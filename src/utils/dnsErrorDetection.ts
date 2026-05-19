@@ -1,4 +1,4 @@
-// Détecte si une erreur de lecture HLS ressemble à un blocage DNS au niveau
+﻿// Détecte si une erreur de lecture HLS ressemble à un blocage DNS au niveau
 // FAI (typiquement un FAI français qui bloque un domaine par décision ARCOM).
 // Retourne true uniquement si on est confiant que c'est DNS et pas un autre
 // type de panne réseau (offline, host isolé mort, etc.).
@@ -132,9 +132,9 @@ async function checkOriginReachable(): Promise<boolean> {
 // — le banner s'en sert pour afficher le message "on a changé de lecteur
 // pour toi automatiquement" uniquement quand c'est vrai.
 //
-// Gate : on ne dispatch QUE si l'origine PRAWLX est elle-même injoignable. Si
+// Gate : on ne dispatch QUE si l'origine Prowler est elle-même injoignable. Si
 // on arrive à charger /movix.png, l'erreur vidéo vient du host vidéo tiers
-// (source morte, CORS, proxy down…) et pas d'un blocage FAI sur PRAWLX —
+// (source morte, CORS, proxy down…) et pas d'un blocage FAI sur Prowler —
 // montrer "ton FAI bloque ce lecteur" serait un faux positif.
 export function notifyDnsBlocked(
   detail: { host?: string; details?: string; switched?: boolean }

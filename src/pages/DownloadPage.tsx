@@ -823,7 +823,7 @@ const DownloadPage: React.FC = () => {
     }
   };
 
-  // Fonction pour trier les liens selon l'ordre de priorité (PRAWLX en premier)
+  // Fonction pour trier les liens selon l'ordre de priorité (Prowler en premier)
   const sortDownloadLinks = (links: DownloadLink[]): DownloadLink[] => {
     const movix = links.filter(l => l.source === 'movix');
     const rest = links.filter(l => l.source !== 'movix');
@@ -1348,7 +1348,7 @@ const DownloadPage: React.FC = () => {
     setQueueInfo(null);
     setShowLinkSelector(true);
 
-    // Les liens PRAWLX sont déjà des URLs directes (1fichier, Mega, …) ajoutées
+    // Les liens Prowler sont déjà des URLs directes (1fichier, Mega, …) ajoutées
     // côté admin : pas de décodage Darkino nécessaire.
     if (link.source === 'movix' && link.url) {
       setIsDecoding(false);
@@ -1734,10 +1734,10 @@ const DownloadPage: React.FC = () => {
                                   title={
                                     link.added_by
                                       ? `Ajouté par ${link.added_by.username}${link.added_at ? ` le ${new Date(link.added_at).toLocaleDateString(i18n.language)}` : ''}`
-                                      : 'Lien PRAWLX'
+                                      : 'Lien Prowler'
                                   }
                                 >
-                                  PRAWLX
+                                  Prowler
                                 </span>
                               )}
                               {link.full_saison === 1 && (

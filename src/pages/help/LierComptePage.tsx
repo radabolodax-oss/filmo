@@ -7,7 +7,7 @@ const LierComptePage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.lierCompte.title')} — PRAWLX`;
+    document.title = `${t('help.lierCompte.title')} — Prowler`;
   }, [t]);
 
   const sections: TutoSection[] = [

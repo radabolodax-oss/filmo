@@ -8,7 +8,7 @@ const MiroirsPage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.miroirs.title')} — PRAWLX`;
+    document.title = `${t('help.miroirs.title')} — Prowler`;
   }, [t]);
 
   const telegramUrl =

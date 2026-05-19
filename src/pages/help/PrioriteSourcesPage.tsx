@@ -10,7 +10,7 @@ const PrioriteSourcesPage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.prioriteSources.title')} — PRAWLX`;
+    document.title = `${t('help.prioriteSources.title')} — Prowler`;
   }, [t]);
 
   const stepIcons = {

@@ -324,7 +324,7 @@ const Movies: React.FC = () => {
     { id: 37, name: 'Western', route: '/genre/movie/37' },
   ]);
 
-  // Track page visit for PRAWLX Wrapped
+  // Track page visit for Prowler Wrapped
   useWrappedTracker({
     mode: 'page',
     pageData: { pageName: 'movies' },
@@ -854,7 +854,7 @@ const Movies: React.FC = () => {
 
   useEffect(() => {
     // Simple title for Movies page
-    document.title = `${t('movies.title')} - PRAWLX`;
+    document.title = `${t('movies.title')} - Prowler`;
   }, []);
 
   React.useEffect(() => {

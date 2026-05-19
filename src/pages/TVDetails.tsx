@@ -2404,7 +2404,7 @@ const TVDetails: React.FC = () => {
   const navigate = useNavigate();
   const { currentProfile } = useProfile();
 
-  // Track page visit for PRAWLX Wrapped
+  // Track page visit for Prowler Wrapped
   useWrappedTracker({
     mode: 'page',
     pageData: id ? { pageName: 'tv-details', contentId: id } : undefined,
@@ -3661,7 +3661,7 @@ const TVDetails: React.FC = () => {
   useEffect(() => {
     if (tvShow) {
       // Simple TV show title
-      document.title = `${tvShow.name} - PRAWLX`;
+      document.title = `${tvShow.name} - Prowler`;
     } else {
       document.title = t('details.tvShowDefaultTitle');
     }
@@ -4507,12 +4507,12 @@ const TVDetails: React.FC = () => {
   const tvYear = tvShow.first_air_date && !isNaN(new Date(tvShow.first_air_date).getTime())
     ? new Date(tvShow.first_air_date).getFullYear()
     : null;
-  const tvTitle = tvYear ? `${tvShow.name} (${tvYear}) - PRAWLX` : `${tvShow.name} - PRAWLX`;
+  const tvTitle = tvYear ? `${tvShow.name} (${tvYear}) - Prowler` : `${tvShow.name} - Prowler`;
   const tvCanonicalUrl = buildSiteUrl(`/tv/${encodedId || id}`);
   const tvSocialImage = tvShow.backdrop_path || tvShow.poster_path
     ? `https://image.tmdb.org/t/p/original${tvShow.backdrop_path || tvShow.poster_path}`
     : undefined;
-  const tvDescription = tvShow.overview?.trim() || `Découvrez ${tvShow.name} sur PRAWLX.`;
+  const tvDescription = tvShow.overview?.trim() || `Découvrez ${tvShow.name} sur Prowler.`;
 
   return (
     <MotionConfig reducedMotion="user">

@@ -21,7 +21,13 @@
    Firefox 121+ (déjà aligné sur le reste du codebase). */
 .embla-slide:not(:has(.ranking-number)) {
   content-visibility: auto;
-  contain-intrinsic-size: 192px 320px;
+  contain-intrinsic-size: 160px 240px;
+}
+
+@media (min-width: 768px) {
+  .embla-slide:not(:has(.ranking-number)) {
+    contain-intrinsic-size: 192px 320px;
+  }
 }
 
 /* P5 — will-change: transform pré-promotion compositing layer (PC only).

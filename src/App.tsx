@@ -3,7 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigationType,
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
 import Header from './components/Header';
+import BottomNav from './components/BottomNav';
 import Home from './pages/Home';
+import { useTVMode } from './hooks/useTVMode';
 import DnsBlockBanner from './components/DnsBlockBanner';
 import { AdFreePopupProvider } from './context/AdFreePopupContext';
 import { SearchProvider } from './context/SearchContext';
@@ -1638,6 +1640,7 @@ const AppWithIntro: React.FC = () => {
   const location = useLocation();
   const [showRedirectPopup, setShowRedirectPopup] = useState(false);
   const { showIntro, completeIntro } = useIntro();
+  useTVMode();
 
   // Détecter si on est sur une route /watch ou la page 404
   const isWatchRoute = location.pathname.startsWith('/watch/') || location.pathname.startsWith('/watchparty/room/') || location.pathname.startsWith('/ftv/watch/');
@@ -1780,8 +1783,13 @@ const AppWithIntro: React.FC = () => {
       <SmoothScroll />
       {/* Ne pas afficher le Header sur les routes lecteur et Wrapped */}
       {shouldShowHeader && <Header />}
+      {/* Bottom navigation mobile (< 768px) */}
+      <BottomNav />
       <PersistenceManager />
-      <div className={shouldShowHeader && !isHeroHeaderPage ? 'pt-20' : ''}>
+      <div className={[
+        shouldShowHeader && !isHeroHeaderPage ? 'pt-20' : '',
+        !isWatchRoute && !isWrappedRoute ? 'pb-16 md:pb-0' : '',
+      ].filter(Boolean).join(' ')}>
         <AlertNotificationManager />
         <DefaultProfileNudge />
         <ProfileGate>
@@ -1792,7 +1800,7 @@ const AppWithIntro: React.FC = () => {
             {/* Routes spéciales avec props ou logique conditionnelle */}
             <Route path="/login-bip39" element={<LoginBip39 />} />
             <Route path="/create-account" element={<CreateAccount />} />
-{/* PRAWLX: removed - {/* PRAWLX: removed - <Route path="/link-bip39" element={<Lo */}
+{/* Prowler: removed - {/* Prowler: removed - <Route path="/link-bip39" element={<Lo */}
             <Route path="/link-bip39/create" element={<CreateAccount mode="link" />} />
             <Route path="/terms" element={<Navigate to="/terms-of-service" replace />} />
             <Route path="/profile-selection" element={<ProfileSelection />} />

@@ -8,7 +8,7 @@ const RecupererComptePage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.recupererCompte.title')} — PRAWLX`;
+    document.title = `${t('help.recupererCompte.title')} — Prowler`;
   }, [t]);
 
   const sections: TutoSection[] = [

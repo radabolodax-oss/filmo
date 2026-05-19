@@ -1945,7 +1945,7 @@ const MovieDetails = (): JSX.Element => {
   const { resetVipStatus } = useAdFreePopup(); // Récupérer la fonction reset
   const { currentProfile } = useProfile();
 
-  // Track page visit for PRAWLX Wrapped
+  // Track page visit for Prowler Wrapped
   useWrappedTracker({
     mode: 'page',
     pageData: id ? { pageName: 'movie-details', contentId: id } : undefined,
@@ -2568,9 +2568,9 @@ const MovieDetails = (): JSX.Element => {
       setIsReleased(releaseDate ? releaseDate <= new Date() : true);
 
       // Simple movie title
-      document.title = `${movie.title} - PRAWLX`;
+      document.title = `${movie.title} - Prowler`;
     } else {
-      document.title = 'Film - PRAWLX';
+      document.title = 'Film - Prowler';
     }
   }, [movie, id]);
 
@@ -2745,12 +2745,12 @@ const MovieDetails = (): JSX.Element => {
   const movieYear = movie.release_date && !isNaN(new Date(movie.release_date).getTime())
     ? new Date(movie.release_date).getFullYear()
     : null;
-  const movieTitle = movieYear ? `${movie.title} (${movieYear}) - PRAWLX` : `${movie.title} - PRAWLX`;
+  const movieTitle = movieYear ? `${movie.title} (${movieYear}) - Prowler` : `${movie.title} - Prowler`;
   const movieCanonicalUrl = buildSiteUrl(`/movie/${encodedId || id}`);
   const movieSocialImage = movie.backdrop_path || movie.poster_path
     ? `https://image.tmdb.org/t/p/original${movie.backdrop_path || movie.poster_path}`
     : undefined;
-  const movieDescription = movie.overview?.trim() || `Découvrez ${movie.title} sur PRAWLX.`;
+  const movieDescription = movie.overview?.trim() || `Découvrez ${movie.title} sur Prowler.`;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -4080,7 +4080,7 @@ const MovieDetails = (): JSX.Element => {
                                     onError={(e) => {
                                       const target = e.target as HTMLImageElement;
                                       target.onerror = null;
-                                      target.src = 'data:image/svg+xml;utf8,<svg width="500" height="750" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 750" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="50" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">PRAWLX</text></svg>';
+                                      target.src = 'data:image/svg+xml;utf8,<svg width="500" height="750" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 750" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="50" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">Prowler</text></svg>';
                                     }}
                                   />
 
@@ -4095,7 +4095,7 @@ const MovieDetails = (): JSX.Element => {
                                         onError={(e) => {
                                           const target = e.target as HTMLImageElement;
                                           target.onerror = null;
-                                          target.src = 'data:image/svg+xml;utf8,<svg width="500" height="281" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 281" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="30" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">PRAWLX</text></svg>';
+                                          target.src = 'data:image/svg+xml;utf8,<svg width="500" height="281" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 281" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="30" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">Prowler</text></svg>';
                                         }}
                                       />
 

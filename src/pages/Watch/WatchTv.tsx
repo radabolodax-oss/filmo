@@ -777,7 +777,7 @@ const WatchTv: React.FC = () => {
   // Ajout de l'état pour savoir si l'utilisateur a cliqué sur la pub
   const [hasClickedAd, setHasClickedAd] = useState(false);
 
-  // PRAWLX Wrapped 2026 - Track TV viewing time
+  // Prowler Wrapped 2026 - Track TV viewing time
   useWrappedTracker({
     mode: 'viewing',
     viewingData: id ? {

@@ -645,7 +645,7 @@ const WatchMovie: React.FC = () => {
   // Ajout de l'état pour savoir si l'utilisateur a cliqué sur la pub
   const [hasClickedAd, setHasClickedAd] = useState(false);
 
-  // PRAWLX Wrapped 2026 - Track movie viewing time
+  // Prowler Wrapped 2026 - Track movie viewing time
   useWrappedTracker({
     mode: 'viewing',
     viewingData: id ? {
@@ -3398,7 +3398,7 @@ const WatchMovie: React.FC = () => {
                   setSelectedMp4Source(0);
                   setVideoSource(mp4Sources[0].url);
                 } else {
-                  // Fallback order: Supervideo (Omega), Multi (Coflix), Frembed, PRAWLX (custom)
+                  // Fallback order: Supervideo (Omega), Multi (Coflix), Frembed, Prowler (custom)
                   const supervideo = omegaData ? getSupervideoFromOmega(omegaData) : null;
                   if (supervideo && omegaData) {
                     setSelectedSource('omega');

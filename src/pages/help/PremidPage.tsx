@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Gamepad2, AlertTriangle } from 'lucide-react';
 import TutoLayout, { TutoSection } from '../../components/TutoLayout';
@@ -21,7 +21,7 @@ const PremidPage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.premid.title')} — PRAWLX`;
+    document.title = `${t('help.premid.title')} — Prowler`;
   }, [t]);
 
   const sections: TutoSection[] = [

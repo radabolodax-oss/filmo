@@ -1,6 +1,6 @@
-/**
+﻿/**
  * Wrapped 2026 Service
- * Fetches and manages PRAWLX Wrapped data from the API
+ * Fetches and manages Prowler Wrapped data from the API
  */
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;

@@ -11,7 +11,7 @@ const Footer: React.FC = () => {
     {/* Barre de délimitation */}
     <div className="relative z-10 w-full h-px bg-gradient-to-r from-transparent via-gray-600 to-transparent"></div>
 
-    <footer className="relative z-10 bg-black text-gray-300 py-8 mt-0">
+    <footer className="relative z-10 bg-black text-gray-300 py-8 mt-0 pb-24 md:pb-8">
       <div className="container mx-auto px-6 max-w-6xl">
         {/* Section principale */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
@@ -241,7 +241,7 @@ const Footer: React.FC = () => {
         {/* Ligne de séparation */}
         <div className="border-t border-gray-800 pt-6">
           <div className="text-center text-sm text-gray-500">
-            <p>© {new Date().getFullYear()} PRAWLX. {t('footer.allRightsReserved')}</p>
+            <p>© {new Date().getFullYear()} Prowler. {t('footer.allRightsReserved')}</p>
             <p className="mt-1">
               {t('footer.madeWith')} ❤️ {t('footer.by')}{" "}
               <a

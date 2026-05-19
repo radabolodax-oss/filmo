@@ -70,7 +70,7 @@ const DnsPage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('helpDns.title')} — PRAWLX`;
+    document.title = `${t('helpDns.title')} — Prowler`;
   }, [t]);
 
   const renderInstallGrid = () => (

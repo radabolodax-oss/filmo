@@ -711,7 +711,7 @@ const LiveTV: React.FC = () => {
     }
   }, [selectedChannel]);
 
-  // PRAWLX Wrapped 2026 - Track Live TV viewing time (only when channel is open)
+  // Prowler Wrapped 2026 - Track Live TV viewing time (only when channel is open)
   useWrappedTracker({
     mode: 'viewing',
     viewingData: selectedChannel ? {
@@ -770,7 +770,7 @@ const LiveTV: React.FC = () => {
         // 2. Si extension, récupérer le manifest extension
         let extensionCatalogs: Catalog[] = [];
         if (isExtensionAvailable()) {
-          console.log("Using PRAWLX Extension");
+          console.log("Using Prowler Extension");
           try {
             const result = await fetchFromExtension<{ catalogs?: Catalog[] }>('GET_MANIFEST');
             extensionCatalogs = result.catalogs || [];

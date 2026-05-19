@@ -278,7 +278,7 @@ const WatchAnime: React.FC = () => {
     localStorage.setItem('continueWatching', JSON.stringify(continueWatching));
   }, [id, season, episode]);
 
-  // PRAWLX Wrapped 2026 - Track anime viewing time
+  // Prowler Wrapped 2026 - Track anime viewing time
   useWrappedTracker({
     mode: 'viewing',
     viewingData: id ? {

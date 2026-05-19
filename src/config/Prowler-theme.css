@@ -1,11 +1,11 @@
 ﻿/* ═══════════════════════════════════════════════════════
-   PRAWLX THEME — Remplace rouge Movix par vert→violet
+   Prowler THEME — Remplace rouge Movix par vert→violet
    À importer dans src/main.tsx ou src/App.tsx :
-   import './config/prawlx-theme.css';
+   import './config/Prowler-theme.css';
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  /* Couleurs principales PRAWLX */
+  /* Couleurs principales Prowler */
   --color-primary: #00e676;
   --color-primary-dim: #00c853;
   --color-secondary: #000000;

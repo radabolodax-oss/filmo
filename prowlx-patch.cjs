@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * PRAWLX Patcher
+ * ProwlX Patcher
  * Lance ce script UNE FOIS après avoir cloné le repo Movix :
- *   node prawlx-patch.js
+ *   node prowlx-patch.js
  */
 
 const fs = require('fs');
@@ -12,19 +12,19 @@ const ROOT = __dirname;
 const changes = [];
 
 // ══════════════════════════════════════════
-// 1. Renommer "Movix" → "PRAWLX" dans index.html
+// 1. Renommer "Movix" → "ProwlX" dans index.html
 // ══════════════════════════════════════════
 const indexPath = path.join(ROOT, 'index.html');
 if (fs.existsSync(indexPath)) {
   let content = fs.readFileSync(indexPath, 'utf8');
   const before = content;
   content = content
-    .replace(/<title>.*?<\/title>/i, '<title>PRAWLX - Movie</title>')
-    .replace(/Movix/g, 'PRAWLX')
-    .replace(/movix/g, 'prawlx');
+    .replace(/<title>.*?<\/title>/i, '<title>ProwlX - Movie</title>')
+    .replace(/Movix/g, 'ProwlX')
+    .replace(/movix/g, 'prowlx');
   if (content !== before) {
     fs.writeFileSync(indexPath, content);
-    changes.push('✅ index.html — titre mis à jour → PRAWLX - Movie');
+    changes.push('✅ index.html — titre mis à jour → ProwlX - Movie');
   }
 }
 
@@ -34,10 +34,10 @@ if (fs.existsSync(indexPath)) {
 const mainTsx = path.join(ROOT, 'src', 'main.tsx');
 if (fs.existsSync(mainTsx)) {
   let content = fs.readFileSync(mainTsx, 'utf8');
-  if (!content.includes('prawlx-theme')) {
-    content = `import './config/prawlx-theme.css';\n` + content;
+  if (!content.includes('prowlx-theme')) {
+    content = `import './config/prowlx-theme.css';\n` + content;
     fs.writeFileSync(mainTsx, content);
-    changes.push('✅ src/main.tsx — import thème PRAWLX ajouté');
+    changes.push('✅ src/main.tsx — import thème ProwlX ajouté');
   } else {
     changes.push('⏭️  src/main.tsx — thème déjà importé');
   }
@@ -52,11 +52,11 @@ if (!fs.existsSync(configDir)) {
   changes.push('✅ src/config/ créé');
 }
 
-const themeSrc = path.join(ROOT, 'prawlx-theme.css');
-const themeDest = path.join(configDir, 'prawlx-theme.css');
+const themeSrc = path.join(ROOT, 'prowlx-theme.css');
+const themeDest = path.join(configDir, 'prowlx-theme.css');
 if (fs.existsSync(themeSrc) && !fs.existsSync(themeDest)) {
   fs.copyFileSync(themeSrc, themeDest);
-  changes.push('✅ prawlx-theme.css copié dans src/config/');
+  changes.push('✅ prowlx-theme.css copié dans src/config/');
 }
 
 // ══════════════════════════════════════════
@@ -90,7 +90,7 @@ for (const file of srcFiles) {
     const lower = line.toLowerCase();
     if (navKeywords.some(k => line.includes(k))) {
       if (lower.includes('href') || lower.includes('to=') || lower.includes('link') || lower.includes('navitem')) {
-        return `{/* PRAWLX: removed - ${line.trim().substring(0, 60)} */}`;
+        return `{/* ProwlX: removed - ${line.trim().substring(0, 60)} */}`;
       }
     }
     return line;
@@ -104,26 +104,26 @@ for (const file of srcFiles) {
 }
 
 // ══════════════════════════════════════════
-// 5. Remplacer "Movix" → "PRAWLX" partout dans src/
+// 5. Remplacer "Movix" → "ProwlX" partout dans src/
 // ══════════════════════════════════════════
 let renamedCount = 0;
 for (const file of srcFiles) {
   let content = fs.readFileSync(file, 'utf8');
   if (content.includes('Movix') || content.includes('MOVIX')) {
     content = content
-      .replace(/\bMovix\b/g, 'PRAWLX')
-      .replace(/\bMOVIX\b/g, 'PRAWLX');
+      .replace(/\bMovix\b/g, 'ProwlX')
+      .replace(/\bMOVIX\b/g, 'ProwlX');
     fs.writeFileSync(file, content);
     renamedCount++;
   }
 }
-if (renamedCount > 0) changes.push(`✅ ${renamedCount} fichiers — "Movix" renommé en "PRAWLX"`);
+if (renamedCount > 0) changes.push(`✅ ${renamedCount} fichiers — "Movix" renommé en "ProwlX"`);
 
 // ══════════════════════════════════════════
 // 6. Rapport final
 // ══════════════════════════════════════════
 console.log('\n╔══════════════════════════════════════╗');
-console.log('║        PRAWLX Patcher — Résultat     ║');
+console.log('║        ProwlX Patcher — Résultat     ║');
 console.log('╚══════════════════════════════════════╝\n');
 changes.forEach(c => console.log(c));
 if (changes.length === 0) console.log('ℹ️  Aucun changement effectué.');
@@ -133,4 +133,4 @@ console.log('  1. cp .env.example .env  (puis remplis VITE_TMDB_API_KEY)');
 console.log('  2. npm install');
 console.log('  3. npm run dev');
 console.log('  4. Ouvre http://localhost:3000\n');
-console.log('🎬 PRAWLX est prêt !\n');
+console.log('🎬 ProwlX est prêt !\n');

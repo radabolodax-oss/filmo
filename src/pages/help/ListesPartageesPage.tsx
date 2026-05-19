@@ -8,7 +8,7 @@ const ListesPartageesPage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.listesPartagees.title')} — PRAWLX`;
+    document.title = `${t('help.listesPartagees.title')} — Prowler`;
   }, [t]);
 
   const sections: TutoSection[] = [

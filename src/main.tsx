@@ -1,4 +1,4 @@
-﻿import './config/prawlx-theme.css';
+﻿import './config/Prowler-theme.css';
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HelmetProvider } from 'react-helmet-async'
@@ -52,7 +52,7 @@ const MOVIX_CONSOLE_SAFETY_WARNING_LINES: MovixConsoleWarningLine[] = [
     ].join('; '),
   },
   {
-    text: 'Coller quelque chose ici peut donner a un attaquant acces a ton compte PRAWLX.',
+    text: 'Coller quelque chose ici peut donner a un attaquant acces a ton compte Prowler.',
     style: [
       'font-size: 22px',
       'font-weight: 900',
@@ -83,7 +83,7 @@ const MOVIX_CONSOLE_SAFETY_WARNING_LINES: MovixConsoleWarningLine[] = [
 
 const emitMovixConsoleSafetyWarning = () => {
   console.log(
-    '%c PRAWLX SECURITY WARNING ',
+    '%c Prowler SECURITY WARNING ',
     [
       'font-size: 16px',
       'font-weight: 900',
