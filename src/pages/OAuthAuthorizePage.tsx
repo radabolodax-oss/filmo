@@ -1,0 +1,776 @@
+﻿import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import { PrefetchLink as Link } from '@/routing/PrefetchLink';
+import { useTranslation } from 'react-i18next';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowRight, Bell, BellPlus, BookmarkMinus, BookmarkPlus, ChevronDown, Crown, ExternalLink, Eye, EyeOff, FilePenLine, FolderPlus, FolderX, Heart, HeartHandshake, HeartOff, History, Library, List, ListChecks, ListMinus, ListPlus, PlayCircle, ShieldCheck, Star, StarOff, UserRound, UserRoundCog } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { discordAuth } from '../services/discordAuth';
+import { googleAuth } from '../services/googleAuth';
+import { broadcastAuthChange, clearPendingAuthAction, clearStoredAuthSession, setPendingAuthAuthorize } from '../utils/accountAuth';
+
+const API_URL = import.meta.env.VITE_MAIN_API;
+const DEFAULT_AVATAR = 'https://as2.ftcdn.net/v2/jpg/05/89/93/27/1000_F_589932782_vQAEAZhHnq1QCGu5ikwrYaQD0Mmurm0N.webp';
+const MOVIX_LOGO_SRC = '/movix.png';
+
+interface OAuthPreviewResponse {
+  success: boolean;
+  client: {
+    clientId: string;
+    clientName: string;
+    description?: string | null;
+    homepageUrl?: string | null;
+    logoUrl?: string | null;
+    iconUrl?: string | null;
+    publicClient: boolean;
+    requirePkce: boolean;
+    allowedScopes: string[];
+    redirectOrigins: string[];
+  };
+  request: {
+    clientId: string;
+    redirectUri: string;
+    scopes: string[];
+    state: string;
+    requiresPkce: boolean;
+    codeChallengeMethod?: string | null;
+    codeChallengeProvided: boolean;
+    codeExpiresInMs: number;
+    accessTokenExpiresInMs: number;
+  };
+}
+
+interface OAuthPreviewApiPayload {
+  success?: boolean;
+  error?: string;
+  error_description?: string;
+  client?: OAuthPreviewResponse['client'];
+  request?: OAuthPreviewResponse['request'];
+}
+
+interface StoredIdentity {
+  username: string;
+  avatar: string;
+}
+
+function getStoredIdentity(): StoredIdentity | null {
+  const authRaw = localStorage.getItem('auth');
+  if (authRaw) {
+    try {
+      const parsed = JSON.parse(authRaw);
+      const userProfile = parsed?.userProfile;
+      if (userProfile && typeof userProfile === 'object') {
+        return {
+          username: String(userProfile.username || userProfile.name || 'PRAWLX'),
+          avatar: String(userProfile.avatar || DEFAULT_AVATAR),
+        };
+      }
+    } catch {
+      // Ignore malformed local auth cache.
+    }
+  }
+
+  const googleRaw = localStorage.getItem('google_user');
+  if (googleRaw) {
+    try {
+      const parsed = JSON.parse(googleRaw);
+      return {
+        username: String(parsed?.name || 'PRAWLX'),
+        avatar: String(parsed?.picture || DEFAULT_AVATAR),
+      };
+    } catch {
+      // Ignore malformed local auth cache.
+    }
+  }
+
+  const discordRaw = localStorage.getItem('discord_user');
+  if (discordRaw) {
+    try {
+      const parsed = JSON.parse(discordRaw);
+      return {
+        username: String(parsed?.username || 'PRAWLX'),
+        avatar: String(parsed?.avatar || DEFAULT_AVATAR),
+      };
+    } catch {
+      // Ignore malformed local auth cache.
+    }
+  }
+
+  return null;
+}
+
+function formatTokenLifetime(ms: number, t: (key: string, options?: Record<string, unknown>) => string) {
+  const days = Math.round(ms / (24 * 60 * 60 * 1000));
+  if (days >= 1) {
+    return t('oauthAuthorize.tokenLifetimeDays', { count: days });
+  }
+
+  const hours = Math.max(1, Math.round(ms / (60 * 60 * 1000)));
+  return t('oauthAuthorize.tokenLifetimeHours', { count: hours });
+}
+
+// ─── Carte humoristique : ce que l'app NE demande PAS ─────────────────────
+// Affichée juste après la vraie liste de permissions. Pour rappeler aux gens
+// qu'ils donnent uniquement un accès limité — pas tous les droits sur leur
+// vie. Les strings vivent dans les fichiers i18n via la clé
+// `oauthAuthorize.fakeNotRequested` (array). Le fallback ci-dessous sert si
+// le bundle de traduction n'a pas chargé.
+const FAKE_NOT_REQUESTED_FALLBACK: string[] = [
+  'Hacker la NASA depuis ton frigo connecté',
+  'Te révéler les vrais codes de la Matrice',
+  'T\'expliquer le sens de la vie (spoiler : 42)',
+  'Te dire qui gagnera la Coupe du Monde 2034',
+  'Te dévoiler l\'identité réelle de Satoshi Nakamoto',
+  'Voler ton chat Pamplemousse à 3h du matin',
+  'Repasser ton chien à la vapeur',
+  'Dompter un lion adulte dans ton salon',
+  'Te faire pousser des dreadlocks en 48h',
+  'Te faire passer pour le Pape François',
+  'Réparer le télescope Hubble par WhatsApp',
+  'T\'envoyer en orbite basse sans casque',
+  'Convertir ton grille-pain en mineur de bitcoin',
+  'T\'apprendre l\'allemand en 12h chrono',
+  'Te masser les épaules pendant ton Zoom RH',
+  'Convaincre ton ex que c\'était sa faute',
+  'Bloquer ta belle-mère sur Facebook ET LinkedIn',
+  'Te désinscrire de tes 47 newsletters dormantes',
+  'Cacher ta télécommande dans le frigo',
+  'Reprogrammer ta machine à laver en mandarin',
+  'Cuire ton riz pendant exactement 17 minutes',
+  'Te chanter La Traviata sous la douche',
+  'T\'inscrire à Tinder en ton absence',
+  'Swiper à droite sur tous les profils de chats',
+  'Te faire perdre 5 kg en 2 jours (pas légal)',
+  'Te trouver un appart à Paris pour 400€/mois',
+  'Te calculer tes impôts en pré-vision 2030',
+  'Crier "ALEXAAA" dans tes oreilles à 4h du mat',
+  'Te commander 200 cure-dents sur Amazon',
+  'Voler les Ferrero Rocher cachés dans ton placard',
+  'Te chanter une berceuse en klingon',
+  'T\'expliquer pourquoi tes AirPods disparaissent',
+  'Régler ton réveil à 3h33 pile chaque nuit',
+  'Repeindre ton plafond en rose flashy à 4h du mat',
+  'Booter Windows XP sur ton iPhone',
+  'Installer Internet Explorer 6 par nostalgie',
+  'Mettre à jour Adobe Flash Player une dernière fois',
+  'Désinstaller McAfee qui spam depuis 2014',
+  'Cracker le WiFi du voisin (« Livebox-3F2A »)',
+  'Coller 12 stickers Hello Kitty sur ton frigo',
+  'Te faire devenir VIP gratis (jamais. JAMAIS.)',
+  'Servir un mojito à ton chat chaque vendredi',
+  'Te faire les ongles en gel pendant que tu dors',
+  'Couper tes cheveux à la tondeuse pour chien',
+  'Choisir ton fond d\'écran à ton insu (un cactus)',
+  'Envoyer un sms passif-agressif à ton ex',
+  'Te faire un CV avec WordArt 1997',
+  'T\'apprendre à tricoter une écharpe en mohair',
+  'Te donner la météo précise sur Mars',
+  'Te révéler la vérité sur le Père Noël',
+  'Décliner tes invitations LinkedIn par insultes',
+  'Te désinscrire de TikTok pendant ton sommeil',
+  'Te filer un cours de salsa cubaine en visio',
+  'Voler la TV 4K de ton voisin silencieusement',
+  'Réparer ton aspirateur qui refuse de démarrer',
+  'T\'organiser un dîner romantique avec ton boulanger',
+  'Cirer ton parquet flottant à la main',
+  'Faire ta lessive de noirs un mardi 13',
+  'Te commander une pizza 4 fromages à 2h du mat',
+  'T\'aider à craquer le code de Vinci',
+  'T\'apprendre à siffler en avalant',
+  'Te coiffer en hérisson sans gel',
+  'Te répondre à ton mail RH compliqué',
+  'Te trouver l\'âme sœur sur Vinted',
+  'T\'expliquer la blockchain à ta grand-mère',
+  'Tatouer "VIP" sur ton avant-bras pendant ta sieste',
+  'T\'apprendre à parler aux chats couramment',
+  'Te coder un site WordPress en COBOL',
+  'Te faire passer ton permis bateau en piscine',
+  'T\'envoyer Jeff Bezos en cadeau d\'anniversaire',
+  'Te transformer en NFT contre ton gré',
+  'T\'apprendre la danse classique pendant la sieste',
+  'Te révéler tous les codes du Konami',
+  'Te livrer ton café en drone à 6h pile',
+  'Te faire pleurer devant un sketch des Inconnus',
+  'T\'envoyer une lettre manuscrite en sumérien',
+  'Te trouver un job de testeur de matelas chez IKEA',
+  'T\'apprendre le solfège en braille inversé',
+  'Te faire un calendrier de l\'avent thème pickles',
+  'Voler ton vélo et te le rendre vendredi prochain',
+  'Te tricoter un pull pour ton aspirateur',
+];
+
+const FakePermissionsTeasingCard: React.FC = () => {
+  const { t } = useTranslation();
+  // Charge la liste traduite via returnObjects (i18next), avec fallback en
+  // dur si la clé n'existe pas (ex : bundle de traduction incomplet).
+  const fakeListRaw = t('oauthAuthorize.fakeNotRequested', { returnObjects: true });
+  const fakeList = Array.isArray(fakeListRaw) && fakeListRaw.length > 0
+    ? (fakeListRaw as string[])
+    : FAKE_NOT_REQUESTED_FALLBACK;
+  // useMemo sur la longueur — évite que les changements de référence du
+  // tableau retourné par t() repick une nouvelle ligne à chaque re-render.
+  const randomIdx = useMemo(
+    () => Math.floor(Math.random() * fakeList.length),
+    [fakeList.length],
+  );
+  const randomFake = fakeList[randomIdx] ?? '';
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+      <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gray-400">
+        🚫 {t('oauthAuthorize.fakeNotRequestedTitle', 'Ce que PRAWLX ne demande pas')}
+      </p>
+      <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2">
+        <span className="shrink-0 text-red-400/70 leading-none">✗</span>
+        <p className="min-w-0 flex-1 text-sm text-gray-300 leading-snug">{randomFake}</p>
+      </div>
+    </div>
+  );
+};
+
+// ─── Accordéon des permissions demandées ────────────────────────────────
+// Fermé par défaut (les utilisateurs voient déjà le nombre via le badge),
+// ouvert au clic. Animation height + opacity via framer-motion.
+interface PermissionsAccordionProps {
+  requestedScopes: {
+    scope: string;
+    icon: typeof UserRound;
+    title: string;
+    description: string;
+  }[];
+  label: string;
+}
+
+const PermissionsAccordion: React.FC<PermissionsAccordionProps> = ({ requestedScopes, label }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20">
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 rounded-xl"
+      >
+        <div className="flex items-center gap-2">
+          <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gray-400">
+            {label}
+          </p>
+          <span className="rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[0.6rem] font-medium text-gray-300">
+            {requestedScopes.length}
+          </span>
+        </div>
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+          className="text-gray-400"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </motion.div>
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{
+              height: { duration: 0.28, ease: [0.4, 0, 0.2, 1] },
+              opacity: { duration: 0.18, ease: 'easeOut' },
+            }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-1.5 px-3 pb-3 pt-1">
+              {requestedScopes.map((scopeItem) => {
+                const Icon = scopeItem.icon;
+                return (
+                  <div
+                    key={scopeItem.scope}
+                    className="flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2"
+                  >
+                    <div className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-red-200">
+                      <Icon className="h-3.5 w-3.5" />
+                    </div>
+                    <p className="min-w-0 truncate text-sm font-medium text-white">
+                      {scopeItem.title}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const OAuthAuthorizePage: React.FC = () => {
+  const { t } = useTranslation();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const [preview, setPreview] = useState<OAuthPreviewResponse | null>(null);
+  const [previewClient, setPreviewClient] = useState<OAuthPreviewResponse['client'] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const authToken = localStorage.getItem('auth_token');
+  const accountIdentity = useMemo(() => getStoredIdentity(), []);
+  const returnTo = `${location.pathname}${location.search}`;
+  const isAlreadyConnected = Boolean(authToken);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPreview = async () => {
+      setIsLoading(true);
+      setError(null);
+      setPreviewClient(null);
+
+      try {
+        const response = await fetch(`${API_URL}/api/oauth/authorize/preview?${searchParams.toString()}`);
+        const payload = await response.json() as OAuthPreviewApiPayload;
+
+        if (!response.ok || !payload.success) {
+          if (payload.client) {
+            setPreviewClient(payload.client);
+          }
+          throw new Error(payload.error_description || payload.error || t('oauthAuthorize.errors.invalidRequest'));
+        }
+
+        if (!cancelled) {
+          setPreview(payload as OAuthPreviewResponse);
+          if (payload.client) {
+            setPreviewClient(payload.client);
+          }
+        }
+      } catch (previewError) {
+        if (!cancelled) {
+          const message = previewError instanceof Error
+            ? previewError.message
+            : t('oauthAuthorize.errors.invalidRequest');
+          setError(message);
+          setPreview(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, t]);
+
+  useEffect(() => {
+    if (!preview) return;
+    setPendingAuthAuthorize(returnTo, preview.client.clientId);
+  }, [preview, returnTo]);
+
+  const requestedScopes = useMemo(() => {
+    const scopeConfig: Record<string, { icon: typeof UserRound; titleKey: string; descKey: string }> = {
+      'profile.read': { icon: UserRound, titleKey: 'oauthAuthorize.scopes.profileRead.title', descKey: 'oauthAuthorize.scopes.profileRead.description' },
+      'profile.list': { icon: List, titleKey: 'oauthAuthorize.scopes.profileList.title', descKey: 'oauthAuthorize.scopes.profileList.description' },
+      'profile.manage': { icon: UserRoundCog, titleKey: 'oauthAuthorize.scopes.profileManage.title', descKey: 'oauthAuthorize.scopes.profileManage.description' },
+      'vip.read': { icon: ShieldCheck, titleKey: 'oauthAuthorize.scopes.vipRead.title', descKey: 'oauthAuthorize.scopes.vipRead.description' },
+      'vip.manage': { icon: Crown, titleKey: 'oauthAuthorize.scopes.vipManage.title', descKey: 'oauthAuthorize.scopes.vipManage.description' },
+      // Favoris
+      'favorites.read':   { icon: Heart,       titleKey: 'oauthAuthorize.scopes.favoritesRead.title',   descKey: 'oauthAuthorize.scopes.favoritesRead.description' },
+      'favorites.add':    { icon: HeartHandshake, titleKey: 'oauthAuthorize.scopes.favoritesAdd.title',    descKey: 'oauthAuthorize.scopes.favoritesAdd.description' },
+      'favorites.remove': { icon: HeartOff,        titleKey: 'oauthAuthorize.scopes.favoritesRemove.title', descKey: 'oauthAuthorize.scopes.favoritesRemove.description' },
+      // Listes personnalisées
+      'lists.read':        { icon: Library,      titleKey: 'oauthAuthorize.scopes.listsRead.title',        descKey: 'oauthAuthorize.scopes.listsRead.description' },
+      'lists.create':      { icon: FolderPlus,   titleKey: 'oauthAuthorize.scopes.listsCreate.title',      descKey: 'oauthAuthorize.scopes.listsCreate.description' },
+      'lists.rename':      { icon: FilePenLine,  titleKey: 'oauthAuthorize.scopes.listsRename.title',      descKey: 'oauthAuthorize.scopes.listsRename.description' },
+      'lists.delete':      { icon: FolderX,      titleKey: 'oauthAuthorize.scopes.listsDelete.title',      descKey: 'oauthAuthorize.scopes.listsDelete.description' },
+      'lists.add-item':    { icon: ListPlus,     titleKey: 'oauthAuthorize.scopes.listsAddItem.title',     descKey: 'oauthAuthorize.scopes.listsAddItem.description' },
+      'lists.remove-item': { icon: ListMinus,    titleKey: 'oauthAuthorize.scopes.listsRemoveItem.title',  descKey: 'oauthAuthorize.scopes.listsRemoveItem.description' },
+      // Watchlist
+      'watchlist.read':    { icon: ListChecks,    titleKey: 'oauthAuthorize.scopes.watchlistRead.title',    descKey: 'oauthAuthorize.scopes.watchlistRead.description' },
+      'watchlist.add':     { icon: BookmarkPlus,  titleKey: 'oauthAuthorize.scopes.watchlistAdd.title',     descKey: 'oauthAuthorize.scopes.watchlistAdd.description' },
+      'watchlist.remove':  { icon: BookmarkMinus, titleKey: 'oauthAuthorize.scopes.watchlistRemove.title',  descKey: 'oauthAuthorize.scopes.watchlistRemove.description' },
+      // Historique
+      'history.read':   { icon: History, titleKey: 'oauthAuthorize.scopes.historyRead.title',   descKey: 'oauthAuthorize.scopes.historyRead.description' },
+      'history.add':    { icon: Eye,     titleKey: 'oauthAuthorize.scopes.historyAdd.title',    descKey: 'oauthAuthorize.scopes.historyAdd.description' },
+      'history.remove': { icon: EyeOff,  titleKey: 'oauthAuthorize.scopes.historyRemove.title', descKey: 'oauthAuthorize.scopes.historyRemove.description' },
+      // Continue watching
+      'continue-watching.read': { icon: PlayCircle, titleKey: 'oauthAuthorize.scopes.continueWatchingRead.title', descKey: 'oauthAuthorize.scopes.continueWatchingRead.description' },
+      // Alertes
+      'alerts.read':   { icon: Bell,     titleKey: 'oauthAuthorize.scopes.alertsRead.title',   descKey: 'oauthAuthorize.scopes.alertsRead.description' },
+      'alerts.manage': { icon: BellPlus, titleKey: 'oauthAuthorize.scopes.alertsManage.title', descKey: 'oauthAuthorize.scopes.alertsManage.description' },
+      // Ratings (notes personnelles)
+      'ratings.read':   { icon: Star,    titleKey: 'oauthAuthorize.scopes.ratingsRead.title',   descKey: 'oauthAuthorize.scopes.ratingsRead.description' },
+      'ratings.manage': { icon: StarOff, titleKey: 'oauthAuthorize.scopes.ratingsManage.title', descKey: 'oauthAuthorize.scopes.ratingsManage.description' },
+      // Note : `comments.read`, `wishboard.read`, `shared-lists.read`,
+      // `live-tv.read`, `vip-invoices.read` ont été retirés car les routes
+      // backend correspondantes sont soit publiques (top10, wishboard,
+      // shared-lists), soit utilisent un autre scope (vip.manage pour les
+      // invoices, x-access-key pour live TV). Les outils MCP marchent toujours
+      // — ils n'avaient juste pas besoin de scope OAuth dédié.
+    };
+
+    return (preview?.request.scopes || []).map((scope) => {
+      const config = scopeConfig[scope] || { icon: ShieldCheck, titleKey: scope, descKey: scope };
+      return {
+        scope,
+        icon: config.icon,
+        title: t(config.titleKey),
+        description: t(config.descKey),
+      };
+    });
+  }, [preview?.request.scopes, t]);
+
+  const handleProviderLogin = (provider: 'discord' | 'google') => {
+    if (provider === 'discord') {
+      discordAuth.login({
+        mode: 'authorize',
+        returnTo,
+        clientId: preview?.client.clientId,
+      });
+      return;
+    }
+
+    googleAuth.login({
+      mode: 'authorize',
+      returnTo,
+      clientId: preview?.client.clientId,
+    });
+  };
+
+  const handleBip39Route = (targetPath: '/login-bip39' | '/create-account') => {
+    setPendingAuthAuthorize(returnTo, preview?.client.clientId);
+    window.location.replace(targetPath);
+  };
+
+  const handleSwitchAccount = () => {
+    clearPendingAuthAction();
+    clearStoredAuthSession();
+    broadcastAuthChange();
+    window.location.reload();
+  };
+
+  const handleDecision = async (approve: boolean) => {
+    if (!preview || !authToken) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${API_URL}/api/oauth/authorize/decision`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          client_id: preview.request.clientId,
+          redirect_uri: preview.request.redirectUri,
+          scope: preview.request.scopes.join(' '),
+          state: preview.request.state,
+          code_challenge_method: searchParams.get('code_challenge_method'),
+          code_challenge: searchParams.get('code_challenge'),
+          approve,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.error_description || payload.error || t('oauthAuthorize.errors.decisionFailed'));
+      }
+
+      clearPendingAuthAction();
+      window.location.replace(payload.redirectTo);
+    } catch (decisionError) {
+      const message = decisionError instanceof Error
+        ? decisionError.message
+        : t('oauthAuthorize.errors.decisionFailed');
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const redirectHost = useMemo(() => {
+    try {
+      return preview ? new URL(preview.request.redirectUri).origin : null;
+    } catch {
+      return null;
+    }
+  }, [preview]);
+
+  return (
+    <div className="min-h-[100svh] overflow-x-hidden bg-[radial-gradient(circle_at_top,_rgba(239,68,68,0.18),_transparent_35%),linear-gradient(180deg,_#050505,_#0b0b10_45%,_#111827)] text-white">
+      <div className="mx-auto flex min-h-[100svh] w-full max-w-6xl items-center justify-center overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 lg:overflow-hidden">
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="grid w-full gap-4 lg:grid-cols-[1.25fr_0.75fr]"
+        >
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-md sm:p-5">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5 shadow-lg shadow-black/20">
+                  <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black/30">
+                    <img src={MOVIX_LOGO_SRC} alt="PRAWLX" className="h-5 w-5 object-contain" />
+                  </span>
+                  <span className="text-left">
+                    <span className="block text-[0.6rem] font-semibold uppercase tracking-[0.35em] text-red-200/80">
+                      PRAWLX
+                    </span>
+                    <span className="block text-xs font-medium text-white">OAuth</span>
+                  </span>
+                </div>
+                <p className="text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-red-300/80">
+                  {t('oauthAuthorize.eyebrow')}
+                </p>
+                <h1 className="text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                  {t('oauthAuthorize.title')}
+                </h1>
+                <p className="max-w-2xl text-sm leading-5 text-gray-300">
+                  {t('oauthAuthorize.subtitle')}
+                </p>
+              </div>
+              <div className="hidden rounded-2xl border border-white/20 bg-red-500/10 p-2 text-red-200 lg:block">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-gray-300">
+                {t('oauthAuthorize.loading')}
+              </div>
+            ) : error ? (
+              <div className="rounded-2xl border border-white/20 bg-red-500/10 p-4 text-sm text-red-100">
+                <p className="font-medium">{t('oauthAuthorize.errorTitle')}</p>
+                <p className="mt-2 text-red-100/80">{error}</p>
+                {previewClient?.homepageUrl && (
+                  <a
+                    href={previewClient.homepageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+                  >
+                    {t('oauthAuthorize.visitSite')}
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                )}
+                <Link to="/" className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-red-200 hover:text-white">
+                  {t('oauthAuthorize.backHome')}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : preview ? (
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/5">
+                      {(() => {
+                        // iconUrl est servie par l'API (`/oauth-icons/...`) — préfixée par API_URL.
+                        // logoUrl peut être absolue (legacy) → on l'utilise telle quelle si présente.
+                        const iconSrc = preview.client.iconUrl
+                          ? `${API_URL}${preview.client.iconUrl}`
+                          : preview.client.logoUrl || null;
+                        return iconSrc ? (
+                          <img src={iconSrc} alt={preview.client.clientName} className="h-full w-full object-cover" />
+                        ) : (
+                          <ShieldCheck className="h-5 w-5 text-red-300" />
+                        );
+                      })()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gray-400">
+                        {t('oauthAuthorize.appLabel')}
+                      </p>
+                      <h2 className="text-lg font-semibold text-white">
+                        {preview.client.clientName}
+                      </h2>
+                      {preview.client.description && (
+                        <p className="text-xs leading-4 text-gray-300">
+                          {preview.client.description}
+                        </p>
+                      )}
+                    </div>
+                    {preview.client.homepageUrl && (
+                      <a
+                        href={preview.client.homepageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white transition hover:bg-white/10"
+                      >
+                        {t('oauthAuthorize.visitSite')}
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                    <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gray-400">
+                      {t('oauthAuthorize.redirectLabel')}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-white">
+                      {redirectHost || preview.request.redirectUri}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                    <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gray-400">
+                      {t('oauthAuthorize.tokenLabel')}
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-white">
+                      {formatTokenLifetime(preview.request.accessTokenExpiresInMs, t)}
+                    </p>
+                  </div>
+                </div>
+
+                <PermissionsAccordion requestedScopes={requestedScopes} label={t('oauthAuthorize.permissionsLabel')} />
+
+                <FakePermissionsTeasingCard />
+
+
+                {authToken ? (
+                  <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2.5">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={accountIdentity?.avatar || DEFAULT_AVATAR}
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-full border border-white/10 object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[0.65rem] uppercase tracking-[0.25em] text-emerald-200/80">{t('oauthAuthorize.signedInAs')}</p>
+                        <p className="truncate font-medium text-white">{accountIdentity?.username || t('oauthAuthorize.connectedAccount')}</p>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => handleDecision(false)}
+                          disabled={isSubmitting}
+                          className="border-white/15 bg-transparent px-3 py-1.5 text-sm"
+                        >
+                          {t('oauthAuthorize.deny')}
+                        </Button>
+                        <Button
+                          onClick={() => handleDecision(true)}
+                          disabled={isSubmitting}
+                          className="bg-gradient-to-r from-green-400 to-purple-500 px-4 py-1.5 text-sm hover:bg-red-700"
+                        >
+                          {isSubmitting ? t('oauthAuthorize.processing') : t('oauthAuthorize.approve')}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+                    <p className="text-sm font-medium text-amber-100">
+                      {t('oauthAuthorize.loginRequiredTitle')}
+                    </p>
+                    <p className="mt-1.5 text-sm leading-5 text-amber-50/80">
+                      {t('oauthAuthorize.loginRequiredDescription')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </section>
+
+          <aside className="rounded-3xl border border-white/10 bg-black/25 p-4 shadow-2xl backdrop-blur-md">
+            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-gray-400">
+              {isAlreadyConnected ? t('oauthAuthorize.connectedAccount') : t('oauthAuthorize.connectMovix')}
+            </p>
+            {isAlreadyConnected ? (
+              <div className="mt-2.5 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-3.5">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={accountIdentity?.avatar || DEFAULT_AVATAR}
+                    alt={accountIdentity?.username || 'PRAWLX'}
+                    className="h-10 w-10 rounded-full border border-white/10 object-cover"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[0.65rem] uppercase tracking-[0.28em] text-emerald-200/80">
+                      {t('oauthAuthorize.signedInAs')}
+                    </p>
+                    <p className="truncate text-base font-semibold text-white">
+                      {accountIdentity?.username || t('oauthAuthorize.connectedAccount')}
+                    </p>
+                  </div>
+                </div>
+
+                <h2 className="mt-3 text-lg font-semibold text-white">
+                  {t('oauthAuthorize.notYouPrompt', { username: accountIdentity?.username || t('oauthAuthorize.connectedAccount') })}
+                </h2>
+                <p className="mt-1.5 text-sm leading-5 text-emerald-50/80">
+                  {t('oauthAuthorize.switchAccountDescription')}
+                </p>
+
+                <Button
+                  onClick={handleSwitchAccount}
+                  disabled={!preview}
+                  className="mt-3 w-full justify-center bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700"
+                >
+                  {t('oauthAuthorize.switchAccountCta')}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <h2 className="mt-3 text-xl font-semibold text-white">
+                  {t('oauthAuthorize.loginCardTitle')}
+                </h2>
+                <p className="mt-2 text-sm leading-5 text-gray-300">
+                  {t('oauthAuthorize.loginCardDescription')}
+                </p>
+
+                <div className="mt-5 space-y-2.5">
+                  <Button
+                    onClick={() => handleProviderLogin('discord')}
+                    disabled={!preview}
+                    className="w-full justify-center bg-[#5865F2] py-2.5 hover:bg-[#4752C4]"
+                  >
+                    {t('auth.loginWithDiscord')}
+                  </Button>
+                  <Button
+                    onClick={() => handleProviderLogin('google')}
+                    disabled={!preview}
+                    className="w-full justify-center bg-white py-2.5 text-gray-900 hover:bg-gray-100"
+                  >
+                    {t('auth.loginWithGoogle')}
+                  </Button>
+                  <Button
+                    onClick={() => handleBip39Route('/login-bip39')}
+                    disabled={!preview}
+                    variant="secondary"
+                    className="w-full justify-center py-2.5"
+                  >
+                    {t('oauthAuthorize.loginWithBip39')}
+                  </Button>
+                  <Button
+                    onClick={() => handleBip39Route('/create-account')}
+                    disabled={!preview}
+                    variant="outline"
+                    className="w-full justify-center border-white/15 bg-transparent py-2.5"
+                  >
+                    {t('oauthAuthorize.createMovixAccount')}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <p className="text-sm font-medium text-white">{t('oauthAuthorize.securityTitle')}</p>
+              <p className="mt-1 text-xs leading-4 text-gray-400">
+                {t('oauthAuthorize.securityDescription')}
+              </p>
+            </div>
+          </aside>
+        </motion.div>
+      </div>
+    </div>
+  );
+};
+
+export default OAuthAuthorizePage;

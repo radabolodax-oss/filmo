@@ -1,0 +1,130 @@
+﻿/* ═══════════════════════════════════════════════════════
+   PRAWLX THEME — Remplace rouge Movix par vert→violet
+   À importer dans src/main.tsx ou src/App.tsx :
+   import './config/prawlx-theme.css';
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  /* Couleurs principales PRAWLX */
+  --color-primary: #00e676;
+  --color-primary-dim: #00c853;
+  --color-secondary: #000000;
+  --color-secondary-bright: #ffffff;
+  --color-accent: #000000;
+
+  /* Gradient signature */
+  --gradient-main: linear-gradient(135deg, #00e676 0%, #ffffff 100%);
+  --gradient-bg: linear-gradient(160deg, #0d1117 0%, #0a1a10 30%, #1a0d2e 100%);
+
+  /* Backgrounds */
+  --color-bg: #0d1117;
+  --color-bg-card: rgba(13, 17, 23, 0.85);
+  --color-bg-nav: rgba(13, 17, 23, 0.82);
+
+  /* Borders */
+  --color-border: rgba(0,0,0,0);
+  --color-border-hover: transparent;
+
+  /* Glow effects */
+  --glow-primary: 0 0 20px rgba(0, 230, 118, 0.35);
+  --glow-secondary: 0 0 20px rgba(0,0,0,0);
+}
+
+/* ── Remplace le rouge Movix (#e50914, #f40612, #b81d24) ── */
+
+/* Boutons principaux */
+button[class*="play"],
+button[class*="watch"],
+a[class*="play"],
+[class*="btn-primary"],
+[class*="button-primary"] {
+  background: var(--gradient-main) !important;
+  border-color: transparent !important;
+  box-shadow: var(--glow-primary) !important;
+}
+
+/* Liens actifs / sélectionnés */
+[class*="active"],
+[class*="selected"],
+nav a.active,
+nav [class*="active"] {
+  color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+/* Progress bars / sliders */
+[class*="progress"],
+[class*="slider"],
+input[type="range"]::-webkit-slider-thumb,
+input[type="range"]::-webkit-slider-runnable-track {
+  background: var(--gradient-main) !important;
+}
+
+/* Logo texte */
+[class*="logo"],
+[class*="brand"] {
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Badges / tags */
+[class*="badge"],
+[class*="tag"],
+[class*="label"] {
+  background: rgba(0,0,0,0) !important;
+  border-color: transparent !important;
+  color: var(--color-secondary-bright) !important;
+}
+
+/* Icônes colorées */
+[class*="icon"][class*="red"],
+[class*="icon"][class*="primary"],
+svg[class*="red"] {
+  color: var(--color-primary) !important;
+  fill: var(--color-primary) !important;
+}
+
+/* Hover states */
+*:hover > [class*="icon"],
+a:hover,
+button:hover {
+  color: var(--color-primary) !important;
+}
+
+/* Background ambiance */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0, 230, 118, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 80% 110%, rgba(0,0,0,0) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Navbar ── */
+nav, header {
+  background: var(--color-bg-nav) !important;
+  backdrop-filter: blur(18px) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+
+/* ── Cards hover ── */
+[class*="card"]:hover,
+[class*="item"]:hover,
+[class*="movie"]:hover,
+[class*="serie"]:hover {
+  border-color: var(--color-border-hover) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0) !important;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--color-primary), var(--color-secondary-bright));
+  border-radius: 999px;
+}
