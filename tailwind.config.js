@@ -6,6 +6,10 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        'phone-ls': { raw: '(max-width: 767px) and (orientation: landscape)' },
+        tv: '1921px',
+      },
       animation: {
         fadeIn: 'fadeIn 0.5s ease-in-out',
         fadeOut: 'fadeOut 0.5s ease-in-out'

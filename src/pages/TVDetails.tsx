@@ -1,13 +1,14 @@
-﻿import React, { useState, useEffect, useCallback, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
+﻿﻿import React, { useState, useEffect, useCallback, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import axios from 'axios';
-import { Loader, Video, Star, Calendar, List, Check, FolderPlus, ChevronRight, AlertTriangle, Play, X, MapPin, Languages, Building, ArrowLeft, Image, Download, Shield, EyeOff, Archive, CheckCircle } from 'lucide-react';
+import { Loader, Video, Star, Calendar, List, Check, FolderPlus, ChevronRight, AlertTriangle, Play, X, MapPin, Languages, Building, ArrowLeft, Image, Download, Shield, EyeOff, Archive, CheckCircle, Film } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import AddToListMenu from '../components/AddToListMenu';
 import DetailsSkeleton from '../components/skeletons/DetailsSkeleton';
+import WatchInterstitial from '../components/WatchInterstitial';
 
 import ShareButtons from '../components/ShareButtons';
 import HLSPlayer, { HLSPlayerRef } from '../components/HLSPlayer';
@@ -1508,7 +1509,7 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
     }
     switch (selectedSource as 'primary' | 'peachify' | 'vostfr' | 'multi' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'omega' | 'darkino' | 'mp4' | number) {
       case 'primary':
-        newSrc = `https://frembed.click/api/serie.php?id=${showId}&sa=${seasonNumber}&epi=${episodeNumber}`;
+        newSrc = `https://frembed.click/embed/serie/${showId}?sa=${seasonNumber}&epi=${episodeNumber}`;
         break;
       case 'peachify':
         newSrc = `https://peachify.top/embed/tv/${showId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626`;
@@ -2404,7 +2405,7 @@ const TVDetails: React.FC = () => {
   const navigate = useNavigate();
   const { currentProfile } = useProfile();
 
-  // Track page visit for PRAWLX Wrapped
+  // Track page visit for Prowler Wrapped
   useWrappedTracker({
     mode: 'page',
     pageData: id ? { pageName: 'tv-details', contentId: id } : undefined,
@@ -2461,6 +2462,16 @@ const TVDetails: React.FC = () => {
   });
 
   const cinemaMode = true;
+
+  type InlineSource = 'frembed' | 'videasy' | 'videasy_net' | 'vidsrccc' | 'vidsrc' | 'vidsrcsu' | 'embed2' | 'embedsu' | 'vostfr' | 'vidsrcwtf1' | 'vidsrcwtf5';
+  const [showInlinePlayer, setShowInlinePlayer] = useState(false);
+  const [showInterstitial, setShowInterstitial] = useState(false);
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
+  const [showInlineSourcePicker, setShowInlineSourcePicker] = useState(false);
+  const [animeExtraSource, setAnimeExtraSource] = useState<InlineSource | null>(null);
+  const [panelSeason, setPanelSeason] = useState<number | null>(null);
+  const episodeListRef = useRef<HTMLDivElement | null>(null);
+  const activeEpisodeRef = useRef<HTMLButtonElement | null>(null);
 
   // Anti-spoiler settings
   const {
@@ -2564,10 +2575,33 @@ const TVDetails: React.FC = () => {
   // Add resetVipStatus hook for the main component
   const { resetVipStatus } = useAdFreePopup();
 
-  // Reset VIP status when the TV show ID changes
+  // Reset VIP status and inline player when the TV show ID changes
   useEffect(() => {
     resetVipStatus();
+    setShowInlinePlayer(false);
+    setShowInlineSourcePicker(false);
+    setAnimeExtraSource(null);
+    setPanelSeason(null);
   }, [id, resetVipStatus]);
+
+  // Sync panel season with active season
+  useEffect(() => {
+    if (selectedSeason !== null) setPanelSeason(selectedSeason);
+  }, [selectedSeason]);
+
+  // Auto-scroll active episode into view in the panel
+  useEffect(() => {
+    if (activeEpisodeRef.current) {
+      activeEpisodeRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedEpisode, panelSeason]);
+
+  // Auto-scroll to anime player section after it renders
+  useEffect(() => {
+    if (animeVideoPlayerSectionRef.current && selectedAnimeEpisode) {
+      animeVideoPlayerSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedAnimeEpisode]);
 
   // Fonction pour basculer l'état d'expansion d'une carte
   const toggleCardExpansion = (episodeKey: string) => (e: React.MouseEvent) => {
@@ -2940,6 +2974,16 @@ const TVDetails: React.FC = () => {
     return [...new Set(availableEpisodes.map((ep) => Number(ep.sa)))].sort((a, b) => a - b);
   }, [availableEpisodes]);
 
+  const episodeCountForSeason = useCallback((season: number) =>
+    availableEpisodes.filter(ep => Number(ep.sa) === season).length,
+  [availableEpisodes]);
+
+  const panelEpisodes = useMemo(() =>
+    availableEpisodes
+      .filter(ep => Number(ep.sa) === (panelSeason ?? selectedSeason))
+      .sort((a, b) => Number(a.epi) - Number(b.epi)),
+  [availableEpisodes, panelSeason, selectedSeason]);
+
   // Saison de départ par défaut : préférer la saison 1 si elle existe (pour éviter de commencer par les spéciaux / saison 0)
   // Si la saison 1 n'est pas disponible (ex: série 71446 où elle est exclue), on prend la première disponible
   const defaultStartSeason = useMemo(() => {
@@ -2991,23 +3035,8 @@ const TVDetails: React.FC = () => {
       episode: epNumber
     });
 
-    if (cinemaMode && id && selectedSeason !== null) {
-      // Rediriger vers la page de visionnage en mode cinéma
-      navigate(`/watch/tv/${encodeId(id)}/s/${selectedSeason}/e/${epNumber}`);
-      return;
-    }
-
-    setShowVideo(true); // S'assurer que le lecteur standard peut se rendre
-
-    // Scroll vers la section des lecteurs immédiatement
-    setTimeout(() => {
-      const playerSection = videoPlayerRef.current?.getSection() || animeVideoPlayerSectionRef.current;
-      if (playerSection) {
-        playerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 0); // Délai mis à 0ms
-
-    // Continue watching functionality removed
+    setShowInlinePlayer(true);
+    setTimeout(() => scrollToInlinePlayer(), 100);
   };
 
   const _scrollLeft = (elementId: string) => {
@@ -3379,19 +3408,14 @@ const TVDetails: React.FC = () => {
     setSelectedSeason(seasonToWatch);
     setSelectedEpisode(episodeToWatch);
 
-    // Check if Cinema Mode is active
-    if (cinemaMode && id) {
-      // Check if it's Anime Mode
-      if (animeMode) {
-        navigate(`/watch/anime/${encodeId(id)}/season/${seasonToWatch}/episode/${episodeToWatch}`);
-      } else {
-        // Navigate to the dedicated TV watch page
-        navigate(`/watch/tv/${encodeId(id)}/s/${seasonToWatch}/e/${episodeToWatch}`);
-      }
+    // Show inline player for TV shows
+    if (!animeMode) {
+      setShowInlinePlayer(true);
+      setTimeout(() => scrollToInlinePlayer(), 100);
       return;
     }
 
-    // Normal mode: proceed with existing logic
+    // Normal mode: proceed with existing logic (anime)
     // Gérer le mode anime spécifiquement
     if (animeMode && animeData?.seasons) {
       const animeSeason = animeData.seasons[seasonToWatch - 1];
@@ -3427,6 +3451,34 @@ const TVDetails: React.FC = () => {
     }, 0); // Délai principal mis à 0ms
   };
 
+  const handlePanelEpisodeClick = useCallback((season: number, epNumber: number) => {
+    setSelectedSeason(season);
+    setSelectedEpisode(epNumber);
+    setLastWatched({ season, episode: epNumber });
+    setShowInlinePlayer(true);
+    setTimeout(() => scrollToInlinePlayer(), 100);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleAnimePanelEpisodeClick = useCallback((episode: any, animeSeason: number) => {
+    setSelectedSeason(animeSeason);
+    setSelectedEpisode(episode.index);
+    setSelectedAnimeEpisode(episode);
+    const hasVf = episode.streaming_links.some((link: any) => link.language === 'vf');
+    const hasVostfr = episode.streaming_links.some((link: any) => link.language === 'vostfr');
+    if (hasVf) setSelectedLanguage('vf');
+    else if (hasVostfr) setSelectedLanguage('vostfr');
+    else if (episode.streaming_links.length > 0) setSelectedLanguage(episode.streaming_links[0].language);
+    setSelectedPlayer('0');
+    setAnimeExtraSource(null);
+    setTimeout(() => {
+      if (animeVideoPlayerSectionRef.current) {
+        animeVideoPlayerSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 80);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const WatchButtons = () => {
     return (
       <div className="flex flex-col gap-4 mt-4">
@@ -3458,118 +3510,51 @@ const TVDetails: React.FC = () => {
             </div>
           </motion.button>
 
-          {(!ENABLE_VIP_DOWNLOAD_CHECK || localStorage.getItem('is_vip') === 'true') && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              onClick={() => navigate(`/download/tv/${tvShow?.id}`)}
-              className="flex flex-col items-center gap-2 px-4 sm:px-6 py-4 sm:py-5 bg-green-600 hover:bg-green-700 rounded-lg flex-1 min-w-0 justify-center text-xs sm:text-sm"
-            >
-              <Download className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-              <span className="text-center">{t('details.downloadBtn')}</span>
-            </motion.button>
+          {/* Source picker discret — séries uniquement */}
+          {!animeMode && (
+            <div className="relative self-stretch">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                onClick={() => setShowInlineSourcePicker(v => !v)}
+                className="h-full flex flex-col items-center gap-2 px-3 sm:px-4 py-4 sm:py-5 bg-gray-800/80 hover:bg-gray-700 rounded-lg justify-center text-xs sm:text-sm border border-gray-600/60"
+                title="Changer de source"
+              >
+                <Film className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span>Source</span>
+              </motion.button>
+              {showInlineSourcePicker && (
+                <div className="absolute left-0 bottom-full mb-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl min-w-[155px] z-50 overflow-hidden">
+                  {([
+                    { id: 'frembed',     label: 'Frembed (VF)' },
+                    { id: 'videasy',     label: 'Vidlink' },
+                    { id: 'videasy_net', label: 'Videasy' },
+                    { id: 'vidsrccc',    label: 'Vidsrc.cc' },
+                    { id: 'vidsrc',      label: 'Vidsrc.io' },
+                    { id: 'vidsrcsu',    label: 'Vidsrc.su' },
+                    { id: 'embed2',      label: '2embed' },
+                    { id: 'embedsu',     label: 'Embed.su' },
+                    { id: 'vostfr',      label: 'VOSTFR' },
+                    { id: 'vidsrcwtf1',  label: 'Vidsrc.wtf 1' },
+                    { id: 'vidsrcwtf5',  label: 'Vidsrc.wtf 5' },
+                  ] as { id: InlineSource; label: string }[]).map(src => (
+                    <button
+                      key={src.id}
+                      onClick={() => {
+                        setInlinePlayerSource(src.id);
+                        setShowInlineSourcePicker(false);
+                        if (!showInlinePlayer) handleContinueWatching();
+                      }}
+                      className={`w-full px-4 py-2 text-left text-sm transition-colors ${inlinePlayerSource === src.id ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
+                    >
+                      {src.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
-        </div>
-
-        {/* Deuxième ligne avec les autres boutons */}
-        <div className="flex flex-wrap gap-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            onClick={() => setShowTrailerPopup(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg"
-            disabled={!trailerVideo}
-          >
-            <Video className="w-4 h-4" />
-            {t('details.bandeAnnonce')}
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => updateWatchStatus('watchlist', !watchStatus.watchlist)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${watchStatus.watchlist
-              ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-              : 'bg-gray-800 hover:bg-gray-700'
-              }`}
-          >
-            <List className="w-4 h-4" />
-            {t('details.watchlistBtn')}
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => updateWatchStatus('favorite', !watchStatus.favorite)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${watchStatus.favorite
-              ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-              : 'bg-gray-800 hover:bg-gray-700'
-              }`}
-          >
-            <Star className="w-4 h-4" />
-            {t('details.favoritesBtn')}
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => updateWatchStatus('watched', !watchStatus.watched)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${watchStatus.watched
-              ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-              : 'bg-gray-800 hover:bg-gray-700'
-              }`}
-          >
-            <Check className="w-4 h-4" />
-            {t('details.watchedBtn')}
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowAddToList(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg"
-          >
-            <FolderPlus className="w-4 h-4" />
-            {t('details.addToAList')}
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowAntiSpoilerModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/10 rounded-lg"
-            title={t('details.antiSpoilConfig')}
-          >
-            <Shield className="w-4 h-4" />
-            {t('details.antiSpoil')}
-          </motion.button>
-
-          {showAddToList && (
-            <AddToListMenu
-              mediaId={Number(id)}
-              mediaType="tv"
-              title={tvShow?.name || ''}
-              posterPath={tvShow?.poster_path || ''}
-              onClose={() => setShowAddToList(false)}
-            />
-          )}
-
-          {showAntiSpoilerModal && (
-            <AntiSpoilerSettingsModal
-              isOpen={showAntiSpoilerModal}
-              onClose={() => setShowAntiSpoilerModal(false)}
-              onSettingsChange={updateAntiSpoilerSettings}
-              currentSettings={antiSpoilerSettings}
-            />
-          )}
-
-          <ShareButtons
-            title={tvShow?.name || ''}
-            description={tvShow?.overview || ''}
-            imageUrl={tvShow?.poster_path ? `https://image.tmdb.org/t/p/original${tvShow.poster_path}` : undefined}
-            url={buildSiteUrl(`/tv/${encodedId || id}`)}
-          />
         </div>
       </div>
     );
@@ -3653,15 +3638,18 @@ const TVDetails: React.FC = () => {
   const handleEpisodeSelect = async (seasonNumber: number, episodeNumber: number) => {
     setSelectedSeason(seasonNumber);
     setSelectedEpisode(episodeNumber);
-    setShowVideo(true);
-
-    // Watch history functionality removed
+    if (!animeMode) {
+      setShowInlinePlayer(true);
+      setTimeout(() => scrollToInlinePlayer(), 100);
+    } else {
+      setShowVideo(true);
+    }
   };
 
   useEffect(() => {
     if (tvShow) {
       // Simple TV show title
-      document.title = `${tvShow.name} - PRAWLX`;
+      document.title = `${tvShow.name} - Prowler`;
     } else {
       document.title = t('details.tvShowDefaultTitle');
     }
@@ -3874,6 +3862,29 @@ const TVDetails: React.FC = () => {
         playerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, 100);
+  };
+
+  const scrollToInlinePlayer = () => {
+    const el = document.getElementById('inline-player-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const getInlinePlayerUrl = () => {
+    const s = selectedSeason ?? 1;
+    const e = selectedEpisode ?? 1;
+    switch (inlinePlayerSource) {
+      case 'frembed':      return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
+      case 'videasy':      return `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=63f99f&secondaryColor=a2a2a2&iconColor=63f99f&autoplay=true`;
+      case 'videasy_net':  return `https://player.videasy.net/tv/${id}/${s}/${e}`;
+      case 'vidsrccc':     return `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}`;
+      case 'vidsrcsu':     return `https://vidsrc.su/embed/tv/${id}/${s}/${e}`;
+      case 'embed2':       return `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`;
+      case 'embedsu':      return `https://embed.su/embed/tv/${id}/${s}/${e}`;
+      case 'vostfr':       return `https://vidsrc.wtf/api/3/tv/?id=${id}&s=${s}&e=${e}`;
+      case 'vidsrcwtf1':   return `https://vidsrc.wtf/api/1/tv/?id=${id}&s=${s}&e=${e}`;
+      case 'vidsrcwtf5':   return `https://vidsrc.wtf/api/5/tv/?id=${id}&s=${s}&e=${e}`;
+      default:             return `https://vidsrc.io/embed/tv?tmdb=${id}&season=${s}&episode=${e}`;
+    }
   };
 
   const fetchBackdropAndTrailer = async () => {
@@ -4092,19 +4103,13 @@ const TVDetails: React.FC = () => {
         }
         setSelectedPlayer('0');
 
-        if (cinemaMode && id && selectedSeason) {
-          // Rediriger vers la page de visionnage anime en mode cinéma
-          navigate(`/watch/anime/${encodeId(id)}/season/${selectedSeason}/episode/${episode.index}`);
-          return;
-        }
-
-        // Scroll vers la section des lecteurs immédiatement
+        // Scroll vers le lecteur anime inline
         setTimeout(() => {
           const playerSection = animeVideoPlayerSectionRef.current;
           if (playerSection) {
             playerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
-        }, 0); // Délai mis à 0ms
+        }, 80);
       }
     };
 
@@ -4126,19 +4131,13 @@ const TVDetails: React.FC = () => {
       }
       setSelectedPlayer('0');
 
-      if (cinemaMode && id && selectedSeason) {
-        // Rediriger vers la page de visionnage anime en mode cinéma
-        navigate(`/watch/anime/${encodeId(id)}/season/${selectedSeason}/episode/${episode.index}`);
-        return;
-      }
-
-      // Scroll vers la section des lecteurs immédiatement
+      // Scroll vers le lecteur anime inline
       setTimeout(() => {
         const playerSection = animeVideoPlayerSectionRef.current;
         if (playerSection) {
           playerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-      }, 0); // Délai mis à 0ms
+      }, 80);
     };
 
     return (
@@ -4507,12 +4506,12 @@ const TVDetails: React.FC = () => {
   const tvYear = tvShow.first_air_date && !isNaN(new Date(tvShow.first_air_date).getTime())
     ? new Date(tvShow.first_air_date).getFullYear()
     : null;
-  const tvTitle = tvYear ? `${tvShow.name} (${tvYear}) - PRAWLX` : `${tvShow.name} - PRAWLX`;
+  const tvTitle = tvYear ? `${tvShow.name} (${tvYear}) - Prowler` : `${tvShow.name} - Prowler`;
   const tvCanonicalUrl = buildSiteUrl(`/tv/${encodedId || id}`);
   const tvSocialImage = tvShow.backdrop_path || tvShow.poster_path
     ? `https://image.tmdb.org/t/p/original${tvShow.backdrop_path || tvShow.poster_path}`
     : undefined;
-  const tvDescription = tvShow.overview?.trim() || `Découvrez ${tvShow.name} sur PRAWLX.`;
+  const tvDescription = tvShow.overview?.trim() || `Découvrez ${tvShow.name} sur Prowler.`;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -4524,6 +4523,28 @@ const TVDetails: React.FC = () => {
         ogImage={tvSocialImage}
         canonical={tvCanonicalUrl}
       />
+      <style dangerouslySetInnerHTML={{ __html: `
+        .ep-card {
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 12px;
+          transition: background 0.2s ease;
+        }
+        .ep-card:hover { background: rgba(255,255,255,0.07); }
+        .ep-panel-scroll::-webkit-scrollbar { width: 3px; }
+        .ep-panel-scroll::-webkit-scrollbar-track { background: transparent; }
+        .ep-panel-scroll::-webkit-scrollbar-thumb {
+          background: linear-gradient(to bottom, #22c55e, #7c3aed);
+          border-radius: 10px;
+        }
+        .src-btn {
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.06);
+          border-radius: 10px;
+          transition: background 0.2s ease;
+        }
+        .src-btn:hover { background: rgba(255,255,255,0.07); }
+      `}} />
       {/* Page backdrop — own compositing layer (position:fixed) instead of
           backgroundAttachment:fixed, which forces full-page re-rasterization
           on every scroll frame and tanks FPS on heavy details pages. */}
@@ -4733,8 +4754,8 @@ const TVDetails: React.FC = () => {
               className="w-full rounded-lg shadow-lg"
             />
             {/* Boutons d'action en-dessous du poster */}
+            <WatchButtons />
             <div className="mt-6">
-              <WatchButtons />
               {/* Bouton pour basculer le mode anime + Note */}
               {isAnime() && (
                 <div className="mt-4"> {/* Ajout d'un div pour grouper */}
@@ -5014,7 +5035,7 @@ const TVDetails: React.FC = () => {
                     <h3 className="text-xl font-bold mb-4">{t('details.seasonsLabel')}</h3>
 
                     {/* Grid of seasons with animations */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-8">
+                    <div className="flex gap-4 mb-8 overflow-x-auto overflow-y-hidden whitespace-nowrap scrollbar-hide">
                       <AnimatePresence>
                         {animeMode && animeData?.seasons ? (
                           /* Affichage des saisons pour les animes */
@@ -5027,7 +5048,7 @@ const TVDetails: React.FC = () => {
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.9 }}
                                 transition={{ duration: 0.3, delay: index * 0.05 }}
-                                className={`group cursor-pointer rounded-lg overflow-hidden border-2 transition-all duration-200 bg-gray-900 ${selectedSeason === seasonNumber ? 'border-white/20' : 'border-gray-800 hover:border-white/20'}`}
+                                className={`group cursor-pointer rounded-lg overflow-hidden border-2 transition-all duration-200 bg-gray-900 flex-shrink-0 w-36 ${selectedSeason === seasonNumber ? 'border-white/20' : 'border-gray-800 hover:border-white/20'}`}
                                 onClick={() => handleSeasonChange(seasonNumber)}
                                 whileHover={{ y: -5 }}
                               >
@@ -5087,7 +5108,7 @@ const TVDetails: React.FC = () => {
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.9 }}
                                 transition={{ duration: 0.3 }}
-                                className={`group cursor-pointer rounded-lg overflow-hidden border-2 transition-all duration-200 ${selectedSeason === season ? 'border-white/20' : 'border-gray-800 hover:border-white/20'}`}
+                                className={`group cursor-pointer rounded-lg overflow-hidden border-2 transition-all duration-200 flex-shrink-0 w-36 ${selectedSeason === season ? 'border-white/20' : 'border-gray-800 hover:border-white/20'}`}
                                 onClick={() => handleSeasonChange(season)}
                                 whileHover={{ y: -5 }}
                               >
@@ -5144,7 +5165,7 @@ const TVDetails: React.FC = () => {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -20 }}
                           transition={{ duration: 0.4 }}
-                          className="w-full episodes-section"
+                          className="w-full episodes-section flex-1 overflow-y-auto custom-scrollbar"
                         >
                           {/* AnimatePresence pour la transition anime/standard */}
                           <AnimatePresence mode="wait">
@@ -6766,105 +6787,383 @@ const TVDetails: React.FC = () => {
         </AnimatePresence>
       )}
 
-      {selectedSeason !== null && selectedEpisode && !animeMode && (
-        <VideoPlayer
-          ref={videoPlayerRef}
-          showId={id!}
-          seasonNumber={selectedSeason}
-          episodeNumber={selectedEpisode}
-          tvShowName={tvShow?.name || ''}
-          releaseYear={tvShow?.first_air_date ? new Date(tvShow.first_air_date).getFullYear() : 0}
-          backdropPath={tvShow?.backdrop_path || ''}
-          seasons={seasonsDetails}
-          cinemaMode={cinemaMode}
-        />
+      {/* Interstitiel uBlock/AdGuard — contenu dans la section lecteur */}
+      {showInterstitial && !animeMode && (
+        <div
+          id="inline-player-section"
+          className="relative mt-10 h-[500px] rounded-lg overflow-hidden"
+          style={{
+            backgroundImage: tvShow?.backdrop_path
+              ? `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.7)), url(https://image.tmdb.org/t/p/original${tvShow.backdrop_path})`
+              : undefined,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundColor: '#000',
+          }}
+        >
+          <AnimatePresence>
+            <WatchInterstitial
+              contained
+              posterUrl={tvShow?.backdrop_path ? `https://image.tmdb.org/t/p/original${tvShow.backdrop_path}` : undefined}
+              onDone={() => { setShowInterstitial(false); setShowInlinePlayer(true); }}
+            />
+          </AnimatePresence>
+        </div>
       )}
 
-      {/* Lecteur d'anime */}
-      {animeMode && selectedSeason !== null && selectedEpisode && selectedAnimeEpisode && (
+      {/* Lecteur inline (séries — non-anime) */}
+      {showInlinePlayer && !animeMode && selectedSeason !== null && selectedEpisode && (
         <motion.div
-          ref={animeVideoPlayerSectionRef}
-          initial={{ opacity: 0, y: 20 }}
+          id="inline-player-section"
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="my-10 bg-gray-900 rounded-lg overflow-hidden shadow-xl border border-gray-800 max-w-7xl mx-auto"
-          id="video-player-section"
+          className="mt-10 flex flex-col lg:flex-row lg:items-stretch gap-3"
         >
-          <div className="p-4 bg-gray-800 border-b border-gray-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-white">
-                {tvShow?.name} - S{selectedSeason} E{selectedEpisode}: {selectedAnimeEpisode.name}
-              </h2>
-              <p className="text-gray-300 text-sm mt-1">
-                {animeData?.name} - {animeData?.seasons.find((s: any) => (s.number || (animeData.seasons.indexOf(s) + 1)) === selectedSeason)?.name}
-              </p>
+          {/* ── Player column (75%) ── */}
+          <div className="w-full lg:w-3/4 min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
+            <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex-shrink-0">
+              <span className="text-sm text-gray-300 font-medium">
+                {tvShow?.name} — S{selectedSeason} E{selectedEpisode}
+              </span>
             </div>
-          </div>
-
-          {/* Interface de sélection de langue améliorée */}
-          <div className="px-4 py-3 bg-gray-900 border-b border-gray-700">
-            <div className="flex flex-col gap-3">
-              <h3 className="text-gray-300 font-medium">{t('details.versionLabel')}</h3>
-              <div className="flex flex-wrap gap-3">
-                {selectedAnimeEpisode.streaming_links?.map((link: any, i: number) => (
+            <iframe
+              key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}`}
+              src={getInlinePlayerUrl()}
+              className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+              allowFullScreen
+              allow="autoplay; fullscreen; encrypted-media"
+              style={{ border: 'none', display: 'block' }}
+              title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
+            />
+            {/* Sources sous la vidéo */}
+            <div
+              className="border-t px-3 py-2.5 flex-shrink-0"
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                borderColor: 'rgba(255,255,255,0.08)',
+              }}
+            >
+              <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
+                {([
+                  { id: 'frembed',     label: 'Frembed (VF)' },
+                  { id: 'videasy',     label: 'Vidlink' },
+                  { id: 'videasy_net', label: 'Videasy' },
+                  { id: 'vidsrccc',    label: 'Vidsrc.cc' },
+                  { id: 'vidsrc',      label: 'Vidsrc.io' },
+                  { id: 'vidsrcsu',    label: 'Vidsrc.su' },
+                  { id: 'embed2',      label: '2embed' },
+                  { id: 'embedsu',     label: 'Embed.su' },
+                  { id: 'vostfr',      label: 'VOSTFR' },
+                  { id: 'vidsrcwtf1',  label: 'Wtf 1' },
+                  { id: 'vidsrcwtf5',  label: 'Wtf 5' },
+                ] as { id: InlineSource; label: string }[]).map(src => (
                   <button
-                    key={`lang-${link.language}-${i}`}
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selectedLanguage === link.language
-                      ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white ring-2 ring-red-400 shadow-lg shadow-red-900/30'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
-                    onClick={() => setSelectedLanguage(link.language)}
+                    key={src.id}
+                    onClick={() => setInlinePlayerSource(src.id)}
+                    className="flex-shrink-0 px-2.5 py-1.5 sm:px-3 2xl:px-4 2xl:py-2 text-xs 2xl:text-sm font-medium transition-all duration-200"
+                    style={inlinePlayerSource === src.id
+                      ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' }
+                      : { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }
+                    }
                   >
-                    {getAnimeLanguageLabel(link.language, t)}
+                    {src.label}
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Interface de sélection de lecteur améliorée */}
-          {selectedLanguage && selectedAnimeEpisode.streaming_links?.find((link: any) => link.language === selectedLanguage)?.players?.length > 0 && (
-            <div className="px-4 py-3 bg-gray-800/50 border-b border-gray-700">
-              <div className="flex flex-col gap-3">
-                <h3 className="text-gray-300 font-medium">{t('details.availablePlayers')}</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                  {selectedAnimeEpisode.streaming_links
-                    .find((link: any) => link.language === selectedLanguage)
-                    .players.map((_player: string, index: number) => (
-                      <button
-                        key={`player-${index}`}
-                        className={`px-3 py-2 rounded-md flex items-center justify-center transition-all ${selectedPlayer === index.toString()
-                          ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white font-medium ring-2 ring-red-400 scale-105 shadow-lg shadow-red-900/30'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-105'
-                          }`}
-                        onClick={() => setSelectedPlayer(index.toString())}
+          {/* ── Episode panel (25%) ── */}
+          <div className="w-full lg:w-1/4 min-w-0">
+            <div
+              className="h-full rounded-lg overflow-hidden flex flex-col lg:min-h-[300px]"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              }}
+            >
+              {/* Header */}
+              <div className="px-4 py-2.5 border-b flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                <span className="uppercase font-semibold" style={{ fontSize: '11px', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.4)' }}>Épisodes</span>
+              </div>
+              {/* Season selectors */}
+              <div className="px-2 py-2 border-b flex flex-wrap gap-1 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                {availableSeasons.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setPanelSeason(s)}
+                    className="px-2.5 py-0.5 text-xs font-medium transition-all duration-200"
+                    style={(panelSeason ?? selectedSeason) === s
+                      ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '20px', border: 'none' }
+                      : { background: 'rgba(255,255,255,0.06)', color: '#9ca3af', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }
+                    }
+                  >
+                    S{s} ({episodeCountForSeason(s)})
+                  </button>
+                ))}
+              </div>
+              {/* Episode list */}
+              <div
+                ref={episodeListRef}
+                className="flex-1 overflow-y-auto lg:max-h-[540px] 2xl:max-h-[680px] ep-panel-scroll p-1.5"
+                style={{ scrollbarWidth: 'thin', scrollbarColor: '#7c3aed transparent' }}
+              >
+                {panelEpisodes.map(ep => {
+                  const epNum = Number(ep.epi);
+                  const activeSeason = panelSeason ?? selectedSeason;
+                  const isActive = selectedSeason === activeSeason && selectedEpisode === epNum;
+                  const epName = seasonsDetails[activeSeason!]?.episodes?.find((e: any) => e.episode_number === epNum)?.name;
+                  return (
+                    <button
+                      key={epNum}
+                      ref={isActive ? (el) => { activeEpisodeRef.current = el; } : undefined}
+                      onClick={() => handlePanelEpisodeClick(activeSeason!, epNum)}
+                      className="ep-card w-full flex items-center gap-2.5 px-3 py-2.5 mb-1 text-left relative overflow-hidden"
+                      style={isActive ? { background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.2)' } : {}}
+                    >
+                      {isActive && (
+                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: 'linear-gradient(to bottom, #22c55e, #7c3aed)' }} />
+                      )}
+                      <span
+                        className="flex-shrink-0 w-9 min-h-[26px] flex items-center justify-center text-[10px] font-bold text-white"
+                        style={isActive
+                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', borderRadius: '8px' }
+                          : { background: 'rgba(255,255,255,0.08)', borderRadius: '8px' }
+                        }
                       >
-                        <Play className={`w-4 h-4 mr-1.5 ${selectedPlayer === index.toString() ? 'text-white' : 'text-gray-400'}`} />
-                        {t('details.playerLabel', { number: index + 1 })}
+                        E{String(epNum).padStart(2, '0')}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-xs text-white truncate leading-snug">
+                          {epName || `Épisode ${epNum}`}
+                        </div>
+                        <div className="text-[10px] text-green-400 mt-0.5">Disponible</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Lecteur d'anime */}
+      {animeMode && selectedSeason !== null && selectedEpisode && selectedAnimeEpisode && (() => {
+        const animeSeasons = animeData?.seasons as any[] | undefined ?? [];
+        const activePanelSeason = panelSeason ?? selectedSeason;
+        const animePanelSeasonObj = animeSeasons.find((s: any, idx: number) =>
+          (s.number ?? (idx + 1)) === activePanelSeason
+        );
+        const animePanelEpisodes: any[] = animePanelSeasonObj?.episodes ?? [];
+        return (
+          <motion.div
+            id="inline-player-section"
+            ref={animeVideoPlayerSectionRef}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="my-10 flex flex-col lg:flex-row lg:items-stretch gap-3"
+          >
+            {/* ── Player column (75%) ── */}
+            <div className="w-full lg:w-3/4 min-w-0 bg-gray-900 rounded-lg overflow-hidden flex flex-col shadow-xl border border-gray-800">
+              <div className="p-3 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+                <h2 className="text-base font-bold text-white truncate">
+                  {tvShow?.name} — S{selectedSeason} E{selectedEpisode}: {selectedAnimeEpisode.name}
+                </h2>
+                <p className="text-gray-400 text-xs mt-0.5 truncate">
+                  {animeData?.name} · {animeData?.seasons.find((s: any) => (s.number || (animeData.seasons.indexOf(s) + 1)) === selectedSeason)?.name}
+                </p>
+              </div>
+
+              {/* Langue */}
+              <div className="px-3 py-2 bg-gray-900 border-b border-gray-700 flex-shrink-0">
+                <div className="flex flex-wrap gap-2">
+                  {selectedAnimeEpisode.streaming_links?.map((link: any, i: number) => (
+                    <button
+                      key={`lang-${link.language}-${i}`}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selectedLanguage === link.language
+                        ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white ring-1 ring-green-400'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                      onClick={() => setSelectedLanguage(link.language)}
+                    >
+                      {getAnimeLanguageLabel(link.language, t)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Lecteurs */}
+              {selectedLanguage && selectedAnimeEpisode.streaming_links?.find((link: any) => link.language === selectedLanguage)?.players?.length > 0 && (
+                <div className="px-3 py-2 bg-gray-800/50 border-b border-gray-700 flex-shrink-0">
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedAnimeEpisode.streaming_links
+                      .find((link: any) => link.language === selectedLanguage)
+                      .players.map((_player: string, index: number) => (
+                        <button
+                          key={`player-${index}`}
+                          className={`px-2.5 py-1 rounded-md flex items-center gap-1 text-xs transition-all ${selectedPlayer === index.toString()
+                            ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white font-medium'
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                          onClick={() => setSelectedPlayer(index.toString())}
+                        >
+                          <Play className="w-3 h-3" />
+                          {t('details.playerLabel', { number: index + 1 })}
+                        </button>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* Iframe */}
+              {((selectedLanguage && selectedPlayer !== null) || animeExtraSource) && (
+                <>
+                  <div className="relative w-full flex-1" style={{ paddingBottom: '56.25%', minHeight: 200 }}>
+                    <iframe
+                      key={animeExtraSource ?? `${selectedLanguage}-${selectedPlayer}`}
+                      src={animeExtraSource
+                        ? getInlinePlayerUrl()
+                        : selectedAnimeEpisode.streaming_links
+                            .find((link: any) => link.language === selectedLanguage)
+                            ?.players[parseInt(selectedPlayer ?? '0')] ?? ''}
+                      className="absolute top-0 left-0 w-full h-full"
+                      allowFullScreen
+                      allow="autoplay; encrypted-media; fullscreen"
+                      title={`${tvShow?.name} - S${selectedSeason} E${selectedEpisode}`}
+                    />
+                  </div>
+                  {/* Sources */}
+                  <div
+                    className="border-t px-3 py-2.5 flex-shrink-0"
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      backdropFilter: 'blur(20px) saturate(180%)',
+                      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                      borderColor: 'rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                      <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
+                      <button
+                        onClick={() => setAnimeExtraSource(null)}
+                        className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
+                        style={animeExtraSource === null
+                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' }
+                          : { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }
+                        }
+                      >
+                        Natif
                       </button>
-                    ))
-                  }
+                      {([
+                        { id: 'frembed', label: 'Frembed (VF)' }, { id: 'videasy', label: 'Vidlink' },
+                        { id: 'videasy_net', label: 'Videasy' }, { id: 'vidsrccc', label: 'Vidsrc.cc' },
+                        { id: 'vidsrc', label: 'Vidsrc.io' }, { id: 'vidsrcsu', label: 'Vidsrc.su' },
+                        { id: 'embed2', label: '2embed' }, { id: 'embedsu', label: 'Embed.su' },
+                        { id: 'vostfr', label: 'VOSTFR' }, { id: 'vidsrcwtf1', label: 'Wtf 1' }, { id: 'vidsrcwtf5', label: 'Wtf 5' },
+                      ] as { id: InlineSource; label: string }[]).map(src => (
+                        <button
+                          key={src.id}
+                          onClick={() => setAnimeExtraSource(src.id)}
+                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
+                          style={animeExtraSource === src.id
+                            ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' }
+                            : { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }
+                          }
+                        >
+                          {src.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* ── Anime episode panel (25%) ── */}
+            <div className="w-full lg:w-1/4 min-w-0">
+              <div
+                className="h-full rounded-lg overflow-hidden flex flex-col lg:min-h-[300px]"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  backdropFilter: 'blur(20px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                }}
+              >
+                <div className="px-4 py-2.5 border-b flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                  <span className="uppercase font-semibold" style={{ fontSize: '11px', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.4)' }}>Épisodes</span>
+                </div>
+                {/* Anime season selectors */}
+                <div className="px-2 py-2 border-b flex flex-wrap gap-1 flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                  {animeSeasons.map((s: any, idx: number) => {
+                    const sNum = s.number ?? (idx + 1);
+                    return (
+                      <button
+                        key={sNum}
+                        onClick={() => setPanelSeason(sNum)}
+                        className="px-2.5 py-0.5 text-xs font-medium transition-all duration-200"
+                        style={activePanelSeason === sNum
+                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '20px', border: 'none' }
+                          : { background: 'rgba(255,255,255,0.06)', color: '#9ca3af', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }
+                        }
+                      >
+                        S{sNum} ({(s.episodes as any[])?.length ?? 0})
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Anime episode list */}
+                <div
+                  ref={episodeListRef}
+                  className="flex-1 overflow-y-auto lg:max-h-[540px] 2xl:max-h-[680px] ep-panel-scroll p-1.5"
+                  style={{ scrollbarWidth: 'thin', scrollbarColor: '#7c3aed transparent' }}
+                >
+                  {animePanelEpisodes.map((ep: any) => {
+                    const isActive = selectedEpisode === ep.index && selectedSeason === activePanelSeason;
+                    return (
+                      <button
+                        key={ep.index}
+                        ref={isActive ? (el) => { activeEpisodeRef.current = el; } : undefined}
+                        onClick={() => handleAnimePanelEpisodeClick(ep, activePanelSeason!)}
+                        className="ep-card w-full flex items-center gap-2.5 px-3 py-2.5 mb-1 text-left relative overflow-hidden"
+                        style={isActive ? { background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.2)' } : {}}
+                      >
+                        {isActive && (
+                          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: 'linear-gradient(to bottom, #22c55e, #7c3aed)' }} />
+                        )}
+                        <span
+                          className="flex-shrink-0 w-9 min-h-[26px] flex items-center justify-center text-[10px] font-bold text-white"
+                          style={isActive
+                            ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', borderRadius: '8px' }
+                            : { background: 'rgba(255,255,255,0.08)', borderRadius: '8px' }
+                          }
+                        >
+                          E{String(ep.index).padStart(2, '0')}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xs text-white truncate leading-snug">
+                            {ep.name || `Épisode ${ep.index}`}
+                          </div>
+                          <div className="text-[10px] text-green-400 mt-0.5">Disponible</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Lecteur vidéo */}
-          {selectedLanguage && selectedPlayer !== null && (
-            <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-              <iframe
-                src={selectedAnimeEpisode.streaming_links
-                  .find((link: any) => link.language === selectedLanguage)
-                  .players[parseInt(selectedPlayer)]}
-                className="absolute top-0 left-0 w-full h-full"
-                allowFullScreen
-                allow="autoplay; encrypted-media"
-                title={`${tvShow?.name} - S${selectedSeason} E${selectedEpisode}`}
-              ></iframe>
-            </div>
-          )}
-        </motion.div>
-      )}
+          </motion.div>
+        );
+      })()}
       {/* Séries similaires — la section est rendue HORS du wrapper page
           (qui ferme à la ligne ~6686), donc on doit appliquer le padding
           gauche/droit ici directement pour s'aligner sur le reste du contenu. */}
@@ -7020,27 +7319,17 @@ const TVDetails: React.FC = () => {
                 onClick={() => {
                   setShowUpcomingModal(false);
                   setForceShowUpcoming(true);
-                  if (pendingEpisode) {
-                    if (cinemaMode && id && selectedSeason) {
-                      // En mode cinéma, naviguer vers la page de visionnage dédiée
-                      setLastWatched({ season: selectedSeason!, episode: pendingEpisode });
-                      if (animeMode) {
-                        navigate(`/watch/anime/${encodeId(id)}/season/${selectedSeason}/episode/${pendingEpisode}`);
-                      } else {
-                        navigate(`/watch/tv/${encodeId(id)}/s/${selectedSeason}/e/${pendingEpisode}`);
-                      }
-                      return;
-                    }
-                    if (!id || !selectedSeason) {
-                      // Mode normal: sélectionner l'épisode et faire défiler vers le lecteur intégré
-                      setSelectedEpisode(pendingEpisode);
-                      setLastWatched({ season: selectedSeason!, episode: pendingEpisode });
+                  if (pendingEpisode && id && selectedSeason) {
+                    setSelectedEpisode(pendingEpisode);
+                    setLastWatched({ season: selectedSeason!, episode: pendingEpisode });
+                    if (animeMode) {
                       setTimeout(() => {
-                        const playerElement = videoPlayerRef.current?.getIframe();
-                        if (playerElement) {
-                          playerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }
-                      }, 100);
+                        const playerSection = animeVideoPlayerSectionRef.current;
+                        if (playerSection) playerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 80);
+                    } else {
+                      setShowInlinePlayer(true);
+                      setTimeout(() => scrollToInlinePlayer(), 100);
                     }
                   }
                   setPendingEpisode(null);

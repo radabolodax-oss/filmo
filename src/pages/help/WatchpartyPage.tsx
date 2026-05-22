@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Users, AlertTriangle } from 'lucide-react';
 import TutoLayout, { TutoSection } from '../../components/TutoLayout';
@@ -8,7 +8,7 @@ const WatchpartyPage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.watchparty.title')} — PRAWLX`;
+    document.title = `${t('help.watchparty.title')} — Prowler`;
   }, [t]);
 
   const sections: TutoSection[] = [

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
 import { SITE_URL } from '../config/runtime';
@@ -37,7 +37,7 @@ const SEO: React.FC<SEOProps> = (props) => {
       { lang: 'x-default', href: SITE_URL },
     ],
   } = props;
-  const siteName = 'PRAWLX';
+  const siteName = 'Prowler';
   
   return (
     <Helmet>

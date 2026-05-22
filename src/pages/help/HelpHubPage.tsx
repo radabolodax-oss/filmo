@@ -91,7 +91,7 @@ const HelpHubPage: React.FC = () => {
   const currentLang = i18n.language;
 
   useEffect(() => {
-    document.title = `${t('help.hub.title')} — PRAWLX`;
+    document.title = `${t('help.hub.title')} — Prowler`;
   }, [t]);
 
   const results: Result[] = useMemo(() => {

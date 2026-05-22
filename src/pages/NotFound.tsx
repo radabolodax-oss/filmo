@@ -17,7 +17,7 @@ const NotFound = () => {
   const Icon = VARIANT_ICONS[variant - 1];
 
   useEffect(() => {
-    document.title = '404 - PRAWLX';
+    document.title = '404 - Prowler';
   }, []);
 
   return (

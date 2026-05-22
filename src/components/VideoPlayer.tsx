@@ -27,14 +27,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, nextMovie }) => {
 
   return (
     <iframe
-      src={`https://frembed.click/api/film.php?id=${movieId}`}
+      src={`https://frembed.click/embed/movie/${movieId}`}
       width="100%"
       height="500px"
       frameBorder="0"
       allowFullScreen
       scrolling="no"
       style={{ overflow: 'hidden' }}
-      sandbox="allow-scripts allow-same-origin"
+      allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
     />
   );
 };

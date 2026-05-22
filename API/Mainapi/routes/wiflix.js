@@ -28,7 +28,7 @@ const {
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "";
 const TMDB_API_URL = "https://api.themoviedb.org/3";
-const WIFLIX_BASE_URL = "https://flemmix.farm";
+const WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || "https://flemmix.farm";
 
 // === Cache helpers (local, since getFromCacheNoExpiration is not yet in cacheManager) ===
 const getFromCacheNoExpiration = async (cacheDir, key) => {

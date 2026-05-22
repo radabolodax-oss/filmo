@@ -105,11 +105,11 @@ const darkiHeaders = {
 };
 
 // Coflix config
-const COFLIX_BASE_URL = "https://coflix.date";
+const COFLIX_BASE_URL = process.env.COFLIX_BASE_URL || "https://coflix.date";
 const coflixHeaders = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-  Referer: "https://coflix.date",
+  Referer: COFLIX_BASE_URL,
 };
 
 // === Axios instances for each source ===
@@ -129,7 +129,7 @@ const axiosAnimeSama = axios.create({
   decompress: true,
 });
 
-const FSTREAM_BASE_URL_VAL = "https://french-stream.one/";
+const FSTREAM_BASE_URL_VAL = process.env.FSTREAM_BASE_URL ? process.env.FSTREAM_BASE_URL.replace(/\/?$/, '/') : "https://french-stream.ac/";
 const axiosFStream = axios.create({
   baseURL: FSTREAM_BASE_URL_VAL,
   timeout: 6000,
@@ -468,6 +468,7 @@ app.use('/', searchRouter);
 app.use('/api', downloadRouter);
 app.use('/api/fstream', require('./routes/fstream'));
 app.use('/api/wiflix', require('./routes/wiflix'));
+app.use('/api/frembed', require('./routes/frembed'));
 app.use('/api', require('./routes/sync'));
 app.use('/api/profiles', require('./routes/profiles'));
 app.use('/api/help', require('./routes/helpFeedback'));
@@ -497,6 +498,24 @@ app.use("/api/purstream", purstreamRouter);
 
 const downloadLinksLeaderboardRouter = require('./routes/downloadLinksLeaderboard');
 app.use('/api/download-links', downloadLinksLeaderboardRouter);
+
+// --- Configure and mount topstream ---
+const topstreamRouter = require('./routes/topstream');
+topstreamRouter.configure({
+  TMDB_API_KEY,
+  TMDB_API_URL,
+  getFromCacheNoExpiration,
+  saveToCache,
+  shouldUpdateCache24h,
+});
+app.use('/api/topstream', topstreamRouter);
+
+// --- Configure and mount dragiv ---
+const dragivRouter = require('./routes/dragiv');
+dragivRouter.configure({
+  getFromCacheNoExpiration,
+});
+app.use('/api/dragiv', dragivRouter);
 
 // ==========================================================================
 // MySQL pool initialization — pool unique via mysqlPool.js

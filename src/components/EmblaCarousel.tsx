@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+﻿import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { Star, Calendar, Trash, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
@@ -10,7 +10,7 @@ import { useTmdbImages, prefetchTmdbImages } from '../hooks/useTmdbImages';
 import { useEmblaScrollSuppress } from '../hooks/useEmblaScrollSuppress';
 import './EmblaCarousel.css';
 
-const POSTER_FALLBACK = `data:image/svg+xml,${encodeURIComponent('<svg width="500" height="750" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#111"/><text x="50%" y="50%" fill="#444" font-size="36" font-family="sans-serif" text-anchor="middle" dy=".3em">PRAWLX</text></svg>')}`;
+const POSTER_FALLBACK = `data:image/svg+xml,${encodeURIComponent('<svg width="500" height="750" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#111"/><text x="50%" y="50%" fill="#444" font-size="36" font-family="sans-serif" text-anchor="middle" dy=".3em">Prowler</text></svg>')}`;
 
 // Stable frozen constant for non-history carousel items — prevents fresh object
 // identity inside limitedItems.map() from defeating CarouselCard memo. — perf
@@ -82,7 +82,7 @@ const LazyImage: React.FC<LazyImageProps> = ({
   className = '',
   style,
   onError,
-  placeholder = 'data:image/svg+xml;utf8,<svg width="342" height="513" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 342 513" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="38" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">PRAWLX</text></svg>',
+  placeholder = 'data:image/svg+xml;utf8,<svg width="342" height="513" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 342 513" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="38" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">Prowler</text></svg>',
   draggable = false,
   priority = false
 }) => {
@@ -231,7 +231,7 @@ const CarouselCard = React.memo<{
       : t('common.movie');
 
   return (
-    <div className="embla-slide flex-none relative w-[144px] md:w-[192px]">
+    <div className="embla-slide flex-none relative w-[160px] md:w-[192px] tv:w-[220px]">
       <div
         style={{ animationDelay: `${Math.min(index * 0.03, 0.5)}s` }}
         className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 hover:scale-105 transition-transform duration-200 ease-out animate-card-enter"

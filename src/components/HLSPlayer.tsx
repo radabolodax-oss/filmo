@@ -1427,7 +1427,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [isAirPlayLoading, setIsAirPlayLoading] = useState(false);
   const castButtonRef = useRef<HTMLElement | null>(null);
   const lastLoadedCastSrcRef = useRef<string | null>(null);
-  // Native Android cast bridge (injected by the PRAWLX Android app WebView).
+  // Native Android cast bridge (injected by the Prowler Android app WebView).
   // When present, clicking cast routes through the Google Cast SDK on-device
   // instead of the web cast_sender.js SDK (which isn't available inside WebView).
   const [nativeCastBridge, setNativeCastBridge] = useState<any>(null);
@@ -2033,19 +2033,19 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           type: 'frembed',
           id: 'frembed_main',
           label: t('watch.frembedPlayer'),
-          url: `https://frembed.click/api/film.php?id=${movieId}`,
+          url: `https://frembed.click/embed/movie/${movieId}`,
         });
       } else if (tvShowId && seasonNumber && episodeNumber) {
         embedSources.push({
           type: 'frembed',
           id: 'frembed_main',
           label: t('watch.frembedPlayer'),
-          url: `https://frembed.click/api/serie.php?id=${tvShowId}&sa=${seasonNumber}&epi=${episodeNumber}`,
+          url: `https://frembed.click/embed/serie/${tvShowId}?sa=${seasonNumber}&epi=${episodeNumber}`,
         });
       }
     }
 
-    // Add custom sources (PRAWLX players)
+    // Add custom sources (Prowler players)
     if (customSources && customSources.length > 0) {
       customSources.forEach((source, index) => {
         const srcLower = source.toLowerCase();
@@ -2186,11 +2186,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     // Définir les lecteurs VO/VOSTFR à conserver (enlever 6, 4 et 2)
     if (showVostfrMenu) {
       const vostfrSources = [
-        { id: 'peachify', label: 'Peachify', url: '' }, // Peachify (priorité, FR subs + accent PRAWLX)
-        { id: 'vostfr', label: 'Videasy', url: '' }, // Videasy
-        { id: 'vidlink', label: 'Vidlink', url: '' }, // vidlink
-        { id: 'vidsrccc', label: 'Vidsrc.io', url: '' }, // vidsrc.io
-        { id: 'vidsrcwtf1', label: 'Vidsrc.wtf 1', url: '' } // vidsrc.wtf (v1)
+        { id: 'peachify',     label: 'Peachify',      url: '' },
+        { id: 'vostfr',       label: 'Videasy',        url: '' },
+        { id: 'vidlink',      label: 'Vidlink',        url: '' },
+        { id: 'vidsrccc',     label: 'Vidsrc.io',      url: '' },
+        { id: 'vidsrcsu',     label: 'Vidsrc.su',      url: '' },
+        { id: 'vidsrcwtf1',   label: 'Vidsrc.wtf 1',   url: '' },
+        { id: 'vidsrcwtf3',   label: 'Vidsrc.wtf 3',   url: '' },
+        { id: 'vidsrcwtf5',   label: 'Vidsrc.wtf 5',   url: '' },
       ];
 
       vostfrSources.forEach(source => {
@@ -2202,18 +2205,24 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         // boutons Sources/Open dupliqués (rendus dans le parent ET dans l'iframe imbriqué).
         if (tvShowId != null && seasonNumber != null && episodeNumber != null) {
           // TV Show URLs
-          if (source.id === 'peachify') finalUrl = `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626`;
-          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`; // vidlink.pro
-          else if (source.id === 'vidsrccc') finalUrl = `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}`;
-          else if (source.id === 'vostfr') finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`; // Videasy
-          else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`; // Assumed pattern
+          if      (source.id === 'peachify')   finalUrl = `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626`;
+          else if (source.id === 'vostfr')     finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          else if (source.id === 'vidlink')    finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          else if (source.id === 'vidsrccc')   finalUrl = `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}`;
+          else if (source.id === 'vidsrcsu')   finalUrl = `https://vidsrc.su/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`;
+          else if (source.id === 'vidsrcwtf3') finalUrl = `https://vidsrc.wtf/api/3/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`;
+          else if (source.id === 'vidsrcwtf5') finalUrl = `https://vidsrc.wtf/api/5/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`;
         } else if (movieId) {
-          // Movie URLs (existing logic)
-          if (source.id === 'peachify') finalUrl = `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626`;
-          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/movie/${movieId}`; // vidlink.pro
-          else if (source.id === 'vidsrccc') finalUrl = `https://vidsrc.io/embed/movie?tmdb=${movieId}`;
-          else if (source.id === 'vostfr') finalUrl = `https://player.videasy.net/movie/${movieId}`;
+          // Movie URLs
+          if      (source.id === 'peachify')   finalUrl = `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626`;
+          else if (source.id === 'vostfr')     finalUrl = `https://player.videasy.net/movie/${movieId}`;
+          else if (source.id === 'vidlink')    finalUrl = `https://vidlink.pro/movie/${movieId}`;
+          else if (source.id === 'vidsrccc')   finalUrl = `https://vidsrc.io/embed/movie?tmdb=${movieId}`;
+          else if (source.id === 'vidsrcsu')   finalUrl = `https://vidsrc.su/embed/movie/${movieId}`;
           else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/movie/?id=${movieId}`;
+          else if (source.id === 'vidsrcwtf3') finalUrl = `https://vidsrc.wtf/api/3/movie/?id=${movieId}`;
+          else if (source.id === 'vidsrcwtf5') finalUrl = `https://vidsrc.wtf/api/5/movie/?id=${movieId}`;
         }
 
         embedSources.push({
@@ -3336,12 +3345,10 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       // Seulement naviguer vers l'épisode suivant si la lecture en boucle n'est PAS activée
       if (nextMovie) {
         setShowNextMovie(true);
-      }
-      if (nextEpisode && onNextEpisode && autoNextEpisodeEnabled) {
-        onNextEpisode(nextEpisode.seasonNumber, nextEpisode.episodeNumber);
-      }
-      // Show similar content when nothing to play next
-      if (!nextEpisode && !nextMovie && similarContent && similarContent.length > 0) {
+      } else if (nextEpisode && autoNextEpisodeEnabled && !hasDeclinedNextEpisode) {
+        // Afficher l'overlay (qui gère le compte à rebours et la navigation)
+        setShowNextEpisodeOverlay(true);
+      } else if (!nextEpisode && !nextMovie && similarContent && similarContent.length > 0) {
         setShowSimilarContent(true);
       }
     };
@@ -3355,7 +3362,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('ended', handleEnded);
     };
-  }, [nextMovie, nextEpisode, onNextEpisode, isLooping, onEnded, onPlayerEnded, onPlayerPlay, onPlayerPause, autoNextEpisodeEnabled, audioEnhancerMode, volumeBoost, customAudio]);
+  }, [nextMovie, nextEpisode, onNextEpisode, isLooping, onEnded, onPlayerEnded, onPlayerPlay, onPlayerPause, autoNextEpisodeEnabled, hasDeclinedNextEpisode, similarContent, audioEnhancerMode, volumeBoost, customAudio]);
 
   // Add seeked event listener for WatchParty seek sync
   useEffect(() => {
@@ -3619,7 +3626,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           return;
         }
 
-        const res = await axios.get(osUrl, { headers: { 'User-Agent': 'PRAWLX/1.0' } });
+        const res = await axios.get(osUrl, { headers: { 'User-Agent': 'Prowler/1.0' } });
         if (cancelled) return;
 
         if (Array.isArray(res.data)) {
@@ -3711,7 +3718,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
       // OpenSubtitles requires a User-Agent header; set a simple one
       console.log(`Fetching OpenSubtitles from: ${osUrl}`);
-      const res = await axios.get(osUrl, { headers: { 'User-Agent': 'PRAWLX/1.0' } });
+      const res = await axios.get(osUrl, { headers: { 'User-Agent': 'Prowler/1.0' } });
       if (Array.isArray(res.data)) {
         console.log(`Found ${res.data.length} subtitle results for ${hasTvShowId ? 'TV show' : 'movie'}`);
         setExternalSubs(res.data);
@@ -3756,7 +3763,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           // Download and extract the .gz file locally using PAKO
           const response = await fetch(downloadLink, {
             headers: {
-              'User-Agent': 'PRAWLX/1.0'
+              'User-Agent': 'Prowler/1.0'
             }
           });
 
@@ -5070,7 +5077,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
         await nativeCastBridge.loadMedia(
           finalUrl,
-          title || tvShow?.name || 'PRAWLX',
+          title || tvShow?.name || 'Prowler',
           posterUrl,
           videoRef.current?.currentTime || 0,
         );
@@ -5474,7 +5481,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     };
   }, [loadCurrentMediaOnCastSession, castSdkReady]);
 
-  // Detect the PRAWLX Android app WebView cast bridge.
+  // Detect the Prowler Android app WebView cast bridge.
   // When the React Native shell injects window.MovixAndroidCast, we route
   // casts through the on-device Google Cast SDK instead of the web SDK
   // (chrome.cast is not available inside Android WebView).
@@ -10581,13 +10588,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           }}
         />
       )}
-      {/* Skip Intro Button — bottom-right, visible during first 90s of TV episodes */}
+      {/* Skip Intro Button — bottom-right, always visible during first 90s of TV episodes */}
       <AnimatePresence>
         {showSkipIntro && !isLoading && controls && (
           <motion.button
             key="skip-intro"
             initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: showControls ? 1 : 0, x: 0 }}
+            animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
             onClick={(e) => {
@@ -10605,13 +10612,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         )}
       </AnimatePresence>
 
-      {/* Previous Episode Button — bottom-left, discrete liquid glass */}
+      {/* Previous Episode Button — bottom-left, always visible, discrete liquid glass */}
       <AnimatePresence>
         {onPreviousEpisode && !(seasonNumber === 1 && episodeNumber === 1) && controls && (
           <motion.button
             key="prev-episode"
             initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: showControls ? 1 : 0, x: 0 }}
+            animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.2 }}
             onClick={(e) => {

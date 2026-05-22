@@ -226,7 +226,7 @@ const WatchPartyRoom: React.FC = () => {
     [safeRemarkGfm],
   );
 
-  // Track page visit for PRAWLX Wrapped
+  // Track page visit for Prowler Wrapped
   useWrappedTracker({
     mode: 'page',
     pageData: { pageName: 'watchparty' },

@@ -61,7 +61,7 @@ function getStoredIdentity(): StoredIdentity | null {
       const userProfile = parsed?.userProfile;
       if (userProfile && typeof userProfile === 'object') {
         return {
-          username: String(userProfile.username || userProfile.name || 'PRAWLX'),
+          username: String(userProfile.username || userProfile.name || 'Prowler'),
           avatar: String(userProfile.avatar || DEFAULT_AVATAR),
         };
       }
@@ -75,7 +75,7 @@ function getStoredIdentity(): StoredIdentity | null {
     try {
       const parsed = JSON.parse(googleRaw);
       return {
-        username: String(parsed?.name || 'PRAWLX'),
+        username: String(parsed?.name || 'Prowler'),
         avatar: String(parsed?.picture || DEFAULT_AVATAR),
       };
     } catch {
@@ -88,7 +88,7 @@ function getStoredIdentity(): StoredIdentity | null {
     try {
       const parsed = JSON.parse(discordRaw);
       return {
-        username: String(parsed?.username || 'PRAWLX'),
+        username: String(parsed?.username || 'Prowler'),
         avatar: String(parsed?.avatar || DEFAULT_AVATAR),
       };
     } catch {
@@ -217,7 +217,7 @@ const FakePermissionsTeasingCard: React.FC = () => {
   return (
     <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
       <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gray-400">
-        🚫 {t('oauthAuthorize.fakeNotRequestedTitle', 'Ce que PRAWLX ne demande pas')}
+        🚫 {t('oauthAuthorize.fakeNotRequestedTitle', 'Ce que Prowler ne demande pas')}
       </p>
       <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2">
         <span className="shrink-0 text-red-400/70 leading-none">✗</span>
@@ -517,11 +517,11 @@ const OAuthAuthorizePage: React.FC = () => {
               <div className="space-y-1.5">
                 <div className="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1.5 shadow-lg shadow-black/20">
                   <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black/30">
-                    <img src={MOVIX_LOGO_SRC} alt="PRAWLX" className="h-5 w-5 object-contain" />
+                    <img src={MOVIX_LOGO_SRC} alt="Prowler" className="h-5 w-5 object-contain" />
                   </span>
                   <span className="text-left">
                     <span className="block text-[0.6rem] font-semibold uppercase tracking-[0.35em] text-red-200/80">
-                      PRAWLX
+                      Prowler
                     </span>
                     <span className="block text-xs font-medium text-white">OAuth</span>
                   </span>
@@ -688,7 +688,7 @@ const OAuthAuthorizePage: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <img
                     src={accountIdentity?.avatar || DEFAULT_AVATAR}
-                    alt={accountIdentity?.username || 'PRAWLX'}
+                    alt={accountIdentity?.username || 'Prowler'}
                     className="h-10 w-10 rounded-full border border-white/10 object-cover"
                   />
                   <div className="min-w-0">

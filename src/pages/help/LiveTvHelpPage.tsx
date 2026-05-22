@@ -8,7 +8,7 @@ const LiveTvHelpPage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.liveTv.title')} — PRAWLX`;
+    document.title = `${t('help.liveTv.title')} — Prowler`;
   }, [t]);
 
   const sections: TutoSection[] = [

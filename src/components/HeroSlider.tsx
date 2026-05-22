@@ -333,8 +333,7 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
         `}
       </style>
       <div
-        className="relative w-full overflow-hidden"
-        style={{ height: '550px' }}
+        className="relative w-full overflow-hidden h-[88vh] md:h-[550px] tv:h-[650px]"
       >
         {/* Edge fades */}
         <div className="absolute inset-y-0 left-0 w-10 sm:w-14 md:w-20 z-20 pointer-events-none bg-gradient-to-r from-black via-black/40 to-transparent" />
@@ -398,7 +397,7 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
                           // (hides the initial YouTube thumbnail/play-button overlay)
                           trailerRevealTimerRef.current = setTimeout(
                             () => setTrailerReady(true),
-                            4500
+                            7000
                           );
                         }}
                       />
@@ -420,7 +419,7 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
 
                   {/* ── Content ── */}
                   <div className="absolute inset-0 flex items-end md:items-center z-20">
-                    <div className="w-full md:max-w-2xl px-4 sm:px-6 md:px-12 pb-20 md:pb-16">
+                    <div className="w-full md:max-w-2xl px-4 sm:px-6 md:px-12 pb-24 md:pb-16 tv:pb-20 tv:max-w-4xl">
                       <AnimatePresence mode="wait">
                         {isActive && (
                           <motion.div

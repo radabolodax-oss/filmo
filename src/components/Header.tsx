@@ -2,7 +2,7 @@
 import Snowfall from 'react-snowfall';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
-import { Film, Search, Menu, X, Star, Tv2, Users, Clapperboard, Bell, Tv, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github } from 'lucide-react';
+import { Film, Search, X, Star, Tv2, Users, Clapperboard, Bell, Tv, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NotificationsPopup from './NotificationsPopup';
 import { getUnreadNotificationsCount, getNotificationsDisabled } from '../services/apiNotificationService';
@@ -71,6 +71,8 @@ const Header: React.FC = () => {
   const [headerQuery, setHeaderQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [hoveredNav, setHoveredNav] = useState<string | null>(null);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const lastScrollY = useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<HTMLDivElement>(null);
@@ -250,6 +252,23 @@ const Header: React.FC = () => {
     if (location.pathname !== '/search') setHeaderQuery('');
   }, [location.pathname]);
 
+  // Masquer/afficher le header au scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      const y = window.scrollY;
+      if (y <= 0) {
+        setHeaderHidden(false);
+      } else if (y > lastScrollY.current + 5) {
+        setHeaderHidden(true);
+      } else if (y < lastScrollY.current - 5) {
+        setHeaderHidden(false);
+      }
+      lastScrollY.current = y;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   // Autocomplete dropdown position
   const prevDropdownPosRef = useRef<{ top: number; left: number } | null>(null);
   const dropdownRafIdRef = useRef<number | null>(null);
@@ -356,72 +375,57 @@ const Header: React.FC = () => {
 
   return (
     <>
-      <header className="!fixed inset-x-0 top-0 w-full z-[11000] transition-all duration-300">
+      <header className={`!fixed inset-x-0 top-0 w-full z-[11000] transition-all duration-300 ${headerHidden ? '-translate-y-full' : 'translate-y-0'}`}>
         <div className="relative z-10">
           <div className="max-w-[1400px] 2xl:max-w-[1600px] mx-auto">
-            <div className="relative flex items-center h-16 px-4 md:px-6 lg:px-8 gap-3 md:gap-5">
+            <div className="relative flex items-center h-16 phone-ls:h-12 px-4 phone-ls:px-2 md:px-6 lg:px-8 gap-3 phone-ls:gap-2 md:gap-5">
 
-              {/* Logo — centré absolument */}
-              <Link
-                to="/"
-                className="absolute left-1/2 -translate-x-1/2 text-2xl md:text-3xl font-extrabold flex items-center transition-all duration-200 z-10 hover:scale-105"
-                onClick={(e) => {
-                  if (location.pathname === '/') {
-                    e.preventDefault();
-                    const lenis = (window as any).lenis;
-                    if (lenis) {
-                      lenis.scrollTo(0, { duration: 1.2 });
-                    } else {
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }
-                  }
-                }}
-                onMouseEnter={e => {
-                  const span = e.currentTarget.querySelector('.logo-text') as HTMLElement | null;
-                  if (span) {
-                    span.style.backgroundImage = 'linear-gradient(135deg,#1aff8f,#c46bff)';
-                    span.style.filter = 'drop-shadow(0 0 10px rgba(26,255,143,0.5)) drop-shadow(0 0 20px rgba(196,107,255,0.4))';
-                  }
-                }}
-                onMouseLeave={e => {
-                  const span = e.currentTarget.querySelector('.logo-text') as HTMLElement | null;
-                  if (span) {
-                    span.style.backgroundImage = 'linear-gradient(135deg,#00e676,#a855f7)';
-                    span.style.filter = '';
-                  }
-                }}
-              >
-                <span className="logo-text tracking-wider" style={{backgroundImage:'linear-gradient(135deg,#00e676,#a855f7)',WebkitBackgroundClip:'text',backgroundClip:'text',WebkitTextFillColor:'transparent',color:'transparent',display:'inline-block',transition:'background-image 0.2s'}}>PRAWLX</span>
-              </Link>
 
               {/* Desktop Nav: 3 items principaux + Explorer */}
-              <nav className="hidden lg:flex items-center gap-1.5">
-                {mainNavItems.map((item) => (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-white/15 border border-white/20 rounded-xl transition-all"
-                    onMouseEnter={() => setHoveredNav(item.path)}
-                    onMouseLeave={() => setHoveredNav(null)}
-                  >
-                    {item.icon}
-                    <span
-                      className="nav-label"
-                      style={(hoveredNav === item.path || item.isActive) ? {
-                        display: 'inline-block',
-                        backgroundImage: 'linear-gradient(135deg,#00e676,#a855f7)',
-                        WebkitBackgroundClip: 'text',
-                        backgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                        color: 'transparent',
-                      } : {
-                        display: 'inline-block',
-                        color: 'white',
-                        WebkitTextFillColor: 'white',
+              <nav className="hidden landscape:flex lg:flex items-center gap-1.5 phone-ls:gap-1">
+                {mainNavItems.map((item) => {
+                  const active = item.isActive || hoveredNav === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className="flex items-center gap-1.5 phone-ls:gap-1 px-3 phone-ls:px-2 py-1.5 phone-ls:py-1 text-sm phone-ls:text-xs font-medium text-white rounded-xl transition-all duration-200"
+                      style={{
+                        background: active
+                          ? 'linear-gradient(135deg, rgba(0,230,118,0.16) 0%, rgba(168,85,247,0.16) 100%)'
+                          : 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
+                        backdropFilter: 'blur(20px) saturate(180%)',
+                        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                        borderTop: '1px solid rgba(255,255,255,0.28)',
+                        borderLeft: '1px solid rgba(255,255,255,0.16)',
+                        borderRight: '1px solid rgba(255,255,255,0.07)',
+                        borderBottom: '1px solid rgba(0,0,0,0.22)',
+                        boxShadow: active
+                          ? 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.12), 0 0 0 1px rgba(168,85,247,0.18)'
+                          : 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
                       }}
-                    >{item.name}</span>
-                  </Link>
-                ))}
+                      onMouseEnter={() => setHoveredNav(item.path)}
+                      onMouseLeave={() => setHoveredNav(null)}
+                    >
+                      {item.icon}
+                      <span
+                        className="nav-label"
+                        style={active ? {
+                          display: 'inline-block',
+                          backgroundImage: 'linear-gradient(135deg,#00e676,#a855f7)',
+                          WebkitBackgroundClip: 'text',
+                          backgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          color: 'transparent',
+                        } : {
+                          display: 'inline-block',
+                          color: 'white',
+                          WebkitTextFillColor: 'white',
+                        }}
+                      >{item.name}</span>
+                    </Link>
+                  );
+                })}
 
                 {isAprilFoolsAdminVisible && (
                   <Link
@@ -447,18 +451,25 @@ const Header: React.FC = () => {
               <div className="flex-1" />
 
               {/* Desktop Search */}
-              <div className="hidden md:block relative w-[14rem] lg:w-[15rem] xl:w-[20rem] 2xl:w-[22rem]">
+              <div className="hidden landscape:block lg:block relative w-[14rem] phone-ls:w-[9.5rem] lg:w-[15rem] xl:w-[20rem] 2xl:w-[22rem]">
                 <form
                   onSubmit={handleSearchSubmit}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
-                  className="relative flex items-center gap-2 rounded-2xl backdrop-blur-xl px-3 py-2 transition-all duration-200"
+                  className="relative flex items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200"
                   style={{
-                    background: 'linear-gradient(135deg, rgba(0,230,118,0.30) 0%, rgba(168,85,247,0.30) 100%)',
-                    border: searchFocused ? '1px solid transparent' : '1px solid rgba(255,255,255,0.22)',
+                    background: searchFocused
+                      ? 'linear-gradient(135deg, rgba(0,230,118,0.14) 0%, rgba(168,85,247,0.14) 100%)'
+                      : 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
+                    backdropFilter: 'blur(20px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                    borderTop: searchFocused ? '1px solid rgba(0,230,118,0.35)' : '1px solid rgba(255,255,255,0.28)',
+                    borderLeft: '1px solid rgba(255,255,255,0.16)',
+                    borderRight: '1px solid rgba(255,255,255,0.07)',
+                    borderBottom: '1px solid rgba(0,0,0,0.22)',
                     boxShadow: searchFocused
-                      ? '0 0 0 1.5px #00e676, 0 0 0 3px rgba(168,85,247,0.7), inset 0 1px 0 rgba(255,255,255,0.22), 0 4px 28px rgba(0,0,0,0.32), 0 0 22px rgba(0,230,118,0.16), 0 0 22px rgba(168,85,247,0.16)'
-                      : 'inset 0 1px 0 rgba(255,255,255,0.18), 0 4px 24px rgba(0,0,0,0.28), 0 0 16px rgba(0,230,118,0.08), 0 0 16px rgba(168,85,247,0.08)',
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 0 0 1px rgba(168,85,247,0.25), 0 8px 24px rgba(0,230,118,0.12)'
+                      : 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
                   }}
                 >
                   <Search size={15} className="shrink-0 text-gray-400/70" />
@@ -499,14 +510,6 @@ const Header: React.FC = () => {
                   </Link>
                 )}
 
-                {/* Mobile search icon */}
-                <motion.button
-                  className="md:hidden p-2 text-gray-400/70 hover:text-white transition-colors"
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setIsMobileSearchOpen(true)}
-                >
-                  <Search size={20} />
-                </motion.button>
 
                 {/* Notifications */}
                 {isAuthenticated && !notificationsDisabled && (
@@ -537,15 +540,6 @@ const Header: React.FC = () => {
                   </div>
                 )}
 
-                {/* Mobile/Tablet: Burger → ouvre fullscreen explore */}
-                <motion.button
-                  className="lg:hidden p-1.5 text-gray-400 hover:text-white transition-colors"
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => setIsExploreOpen(!isExploreOpen)}
-                  data-explore-trigger
-                >
-                  {isExploreOpen ? <X size={22} /> : <Menu size={22} />}
-                </motion.button>
               </div>
             </div>
           </div>
@@ -600,70 +594,45 @@ const Header: React.FC = () => {
         </AnimatePresence>
       </header>
 
-      {/* Fullscreen Explore Menu (Mobile/Tablet) */}
-      <AnimatePresence>
-        {isExploreOpen && (
-          <motion.div
-            className="lg:hidden fixed inset-0 z-[10999]"
-            style={{ touchAction: 'pan-y' }}
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 40 }}
-            transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-          >
-            <div className="h-full bg-black">
-              {/* Glow effects — radial-gradient au lieu de blur-[100px].
-                  Le blur 100px sur un 400×400 coûte ~3-5ms/frame en composit GPU
-                  tant que le menu est ouvert (coût ∝ rayon²). Le radial-gradient
-                  donne visuellement le même halo doux sans toucher au filter
-                  pipeline → ~0ms. */}
-              <div
-                className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] pointer-events-none"
-                style={{
-                  background:
-                    'radial-gradient(circle, transparent 0%, rgba(74, 222, 128, 0.06) 35%, transparent 70%)',
-                }}
-              />
-              <div className="absolute bottom-0 left-0 right-0 h-[200px] bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+      {/* Logo — hors du contexte d'empilement du header pour que mix-blend-mode:screen efface le fond noir JPEG */}
+      <div className="top-[1cm] landscape:top-0 md:top-0" style={{position:'fixed',left:'50%',transform:headerHidden?'translateX(-50%) translateY(-120px)':'translateX(-50%)',transition:'transform 0.3s ease',height:'64px',display:'flex',alignItems:'center',zIndex:11001,mixBlendMode:'screen',pointerEvents:'none',justifyContent:'center'}}>
+        <Link
+          to="/"
+          className="flex items-center transition-all duration-200 hover:scale-105"
+          style={{pointerEvents:'auto'}}
+          onClick={(e) => {
+            if (location.pathname === '/') {
+              e.preventDefault();
+              const lenis = (window as any).lenis;
+              if (lenis) {
+                lenis.scrollTo(0, { duration: 1.2 });
+              } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            }
+          }}
+          onMouseEnter={e => {
+            const glow = e.currentTarget.querySelector('.logo-glow') as HTMLElement | null;
+            if (glow) glow.style.opacity = '1';
+          }}
+          onMouseLeave={e => {
+            const glow = e.currentTarget.querySelector('.logo-glow') as HTMLElement | null;
+            if (glow) glow.style.opacity = '0';
+          }}
+        >
+          <div style={{position:'relative',display:'inline-flex',alignItems:'center'}}>
+            <img
+              className="logo-glow"
+              src="/prowler-logo.png"
+              aria-hidden="true"
+              className="h-11 lg:h-[105px]"
+              style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',objectFit:'contain',filter:'blur(20px) contrast(6) brightness(5) saturate(2)',opacity:0,transition:'opacity 0.35s ease',pointerEvents:'none'}}
+            />
+            <img src="/prowler-logo.png" alt="Prowler" className="h-11 lg:h-[105px]" style={{objectFit:'contain',position:'relative'}} />
+          </div>
+        </Link>
+      </div>
 
-              {/* Contenu scrollable */}
-              <div
-                className="relative h-full overflow-y-auto"
-                style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
-              >
-                {/* Spacer pour le header */}
-                <div className="h-20" />
-
-                <div className="px-5 pb-12 pt-2">
-                  {/* Items principaux en haut */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-                    {mainNavItems.map((item) => (
-                      <Link
-                        key={item.path}
-                        to={item.path}
-                        onClick={() => setIsExploreOpen(false)}
-                        className={`flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-medium transition-all border whitespace-nowrap ${
-                          item.isActive
-                            ? 'bg-white/10 border-white/20 text-white'
-                            : 'bg-white/[0.06] border-white/[0.08] text-gray-300 active:bg-white/10'
-                        }`}
-                      >
-                        {item.icon}
-                        <span>{item.name}</span>
-                      </Link>
-                    ))}
-                  </div>
-
-                  {/* Grille de cards */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {allExploreItems.map((item) => renderExploreCard(item))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Mobile Search Overlay */}
       <AnimatePresence>

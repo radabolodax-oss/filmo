@@ -1,11 +1,11 @@
 ﻿/* ═══════════════════════════════════════════════════════
-   PRAWLX THEME — Remplace rouge Movix par vert→violet
+   Prowler THEME — Remplace rouge Movix par vert→violet
    À importer dans src/main.tsx ou src/App.tsx :
-   import './config/prawlx-theme.css';
+   import './config/Prowler-theme.css';
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  /* Couleurs principales PRAWLX */
+  /* Couleurs principales Prowler */
   --color-primary: #00e676;
   --color-primary-dim: #00c853;
   --color-secondary: #000000;
@@ -106,10 +106,29 @@ body::before {
 }
 
 /* ── Navbar ── */
-nav, header {
-  background: var(--color-bg-nav) !important;
-  backdrop-filter: blur(18px) !important;
-  border-bottom: 1px solid var(--color-border) !important;
+nav {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: none !important;
+}
+
+/* Header : complètement transparent */
+header {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
+}
+
+/* BottomNav wrapper : transparent pour laisser le vrai glass de la pill s'exprimer */
+.bottom-nav-wrapper {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
 }
 
 /* ── Cards hover ── */

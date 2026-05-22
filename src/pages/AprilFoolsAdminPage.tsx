@@ -122,17 +122,17 @@ const AprilFoolsAdminPage: React.FC = () => {
   const fakeVipKeys = useMemo(
     () => [
       {
-        code: 'VIP-PRAWLX-4F2K-Q8AZ',
+        code: 'VIP-Prowler-4F2K-Q8AZ',
         pack: t('aprilAdmin.vipKeys.durationOptions.days365'),
         status: t('aprilAdmin.status.available'),
       },
       {
-        code: 'VIP-PRAWLX-9L1X-R7TP',
+        code: 'VIP-Prowler-9L1X-R7TP',
         pack: t('aprilAdmin.vipKeys.durationOptions.days30'),
         status: t('aprilAdmin.status.queued'),
       },
       {
-        code: 'VIP-PRAWLX-7N6C-Z1EF',
+        code: 'VIP-Prowler-7N6C-Z1EF',
         pack: t('aprilAdmin.vipKeys.durationOptions.lifetime'),
         status: t('aprilAdmin.status.delivered'),
       },

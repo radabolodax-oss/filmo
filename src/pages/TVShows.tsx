@@ -328,7 +328,7 @@ const TVShows: React.FC = () => {
     { id: 10768, name: 'Guerre & Politique', route: '/genre/tv/10768' },
   ]);
 
-  // Track page visit for PRAWLX Wrapped
+  // Track page visit for Prowler Wrapped
   useWrappedTracker({
     mode: 'page',
     pageData: { pageName: 'tv-shows' },
@@ -705,7 +705,7 @@ const TVShows: React.FC = () => {
 
   useEffect(() => {
     // Simple title for TV Shows page
-    document.title = `${t('tvShows.title')} - PRAWLX`;
+    document.title = `${t('tvShows.title')} - Prowler`;
   }, []);
 
   // Auto-rotate featured shows

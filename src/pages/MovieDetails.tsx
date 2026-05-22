@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import AddToListButton from '../components/AddToListButton';
 import DetailsSkeleton from '../components/skeletons/DetailsSkeleton';
+import WatchInterstitial from '../components/WatchInterstitial';
 
 import ShareButtons from '../components/ShareButtons';
 import HLSPlayer from '../components/HLSPlayer';
@@ -1368,7 +1369,7 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
       // =========== PROCESS FREMBED RESULTS ===========
       const isFrembedAvailable = frembedResult.isFrembedAvailable;
       setFrembedAvailable(isFrembedAvailable);
-      setVideoSource(`https://frembed.click/api/film.php?id=${movieId}`);
+      setVideoSource(`https://frembed.click/embed/movie/${movieId}`);
 
       // =========== PROCESS COFLIX RESULTS ===========
       if (coflixResult) {
@@ -1385,7 +1386,7 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
     } catch (error) {
       console.error('Error fetching video sources:', error);
       setFrembedAvailable(false);
-      setVideoSource(`https://frembed.click/api/film.php?id=${movieId}`);
+      setVideoSource(`https://frembed.click/embed/movie/${movieId}`);
       setLoadingAdFree(false);
       setLoadingCoflix(false);
       setLoadingOmega(false);
@@ -1911,7 +1912,7 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
                 : undefined // No sandbox for other players
             }
             src={
-              selectedSource === 'primary' ? `https://frembed.click/api/film.php?id=${movieId}` :
+              selectedSource === 'primary' ? `https://frembed.click/embed/movie/${movieId}` :
                 selectedSource === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
                 selectedSource === 'vostfr' ? `https://vidsrc.wtf/api/3/movie/?id=${movieId}` :
                   selectedSource === 'videasy' ? `https://vidlink.pro/movie/${movieId}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false` :
@@ -1945,7 +1946,7 @@ const MovieDetails = (): JSX.Element => {
   const { resetVipStatus } = useAdFreePopup(); // Récupérer la fonction reset
   const { currentProfile } = useProfile();
 
-  // Track page visit for PRAWLX Wrapped
+  // Track page visit for Prowler Wrapped
   useWrappedTracker({
     mode: 'page',
     pageData: id ? { pageName: 'movie-details', contentId: id } : undefined,
@@ -2021,6 +2022,12 @@ const MovieDetails = (): JSX.Element => {
 
   // Ajout d'un état pour suivre si le film est sorti
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
+
+  type InlineSource = 'frembed' | 'videasy' | 'videasy_net' | 'vidsrccc' | 'vidsrc' | 'vidsrcsu' | 'embed2' | 'embedsu' | 'vostfr' | 'vidsrcwtf1' | 'vidsrcwtf5';
+  const [showInlinePlayer, setShowInlinePlayer] = useState(false);
+  const [showInterstitial, setShowInterstitial] = useState(false);
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
+  const [showInlineSourcePicker, setShowInlineSourcePicker] = useState(false);
 
   const [collection, setCollection] = useState<Collection | null>(null);
   const [loadingCollection, setLoadingCollection] = useState(false);
@@ -2398,6 +2405,50 @@ const MovieDetails = (): JSX.Element => {
             )}
           </motion.button>
 
+          {/* Source picker discret */}
+          <div className="relative self-stretch">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              onClick={() => setShowInlineSourcePicker(v => !v)}
+              className="h-full flex flex-col items-center gap-2 px-3 sm:px-4 py-4 sm:py-5 bg-gray-800/80 hover:bg-gray-700 rounded-lg justify-center text-xs sm:text-sm border border-gray-600/60"
+              title="Changer de source"
+            >
+              <Film className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+              <span>Source</span>
+            </motion.button>
+            {showInlineSourcePicker && (
+              <div className="absolute left-0 bottom-full mb-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl min-w-[155px] z-50 overflow-hidden">
+                {([
+                  { id: 'frembed',     label: 'Frembed (VF)' },
+                  { id: 'videasy',     label: 'Vidlink' },
+                  { id: 'videasy_net', label: 'Videasy' },
+                  { id: 'vidsrccc',    label: 'Vidsrc.cc' },
+                  { id: 'vidsrc',      label: 'Vidsrc.io' },
+                  { id: 'vidsrcsu',    label: 'Vidsrc.su' },
+                  { id: 'embed2',      label: '2embed' },
+                  { id: 'embedsu',     label: 'Embed.su' },
+                  { id: 'vostfr',      label: 'VOSTFR' },
+                  { id: 'vidsrcwtf1',  label: 'Vidsrc.wtf 1' },
+                  { id: 'vidsrcwtf5',  label: 'Vidsrc.wtf 5' },
+                ] as { id: InlineSource; label: string }[]).map(src => (
+                  <button
+                    key={src.id}
+                    onClick={() => {
+                      setInlinePlayerSource(src.id);
+                      setShowInlineSourcePicker(false);
+                      if (!showInlinePlayer) handleWatchClick();
+                    }}
+                    className={`w-full px-4 py-2 text-left text-sm transition-colors ${inlinePlayerSource === src.id ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
+                  >
+                    {src.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {(!ENABLE_VIP_DOWNLOAD_CHECK || localStorage.getItem('is_vip') === 'true') && (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -2513,8 +2564,9 @@ const MovieDetails = (): JSX.Element => {
   // Watch progress tracking functionality removed
 
   const handleWatchClick = () => {
-    // Mode cinéma toujours actif - naviguer vers la page de visionnage
-    navigate(`/watch/movie/${encodeId(id || '')}`);
+    setShowInterstitial(true);
+    setShowInlineSourcePicker(false);
+    setTimeout(() => scrollToPlayer(), 80);
   };
 
   const fetchRecommendations = async () => {
@@ -2568,9 +2620,9 @@ const MovieDetails = (): JSX.Element => {
       setIsReleased(releaseDate ? releaseDate <= new Date() : true);
 
       // Simple movie title
-      document.title = `${movie.title} - PRAWLX`;
+      document.title = `${movie.title} - Prowler`;
     } else {
-      document.title = 'Film - PRAWLX';
+      document.title = 'Film - Prowler';
     }
   }, [movie, id]);
 
@@ -2578,6 +2630,22 @@ const MovieDetails = (): JSX.Element => {
     const playerSection = document.getElementById('video-player-section');
     if (playerSection) {
       playerSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const getInlinePlayerUrl = () => {
+    switch (inlinePlayerSource) {
+      case 'frembed':      return `https://frembed.click/embed/movie/${id}`;
+      case 'videasy':      return `https://vidlink.pro/movie/${id}?primaryColor=63f99f&secondaryColor=a2a2a2&iconColor=63f99f&autoplay=true`;
+      case 'videasy_net':  return `https://player.videasy.net/movie/${id}`;
+      case 'vidsrccc':     return `https://vidsrc.cc/v2/embed/movie/${id}`;
+      case 'vidsrcsu':     return `https://vidsrc.su/embed/movie/${id}`;
+      case 'embed2':       return `https://www.2embed.cc/embed/${id}`;
+      case 'embedsu':      return `https://embed.su/embed/movie/${id}`;
+      case 'vostfr':       return `https://vidsrc.wtf/api/3/movie/?id=${id}`;
+      case 'vidsrcwtf1':   return `https://vidsrc.wtf/api/1/movie/?id=${id}`;
+      case 'vidsrcwtf5':   return `https://vidsrc.wtf/api/5/movie/?id=${id}`;
+      default:             return `https://vidsrc.io/embed/movie?tmdb=${id}`;
     }
   };
 
@@ -2745,12 +2813,12 @@ const MovieDetails = (): JSX.Element => {
   const movieYear = movie.release_date && !isNaN(new Date(movie.release_date).getTime())
     ? new Date(movie.release_date).getFullYear()
     : null;
-  const movieTitle = movieYear ? `${movie.title} (${movieYear}) - PRAWLX` : `${movie.title} - PRAWLX`;
+  const movieTitle = movieYear ? `${movie.title} (${movieYear}) - Prowler` : `${movie.title} - Prowler`;
   const movieCanonicalUrl = buildSiteUrl(`/movie/${encodedId || id}`);
   const movieSocialImage = movie.backdrop_path || movie.poster_path
     ? `https://image.tmdb.org/t/p/original${movie.backdrop_path || movie.poster_path}`
     : undefined;
-  const movieDescription = movie.overview?.trim() || `Découvrez ${movie.title} sur PRAWLX.`;
+  const movieDescription = movie.overview?.trim() || `Découvrez ${movie.title} sur Prowler.`;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -2974,10 +3042,6 @@ const MovieDetails = (): JSX.Element => {
               className="w-full rounded-lg shadow-lg"
             />
 
-            {/* Boutons d'action en-dessous du poster */}
-            <div className="mt-6">
-              <WatchButtons />
-            </div>
           </motion.div>
 
           {/* Colonne droite - Informations */}
@@ -4080,7 +4144,7 @@ const MovieDetails = (): JSX.Element => {
                                     onError={(e) => {
                                       const target = e.target as HTMLImageElement;
                                       target.onerror = null;
-                                      target.src = 'data:image/svg+xml;utf8,<svg width="500" height="750" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 750" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="50" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">PRAWLX</text></svg>';
+                                      target.src = 'data:image/svg+xml;utf8,<svg width="500" height="750" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 750" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="50" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">Prowler</text></svg>';
                                     }}
                                   />
 
@@ -4095,7 +4159,7 @@ const MovieDetails = (): JSX.Element => {
                                         onError={(e) => {
                                           const target = e.target as HTMLImageElement;
                                           target.onerror = null;
-                                          target.src = 'data:image/svg+xml;utf8,<svg width="500" height="281" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 281" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="30" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">PRAWLX</text></svg>';
+                                          target.src = 'data:image/svg+xml;utf8,<svg width="500" height="281" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 281" preserveAspectRatio="xMidYMid meet"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="%23ccc" font-size="30" font-family="Arial, sans-serif" text-anchor="middle" dy=".3em">Prowler</text></svg>';
                                         }}
                                       />
 
@@ -4314,8 +4378,77 @@ const MovieDetails = (): JSX.Element => {
                   {t('details.continueAnyway')}
                 </motion.button>
               </motion.div>
+            ) : showInterstitial ? (
+              <div
+                className="relative h-[500px] rounded-lg overflow-hidden"
+                style={{
+                  backgroundImage: movie?.backdrop_path
+                    ? `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.7)), url(https://image.tmdb.org/t/p/original${movie.backdrop_path})`
+                    : undefined,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundColor: '#000',
+                }}
+              >
+                <AnimatePresence>
+                  <WatchInterstitial
+                    contained
+                    posterUrl={movie?.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : undefined}
+                    onDone={() => { setShowInterstitial(false); setShowInlinePlayer(true); }}
+                  />
+                </AnimatePresence>
+              </div>
+            ) : showInlinePlayer ? (
+              // Lecteur iframe + barre de sources en dessous
+              <motion.div
+                className="bg-black rounded-lg overflow-hidden"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <iframe
+                  key={inlinePlayerSource}
+                  src={getInlinePlayerUrl()}
+                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                  allowFullScreen
+                  allow="autoplay; fullscreen; encrypted-media"
+                  style={{ border: 'none', display: 'block' }}
+                  title={movie?.title || 'Player'}
+                />
+                {/* Sources sous la vidéo */}
+                <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
+                  <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Source :</span>
+                    {([
+                      { id: 'frembed',     label: 'Frembed (VF)' },
+                      { id: 'videasy',     label: 'Vidlink' },
+                      { id: 'videasy_net', label: 'Videasy' },
+                      { id: 'vidsrccc',    label: 'Vidsrc.cc' },
+                      { id: 'vidsrc',      label: 'Vidsrc.io' },
+                      { id: 'vidsrcsu',    label: 'Vidsrc.su' },
+                      { id: 'embed2',      label: '2embed' },
+                      { id: 'embedsu',     label: 'Embed.su' },
+                      { id: 'vostfr',      label: 'VOSTFR' },
+                      { id: 'vidsrcwtf1',  label: 'Wtf 1' },
+                      { id: 'vidsrcwtf5',  label: 'Wtf 5' },
+                    ] as { id: InlineSource; label: string }[]).map(src => (
+                      <button
+                        key={src.id}
+                        onClick={() => setInlinePlayerSource(src.id)}
+                        className={`flex-shrink-0 px-2.5 py-1.5 sm:px-3 2xl:px-4 2xl:py-2 rounded text-xs 2xl:text-sm font-medium transition-colors ${
+                          inlinePlayerSource === src.id
+                            ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                        }`}
+                      >
+                        {src.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
             ) : (
-              // Display cinema mode button in place of video player
+              // Bouton Lecture — cinéma style (sans source picker)
               <motion.div
                 className="h-[500px] flex flex-col items-center justify-center bg-gradient-to-b from-black/40 to-black/80 rounded-lg p-6"
                 style={{
@@ -4330,7 +4463,7 @@ const MovieDetails = (): JSX.Element => {
                 transition={{ duration: 0.5 }}
               >
                 <motion.div
-                  className="w-24 h-24 rounded-full bg-gradient-to-r from-green-400 to-purple-500 hover:bg-gradient-to-r from-green-400 to-purple-500 flex items-center justify-center mb-6 cursor-pointer"
+                  className="w-24 h-24 rounded-full bg-gradient-to-r from-green-400 to-purple-500 flex items-center justify-center mb-6 cursor-pointer"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={handleWatchClick}

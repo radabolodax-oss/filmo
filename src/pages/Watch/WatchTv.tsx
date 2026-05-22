@@ -24,6 +24,7 @@ import { getTmdbLanguage } from '../../i18n';
 import { useProfile } from '../../context/ProfileContext';
 import { getClassificationLabel } from '../../utils/certificationUtils';
 import { getCoflixPreferredUrl } from '../../utils/coflix';
+import WatchInterstitial from '../../components/WatchInterstitial';
 
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
@@ -528,6 +529,7 @@ const WatchTv: React.FC = () => {
   const [backdropPath, setBackdropPath] = useState<string | null>(null);
   const [, setEpisodeStillPath] = useState<string | null>(null);
   const [showPosterPath, setShowPosterPath] = useState<string | null>(null); // Store poster for progress saving
+  const [showInterstitial, setShowInterstitial] = useState(false);
 
   // Anti-spoiler settings
   const { shouldHide, getMaskedContent } = useAntiSpoilerSettings();
@@ -760,6 +762,7 @@ const WatchTv: React.FC = () => {
 
   // Ref to prevent fetching episodes on initial mount (already fetched in initialFetch)
   const isInitialEpisodeFetch = useRef(true);
+  const activeEpisodePanelRef = useRef<HTMLButtonElement>(null);
 
   // Ne pas afficher le bouton Sources en mode HLS
   const [showSourceButton, setShowSourceButton] = useState(true);
@@ -777,7 +780,7 @@ const WatchTv: React.FC = () => {
   // Ajout de l'état pour savoir si l'utilisateur a cliqué sur la pub
   const [hasClickedAd, setHasClickedAd] = useState(false);
 
-  // PRAWLX Wrapped 2026 - Track TV viewing time
+  // Prowler Wrapped 2026 - Track TV viewing time
   useWrappedTracker({
     mode: 'viewing',
     viewingData: id ? {
@@ -1137,7 +1140,7 @@ const WatchTv: React.FC = () => {
         // Try frembed as a fallback
         else if (frembedAvailable && id) {
           setSelectedSource('frembed');
-          setEmbedUrl(`https://frembed.click/api/serie.php?id=${id}&sa=${seasonNumber}&epi=${episodeNumber}`);
+          setEmbedUrl(`https://frembed.click/embed/serie/${id}?sa=${seasonNumber}&epi=${episodeNumber}`);
           setEmbedType('frembed');
         }
         // Note: Ne pas sélectionner automatiquement vostfr - laisser l'utilisateur choisir
@@ -2985,7 +2988,7 @@ const WatchTv: React.FC = () => {
               if (!frembedAvailabilityResult) return false;
               console.log('✅ Selecting FREMBED as source');
               setSelectedSource('frembed');
-              setEmbedUrl(`https://frembed.click/api/serie.php?id=${id}&sa=${seasonNumber}&epi=${episodeNumber}`);
+              setEmbedUrl(`https://frembed.click/embed/serie/${id}?sa=${seasonNumber}&epi=${episodeNumber}`);
               setEmbedType('frembed');
               currentSourceRef.current = 'frembed';
               return true;
@@ -3487,7 +3490,7 @@ const WatchTv: React.FC = () => {
         }
         break;
       case 'frembed':
-        const frembedUrl = `https://frembed.click/api/serie.php?id=${id}&sa=${seasonNumber}&epi=${episodeNumber}`;
+        const frembedUrl = `https://frembed.click/embed/serie/${id}?sa=${seasonNumber}&epi=${episodeNumber}`;
         setEmbedUrl(frembedUrl);
         setEmbedType('frembed');
         setSelectedSource('frembed');
@@ -4018,6 +4021,12 @@ const WatchTv: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (activeEpisodePanelRef.current) {
+      activeEpisodePanelRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [episodeNumber, seasonNumber, episodes]);
+
   // Now, after all hooks, you can do conditional returns:
   if (showAdFreePopup && adPopupTriggered && !adPopupBypass) {
     return <AdFreePlayerAds onClose={handlePopupClose} onAccept={handlePopupAccept} adType={adType} onAdClick={() => setHasClickedAd(true)} />;
@@ -4145,7 +4154,15 @@ const WatchTv: React.FC = () => {
   })();
 
   return (
-    <div style={{ minHeight: 'calc(var(--vh, 1vh) * 100)', overflow: 'hidden' }} className="w-full bg-black text-white overflow-hidden fixed inset-0">
+    <div style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }} className="w-full bg-black text-white lg:fixed lg:inset-0 lg:overflow-hidden">
+      <AnimatePresence>
+        {showInterstitial && (
+          <WatchInterstitial
+            posterUrl={showPosterPath ? `https://image.tmdb.org/t/p/w780${showPosterPath}` : undefined}
+            onDone={() => setShowInterstitial(false)}
+          />
+        )}
+      </AnimatePresence>
       <style dangerouslySetInnerHTML={{
         __html: `
           .loading-container {
@@ -4192,6 +4209,21 @@ const WatchTv: React.FC = () => {
               transform: scaleY(1);
             }
           }
+          .ep-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            transition: background 0.2s ease;
+          }
+          .ep-card:hover {
+            background: rgba(255,255,255,0.07);
+          }
+          .ep-panel-scroll::-webkit-scrollbar { width: 3px; }
+          .ep-panel-scroll::-webkit-scrollbar-track { background: transparent; }
+          .ep-panel-scroll::-webkit-scrollbar-thumb {
+            background: linear-gradient(to bottom, #22c55e, #7c3aed);
+            border-radius: 10px;
+          }
         `
       }} />
       <div
@@ -4208,7 +4240,7 @@ const WatchTv: React.FC = () => {
         data-premid-source-detail={preMidSourceDetail}
       />
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center h-full bg-black">
+        <div className="flex flex-col items-center justify-center bg-black" style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}>
           <div className="loading-container">
             <div className="loading-bar"></div>
             <div className="loading-bar"></div>
@@ -4218,7 +4250,7 @@ const WatchTv: React.FC = () => {
           <div className="text-white text-xl font-medium mt-6">{vipRetryMessage || loadingText}</div>
         </div>
       ) : onlyVostfrAvailable ? (
-        <div className="h-full bg-black text-white flex flex-col items-center justify-center p-4">
+        <div className="bg-black text-white flex flex-col items-center justify-center p-4" style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }}>
           <div className="max-w-2xl w-full bg-gray-900/95 rounded-xl p-8 text-center shadow-2xl border border-gray-800">
             <div className="mb-6">
               <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-yellow-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -4297,7 +4329,7 @@ const WatchTv: React.FC = () => {
                       autoPlay={false}
                       onlyQualityMenu={true}
                       embedType={selectedSource === 'frembed' ? 'frembed' : (embedType || undefined)}
-                      embedUrl={selectedSource === 'frembed' ? `https://frembed.click/api/serie.php?id=${id}&sa=${seasonNumber}&epi=${episodeNumber}` : (embedUrl ?? undefined)}
+                      embedUrl={selectedSource === 'frembed' ? `https://frembed.click/embed/serie/${id}?sa=${seasonNumber}&epi=${episodeNumber}` : (embedUrl ?? undefined)}
                     />
                   </div>
                 </div>
@@ -4305,7 +4337,10 @@ const WatchTv: React.FC = () => {
             )}
           </AnimatePresence>
         </div>
-      ) : embedUrl ? ( // Render Embed Iframe
+      ) : (
+        <div className="flex flex-col lg:flex-row w-full lg:h-full">
+        <div className="relative w-full aspect-video lg:aspect-auto lg:flex-1">
+        {embedUrl ? ( // Render Embed Iframe
         <div className="w-full h-full flex flex-col items-center justify-center relative">
           {/* Back to Info Button */}
           <button
@@ -4678,7 +4713,7 @@ const WatchTv: React.FC = () => {
                       autoPlay={false}
                       onlyQualityMenu={true}
                       embedType={selectedSource === 'frembed' ? 'frembed' : (embedType || undefined)}
-                      embedUrl={selectedSource === 'frembed' ? `https://frembed.click/api/serie.php?id=${id}&sa=${seasonNumber}&epi=${episodeNumber}` : (embedUrl ?? undefined)}
+                      embedUrl={selectedSource === 'frembed' ? `https://frembed.click/embed/serie/${id}?sa=${seasonNumber}&epi=${episodeNumber}` : (embedUrl ?? undefined)}
                     />
                   </div>
                 </div>
@@ -4804,7 +4839,7 @@ const WatchTv: React.FC = () => {
                       autoPlay={false}
                       onlyQualityMenu={true}
                       embedType={selectedSource === 'frembed' ? 'frembed' : (embedType || undefined)}
-                      embedUrl={selectedSource === 'frembed' ? `https://frembed.click/api/serie.php?id=${id}&sa=${seasonNumber}&epi=${episodeNumber}` : (embedUrl ?? undefined)}
+                      embedUrl={selectedSource === 'frembed' ? `https://frembed.click/embed/serie/${id}?sa=${seasonNumber}&epi=${episodeNumber}` : (embedUrl ?? undefined)}
                     />
                   </div>
                 </div>
@@ -4846,37 +4881,114 @@ const WatchTv: React.FC = () => {
             autoPlay={false}
             onlyQualityMenu={true}
             embedType={selectedSource === 'frembed' ? 'frembed' : (embedType || undefined)}
-            embedUrl={selectedSource === 'frembed' ? `https://frembed.click/api/serie.php?id=${id}&sa=${seasonNumber}&epi=${episodeNumber}` : (embedUrl ?? undefined)}
+            embedUrl={selectedSource === 'frembed' ? `https://frembed.click/embed/serie/${id}?sa=${seasonNumber}&epi=${episodeNumber}` : (embedUrl ?? undefined)}
           />
         </div>
-      )}
+        )}
 
-      {showSourceButton && (
-        <div className="absolute top-16 right-4 z-[9000] flex items-center gap-2">
-          {/* Bouton Ouvrir dans une nouvelle page */}
-          <button
-            onClick={() => {
-              const targetUrl = embedType === 'vostfr'
-                ? `https://vidlink.pro/tv/${id}/${seasonNumber}/${episodeNumber}`
-                : embedUrl || '';
-              window.open(targetUrl, '_blank', 'noopener');
-            }}
-            className="flex items-center gap-1 sm:gap-2 px-3 py-2 rounded-lg bg-gray-800/90 border border-gray-600 hover:bg-gray-700/90 text-white font-medium text-sm transition-all duration-200"
-            title={t('watch.openInNewPage')}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </button>
+        {showSourceButton && (
+          <div className="absolute top-16 right-4 z-[9000] flex items-center gap-2">
+            {/* Bouton Ouvrir dans une nouvelle page */}
+            <button
+              onClick={() => {
+                const targetUrl = embedType === 'vostfr'
+                  ? `https://vidlink.pro/tv/${id}/${seasonNumber}/${episodeNumber}`
+                  : embedUrl || '';
+                window.open(targetUrl, '_blank', 'noopener');
+              }}
+              className="flex items-center gap-1 sm:gap-2 px-3 py-2 rounded-lg bg-gray-800/90 border border-gray-600 hover:bg-gray-700/90 text-white font-medium text-sm transition-all duration-200"
+              title={t('watch.openInNewPage')}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </button>
 
-          {/* Bouton Changer de source */}
-          <button
-            onClick={() => setShowEmbedQuality(true)}
-            className="flex items-center gap-1 sm:gap-2 px-3 py-2 rounded-lg bg-black/70 hover:bg-black/90 text-white shadow-lg transition-all duration-200"
+            {/* Bouton Changer de source */}
+            <button
+              onClick={() => setShowEmbedQuality(true)}
+              className="flex items-center gap-1 sm:gap-2 px-3 py-2 rounded-lg bg-black/70 hover:bg-black/90 text-white shadow-lg transition-all duration-200"
+            >
+              <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+              <span className="hidden sm:inline">{t('watch.sources')}</span>
+            </button>
+          </div>
+        )}
+
+        </div>
+
+        {/* ── Panneau Épisodes ─────────────────────────────────────────── */}
+        {seasons.length > 0 && (
+          <div
+            className="w-full lg:w-72 xl:w-80 flex-shrink-0 flex flex-col lg:h-full mt-2 lg:mt-0 overflow-hidden"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              borderRadius: '16px',
+            } as React.CSSProperties}
           >
-            <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-            <span className="hidden sm:inline">{t('watch.sources')}</span>
-          </button>
+            <div className="px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+              <h2 className="uppercase font-semibold" style={{ fontSize: '11px', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.4)' }}>Épisodes</h2>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {seasons.map((s) => (
+                  <button
+                    key={s.season_number}
+                    onClick={() => setSelectedSeasonNumber(s.season_number)}
+                    className="px-2.5 py-1 text-xs font-semibold transition-all duration-200"
+                    style={selectedSeasonNumber === s.season_number
+                      ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '20px', border: 'none' }
+                      : { background: 'rgba(255,255,255,0.06)', color: '#9ca3af', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }
+                    }
+                  >
+                    S{s.season_number} ({s.episode_count})
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div
+              className="flex-1 overflow-y-auto p-2 max-h-[50vh] lg:max-h-full ep-panel-scroll"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: '#7c3aed transparent' } as React.CSSProperties}
+            >
+              {episodes.map((ep) => {
+                const isActive = ep.episode_number === episodeNumber && selectedSeasonNumber === seasonNumber;
+                return (
+                  <button
+                    key={ep.id}
+                    ref={isActive ? activeEpisodePanelRef : null}
+                    onClick={() => handleNextEpisodeNav(selectedSeasonNumber, ep.episode_number)}
+                    className="ep-card w-full flex items-center gap-2.5 px-3 py-3 mb-1.5 text-left relative overflow-hidden"
+                    style={isActive ? { background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.2)' } : {}}
+                  >
+                    {isActive && (
+                      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: 'linear-gradient(to bottom, #22c55e, #7c3aed)' }} />
+                    )}
+                    <div
+                      className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-white text-xs font-bold"
+                      style={isActive
+                        ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', borderRadius: '8px' }
+                        : { background: 'rgba(255,255,255,0.08)', borderRadius: '8px' }
+                      }
+                    >
+                      E{String(ep.episode_number).padStart(2, '0')}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white font-medium truncate">
+                        {shouldHide('episodeNames')
+                          ? getMaskedContent(ep.name, 'episodeNames', undefined, ep.episode_number)
+                          : `Épisode ${ep.episode_number}`}
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: '#22c55e' }}>Disponible</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         </div>
       )}
 

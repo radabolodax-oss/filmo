@@ -21,7 +21,8 @@ const CACHE_DIR = {
   TVDIRECT: path.join(__dirname, '..', 'cache', 'tvdirect'),
   PURSTREAM: path.join(__dirname, '..', 'cache', 'purstream'),
   NOCTAFLIX: path.join(__dirname, '..', 'cache', 'noctaflix'),
-  FTV: path.join(__dirname, '..', 'cache', 'ftv')
+  FTV: path.join(__dirname, '..', 'cache', 'ftv'),
+  DRAGIV: path.join(__dirname, '..', 'cache', 'dragiv'),
 };
 
 const DEFAULT_CACHE_REFRESH_WINDOW_MS = 40 * 60 * 1000;

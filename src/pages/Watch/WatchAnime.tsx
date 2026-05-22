@@ -170,6 +170,7 @@ const WatchAnime: React.FC = () => {
   const { t } = useTranslation();
   const { currentProfile } = useProfile();
   const playerRef = useRef<HTMLDivElement>(null);
+  const activeEpisodePanelRef = useRef<HTMLButtonElement>(null);
 
   // Basic state
   const [loading, setLoading] = useState<boolean>(true);
@@ -214,6 +215,7 @@ const WatchAnime: React.FC = () => {
   // For iframe embed display
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [showEmbedQuality, setShowEmbedQuality] = useState(false);
+  const [frembedAnimeAvailable, setFrembedAnimeAvailable] = useState(false);
 
   // Episode progress tracking
   const { isWatched, toggleWatched } = useWatchStatus({
@@ -235,7 +237,7 @@ const WatchAnime: React.FC = () => {
   // État pour le menu d'épisodes
   const [showEpisodesMenu, setShowEpisodesMenu] = useState(false);
   const [displayedSeasonNumber, setDisplayedSeasonNumber] = useState(Number(season)); // State for the season shown in the menu
-  const [showSeasonDropdown, setShowSeasonDropdown] = useState(false); // State for custom dropdown visibility
+  const [_showSeasonDropdown, _setShowSeasonDropdown] = useState(false);
 
   // État pour suivre si c'est la première sélection automatique
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
@@ -278,7 +280,7 @@ const WatchAnime: React.FC = () => {
     localStorage.setItem('continueWatching', JSON.stringify(continueWatching));
   }, [id, season, episode]);
 
-  // PRAWLX Wrapped 2026 - Track anime viewing time
+  // Prowler Wrapped 2026 - Track anime viewing time
   useWrappedTracker({
     mode: 'viewing',
     viewingData: id ? {
@@ -341,6 +343,22 @@ const WatchAnime: React.FC = () => {
   useEffect(() => {
     updateAnimeContinueWatching();
   }, [updateAnimeContinueWatching]);
+
+  useEffect(() => {
+    if (!id || !season || !episode) return;
+    const checkFrembed = async () => {
+      try {
+        const res = await axios.get(
+          `https://frembed.click/api/public/v1/anime/${id}?sa=${season}&epi=${episode}`,
+          { timeout: 3000 },
+        );
+        setFrembedAnimeAvailable(res.data?.status === 200 && res.data?.result?.totalItems > 0);
+      } catch {
+        setFrembedAnimeAvailable(false);
+      }
+    };
+    checkFrembed();
+  }, [id, season, episode]);
 
   // Pas de fetch TMDB pour les détails d'épisode anime - le numérotage ne correspond pas
 
@@ -1191,6 +1209,12 @@ const WatchAnime: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (activeEpisodePanelRef.current) {
+      activeEpisodePanelRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [episode, season, displayedSeasonNumber]);
+
   // Age restriction blocking screen
   if (isBlocked) {
     return (
@@ -1263,6 +1287,21 @@ const WatchAnime: React.FC = () => {
             50% {
               transform: scaleY(1);
             }
+          }
+          .ep-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            transition: background 0.2s ease;
+          }
+          .ep-card:hover {
+            background: rgba(255,255,255,0.07);
+          }
+          .ep-panel-scroll::-webkit-scrollbar { width: 3px; }
+          .ep-panel-scroll::-webkit-scrollbar-track { background: transparent; }
+          .ep-panel-scroll::-webkit-scrollbar-thumb {
+            background: linear-gradient(to bottom, #22c55e, #7c3aed);
+            border-radius: 10px;
           }
         `
       }} />
@@ -1382,233 +1421,72 @@ const WatchAnime: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center relative">
-          {/* Back to Info Button - Hidden when HLS Player is active */}
-          {!showHLSPlayer && (
-            <motion.button
-              onClick={() => navigate(`/tv/${encodeId(id!)}`)}
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
-              whileTap={{ scale: 0.95 }}
-              className="absolute top-4 left-4 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 text-white shadow-lg"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              {t('watch.back')}
-            </motion.button>
-          )}
+        <div className="w-full h-full flex flex-col lg:flex-row overflow-hidden">
 
-          {/* Navigation buttons (Previous, Episodes, Next) - Hidden when HLS Player is active */}
-          {animeData && !showHLSPlayer && (
-            <motion.div
-              className="absolute top-4 right-4 z-[9000] flex items-center gap-2"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-            >
-              {/* Previous Episode Button - hide if at first episode of first season */}
-              {!(Number(season) === 1 && Number(episode) === 1) && (
+          {/* ── LEFT COLUMN : Player (≈75%) ─────────────────────────────── */}
+          <div className="w-full lg:flex-1 flex flex-col min-h-0">
+
+            {/* Top bar — hidden when HLSPlayer is active (it has its own controls) */}
+            {!showHLSPlayer && (
+              <div className="shrink-0 flex items-center gap-2 px-3 py-2 bg-black/80 z-[500]">
                 <motion.button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePreviousEpisode();
-                  }}
-                  whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
+                  onClick={() => navigate(`/tv/${encodeId(id!)}`)}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 text-white shadow-lg"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/70 text-white text-sm shrink-0"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                   </svg>
-                  <span>
-                    {Number(episode) > 1
-                      ? `S${Number(season)}:${String(Number(episode) - 1).padStart(2, '0')}`
-                      : Number(season) > 1
-                        ? `S${Number(season) - 1}:01`
-                        : `S1:01`}
-                  </span>
+                  {t('watch.back')}
                 </motion.button>
-              )}
 
-              {/* Episodes Button */}
-              <motion.button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowEpisodesMenu(!showEpisodesMenu);
-                }}
-                whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
-                whileTap={{ scale: 0.95 }}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 text-white shadow-lg"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
-                </svg>
-                <span className="hidden sm:inline">{t('watch.episodes')}</span>
-              </motion.button>
-
-              {/* Next Episode Button */}
-              {animeData && (
-                (() => {
-                  const nextSeason = animeData.seasons[Number(season) - 1] && Number(episode) < animeData.seasons[Number(season) - 1].episodes.length
-                    ? Number(season)
-                    : Number(season) < animeData.seasons.length
-                      ? Number(season) + 1
-                      : null;
-                  const nextEpisodeNum = nextSeason === Number(season)
-                    ? Number(episode) + 1
-                    : nextSeason
-                      ? 1
-                      : null;
-
-                  return nextSeason && nextEpisodeNum ? (
-                    <motion.button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleNextEpisode();
-                      }}
-                      whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
-                      whileTap={{ scale: 0.95 }}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 text-white shadow-lg"
-                    >
-                      <span>S{nextSeason}:{String(nextEpisodeNum).padStart(2, '0')}</span>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </motion.button>
-                  ) : null;
-                })()
-              )}
-            </motion.div>
-          )}
-
-          {/* Episodes Menu */}
-          <AnimatePresence>
-            {/* Ensure variables like showEpisodesMenu, animeData etc. are accessible here */}
-            {showEpisodesMenu && animeData && (
-              <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-                className="absolute top-14 right-4 md:right-4 left-4 md:left-auto z-[11000] bg-black/95 border border-gray-800 rounded-lg shadow-2xl md:w-96 w-auto max-h-[80vh] overflow-hidden flex flex-col"
-              >
-                <div className="p-4 border-b border-gray-800 flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-white">{showDetails?.name}</h3>
-                  <button
-                    onClick={() => setShowEpisodesMenu(false)}
-                    className="text-gray-400 hover:text-white"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                <div className="flex-1 min-w-0 text-center">
+                  <p className="text-white text-sm font-medium truncate">{showDetails?.name}</p>
+                  <p className="text-gray-400 text-xs">S{season} · E{episode}{episodeDetails?.name ? ` · ${episodeDetails.name}` : ''}</p>
                 </div>
 
-                {/* Custom Season Dropdown */}
-                <div className="p-4 border-b border-gray-800/50">
-                  <h4 className="text-sm text-gray-400 mb-2">{t('watch.seasonLabel')}</h4>
-                  <div className="relative w-full">
-                    <button
-                      onClick={() => setShowSeasonDropdown(!showSeasonDropdown)}
-                      className="w-full flex items-center justify-between bg-gray-800/50 hover:bg-gray-700/50 rounded-lg p-3 text-white transition-colors duration-200"
-                    >
-                      {/* Display selected season name */}
-                      <span className="font-medium">{animeData.seasons[displayedSeasonNumber - 1]?.name || t('watch.seasonN', { n: displayedSeasonNumber })}</span>
-                      <motion.div
-                        animate={{ rotate: showSeasonDropdown ? 180 : 0 }}
-                        transition={{ duration: 0.2 }}
+                {animeData && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    {!(Number(season) === 1 && Number(episode) === 1) && (
+                      <motion.button
+                        onClick={(e) => { e.stopPropagation(); handlePreviousEpisode(); }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="flex items-center p-2 rounded-lg bg-black/70 text-white"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
                         </svg>
-                      </motion.div>
-                    </button>
-
-                    {/* Animated Dropdown List */}
-                    <AnimatePresence>
-                      {showSeasonDropdown && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          transition={{ duration: 0.2, ease: "easeInOut" }}
-                          className="absolute top-full left-0 right-0 mt-1 bg-gray-900/95 border border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto z-20 custom-scrollbar"
-                          data-lenis-prevent
+                      </motion.button>
+                    )}
+                    {(() => {
+                      const ns = animeData.seasons[Number(season) - 1] && Number(episode) < animeData.seasons[Number(season) - 1].episodes.length
+                        ? Number(season)
+                        : Number(season) < animeData.seasons.length ? Number(season) + 1 : null;
+                      const ne = ns === Number(season) ? Number(episode) + 1 : ns ? 1 : null;
+                      return ns && ne ? (
+                        <motion.button
+                          onClick={(e) => { e.stopPropagation(); handleNextEpisode(); }}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="flex items-center p-2 rounded-lg bg-black/70 text-white"
                         >
-                          {animeData.seasons.map((s, index) => (
-                            <button
-                              key={index}
-                              onClick={() => {
-                                setDisplayedSeasonNumber(index + 1);
-                                setShowSeasonDropdown(false); // Close dropdown on selection
-                              }}
-                              className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 ${displayedSeasonNumber === index + 1
-                                ? 'bg-red-800/50 text-red-100 font-semibold'
-                                : 'text-gray-200 hover:bg-gray-700/50'
-                                }`}
-                            >
-                              {s.name}
-                              <span className="text-xs text-gray-400 ml-1">({t('watch.episodesCount', { count: s.episodes.length })})</span>
-                            </button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </motion.button>
+                      ) : null;
+                    })()}
                   </div>
-                </div>
-
-                {/* Current Episode (reflects URL, not menu selection) */}
-                <div className="p-4 border-b border-gray-800/50">
-                  <div className="text-xs text-gray-400 mb-1">
-                    {animeData.seasons[Number(season) - 1]?.name} • {t('watch.episodeN', { n: episode })} ({t('watch.watching')})
-                  </div>
-                  <h4 className="text-white font-medium mb-1">{animeData.seasons[Number(season) - 1]?.episodes[Number(episode) - 1]?.name || t('watch.episodeN', { n: episode })}</h4>
-                </div>
-
-                {/* Episodes List (uses displayedSeasonNumber) */}
-                <div className="flex-1 overflow-y-auto p-1" data-lenis-prevent>
-                  <div className="grid gap-2 p-2">
-                    {animeData.seasons[displayedSeasonNumber - 1]?.episodes.map((ep, index) => (
-                      <button
-                        key={index}
-                        onClick={() => {
-                          // Use window.location.href for full page reload
-                          if (!id) return;
-                          window.location.href = `/watch/anime/${encodeId(id)}/season/${displayedSeasonNumber}/episode/${index + 1}`;
-                          setShowEpisodesMenu(false);
-                        }}
-                        className={`flex items-start gap-3 p-2 rounded-lg transition-colors ${Number(episode) === index + 1 && displayedSeasonNumber === Number(season) // Highlight only if season and episode match URL
-                          ? 'bg-red-900/30 border border-red-800/50'
-                          : 'hover:bg-gray-800/50'
-                          }`}
-                      >
-                        <div className="w-10 h-10 bg-gray-800 rounded flex items-center justify-center">
-                          <span className="text-sm font-medium">{index + 1}</span>
-                        </div>
-                        <div className="flex-1 text-left">
-                          <h5 className="text-sm text-white font-medium line-clamp-1">{ep.name || t('watch.episodeN', { n: index + 1 })}</h5>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
+                )}
+              </div>
             )}
-          </AnimatePresence>
 
-          {/* Change Source Button */}
-          {!showHLSPlayer && (
-            <button
-              onClick={() => setShowEmbedQuality(true)}
-              className="fixed top-16 right-4 z-[10000] flex items-center gap-2 px-4 py-2 rounded-lg bg-black/90 border border-gray-700 hover:bg-gray-800/80 text-white font-medium text-sm transition-all duration-200"
-            >
-              <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-              <span>{t('watch.sources')}</span>
-            </button>
-          )}
+            {/* Player area */}
+            <div className="w-full aspect-video lg:aspect-auto lg:flex-1 bg-black relative min-h-0">
 
           {/* Source Selection Panel */}
           <AnimatePresence>
@@ -1750,67 +1628,255 @@ const WatchAnime: React.FC = () => {
                           ))}
                       </div>
                     </div>
+
+                    {frembedAnimeAvailable && id && (
+                      <div className="mb-6">
+                        <h4 className="text-white text-md font-semibold mb-3 flex items-center">
+                          <svg className="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                          </svg>
+                          {t('watch.frembedPlayer')}
+                        </h4>
+                        <motion.button
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          onClick={() => {
+                            const frembedUrl = `https://frembed.click/embed/serie/${id}?sa=${season}&epi=${episode}`;
+                            setEmbedUrl(frembedUrl);
+                            setShowHLSPlayer(false);
+                            setHlsPlayerSrc('');
+                            setShowEmbedQuality(false);
+                          }}
+                          className={`w-full px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${
+                            embedUrl === `https://frembed.click/embed/serie/${id}?sa=${season}&epi=${episode}`
+                              ? 'bg-gray-800 border-l-4 border-purple-500/60 pl-3'
+                              : 'bg-gray-900/60 text-white'
+                          }`}
+                        >
+                          <div className="flex flex-col">
+                            <span className={embedUrl === `https://frembed.click/embed/serie/${id}?sa=${season}&epi=${episode}` ? 'text-purple-400 font-medium' : 'text-white'}>
+                              Frembed
+                            </span>
+                            <span className="text-xs text-gray-400">Embed • Multi</span>
+                          </div>
+                          {embedUrl === `https://frembed.click/embed/serie/${id}?sa=${season}&epi=${episode}` && (
+                            <span className="text-xs px-2 py-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">{t('watch.active')}</span>
+                          )}
+                        </motion.button>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               </div>
             )}
           </AnimatePresence>
 
-          {/* HLS Player for extracted sources */}
-          {showHLSPlayer && hlsPlayerSrc ? (
-            <HLSPlayer
-              priorityCategory="anime"
-              src={hlsPlayerSrc}
-              autoPlay={true}
-              controls={true}
-              className="w-full h-full"
-              poster={showDetails?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${showDetails.backdrop_path}` : undefined}
-              tvShow={{
-                name: showDetails?.name || '',
-                backdrop_path: showDetails?.backdrop_path
-              }}
-              tvShowId={id || undefined}
-              seasonNumber={Number(season)}
-              episodeNumber={Number(episode)}
-              title={`${showDetails?.name} - S${season}E${episode}`}
-              onNextEpisode={handleNextEpisodeFromPlayer}
-              onPreviousEpisode={handlePreviousEpisode}
-              onShowEpisodesMenu={() => setShowEpisodesMenu(!showEpisodesMenu)}
-              onShowSources={() => setShowEmbedQuality(true)}
-              isAnime={true}
-              nextEpisode={
-                animeData && Number(season) <= animeData.seasons.length && Number(episode) < animeData.seasons[Number(season) - 1]?.episodes.length
-                  ? {
-                    seasonNumber: Number(season),
-                    episodeNumber: Number(episode) + 1,
-                    name: animeData.seasons[Number(season) - 1]?.episodes[Number(episode)]?.name
+              {showHLSPlayer && hlsPlayerSrc ? (
+                <HLSPlayer
+                  priorityCategory="anime"
+                  src={hlsPlayerSrc}
+                  autoPlay={true}
+                  controls={true}
+                  className="w-full h-full"
+                  poster={showDetails?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${showDetails.backdrop_path}` : undefined}
+                  tvShow={{
+                    name: showDetails?.name || '',
+                    backdrop_path: showDetails?.backdrop_path
+                  }}
+                  tvShowId={id || undefined}
+                  seasonNumber={Number(season)}
+                  episodeNumber={Number(episode)}
+                  title={`${showDetails?.name} - S${season}E${episode}`}
+                  onNextEpisode={handleNextEpisodeFromPlayer}
+                  onPreviousEpisode={handlePreviousEpisode}
+                  onShowEpisodesMenu={() => setShowEpisodesMenu(!showEpisodesMenu)}
+                  onShowSources={() => setShowEmbedQuality(true)}
+                  isAnime={true}
+                  nextEpisode={
+                    animeData && Number(season) <= animeData.seasons.length && Number(episode) < animeData.seasons[Number(season) - 1]?.episodes.length
+                      ? {
+                        seasonNumber: Number(season),
+                        episodeNumber: Number(episode) + 1,
+                        name: animeData.seasons[Number(season) - 1]?.episodes[Number(episode)]?.name
+                      }
+                      : animeData && Number(season) < animeData.seasons.length
+                        ? {
+                          seasonNumber: Number(season) + 1,
+                          episodeNumber: 1,
+                          name: animeData.seasons[Number(season)]?.episodes[0]?.name
+                        }
+                        : undefined
                   }
-                  : animeData && Number(season) < animeData.seasons.length
-                    ? {
-                      seasonNumber: Number(season) + 1,
-                      episodeNumber: 1,
-                      name: animeData.seasons[Number(season)]?.episodes[0]?.name
-                    }
-                    : undefined
-              }
-            />
-          ) : null}
+                />
+              ) : null}
 
-          {/* Video container for direct MP4 playback */}
-          <div
-            ref={playerRef}
-            className={`w-full h-full ${!embedUrl && !showHLSPlayer ? 'block' : 'hidden'}`}
-          ></div>
+              <div
+                ref={playerRef}
+                className={`w-full h-full ${!embedUrl && !showHLSPlayer ? 'block' : 'hidden'}`}
+              />
 
-          {/* Iframe for embed video */}
-          {embedUrl && !showHLSPlayer ? (
-            <iframe
-              src={embedUrl}
-              className="w-full h-full border-0"
-              allowFullScreen
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            ></iframe>
-          ) : null}
+              {embedUrl && !showHLSPlayer ? (
+                <iframe
+                  src={embedUrl}
+                  className="w-full h-full border-0"
+                  allowFullScreen
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                />
+              ) : null}
+            </div>
+
+            {/* Source buttons row — hidden when HLSPlayer is active */}
+            {!showHLSPlayer && (
+              <div
+                className="shrink-0 px-4 py-3 border-t"
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  backdropFilter: 'blur(20px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                  borderColor: 'rgba(255,255,255,0.08)',
+                } as React.CSSProperties}
+              >
+                {availableLanguages.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {availableLanguages.map(lang => (
+                      <button
+                        key={lang}
+                        onClick={() => setSelectedLanguage(lang)}
+                        className="px-3 py-1 text-xs font-semibold transition-all duration-200"
+                        style={selectedLanguage === lang
+                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '20px', border: 'none' }
+                          : { background: 'rgba(255,255,255,0.06)', color: '#9ca3af', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }
+                        }
+                      >
+                        {lang.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 items-center">
+                  {videoSources
+                    .filter(s => s.language?.toLowerCase() === selectedLanguage.toLowerCase())
+                    .map((source, idx) => {
+                      const isActive = selectedSource?.id === source.id;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleSelectSource(source)}
+                          className="px-3 py-1.5 text-xs font-medium transition-all duration-200"
+                          style={isActive
+                            ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '12px', border: 'none' }
+                            : { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }
+                          }
+                        >
+                          {source.player}
+                          {source.isM3u8 && <span className="ml-1 opacity-60">HLS</span>}
+                        </button>
+                      );
+                    })}
+                  {frembedAnimeAvailable && id && (() => {
+                    const fUrl = `https://frembed.click/embed/serie/${id}?sa=${season}&epi=${episode}`;
+                    const isActive = embedUrl === fUrl;
+                    return (
+                      <button
+                        onClick={() => { setEmbedUrl(fUrl); setShowHLSPlayer(false); setHlsPlayerSrc(''); }}
+                        className="px-3 py-1.5 text-xs font-medium transition-all duration-200"
+                        style={isActive
+                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '12px', border: 'none' }
+                          : { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }
+                        }
+                      >
+                        Frembed
+                      </button>
+                    );
+                  })()}
+                  <button
+                    onClick={() => setShowEmbedQuality(true)}
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-all duration-200"
+                    style={{ background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}
+                  >
+                    <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                    {t('watch.sources')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── RIGHT COLUMN : Episodes (≈25%) ───────────────────────────── */}
+          {animeData && (
+            <div
+              className="w-full lg:w-72 xl:w-80 flex-shrink-0 flex flex-col lg:h-full mt-2 lg:mt-0 overflow-hidden"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                borderRadius: '16px',
+              } as React.CSSProperties}
+            >
+              <div className="px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+                <h2 className="uppercase font-semibold" style={{ fontSize: '11px', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.4)' }}>Épisodes</h2>
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {animeData.seasons.map((s, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setDisplayedSeasonNumber(index + 1)}
+                      className="px-2.5 py-1 text-xs font-semibold transition-all duration-200"
+                      style={displayedSeasonNumber === index + 1
+                        ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '20px', border: 'none' }
+                        : { background: 'rgba(255,255,255,0.06)', color: '#9ca3af', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }
+                      }
+                    >
+                      S{index + 1} ({s.episodes.length})
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                className="flex-1 overflow-y-auto p-2 max-h-[50vh] lg:max-h-full ep-panel-scroll"
+                style={{ scrollbarWidth: 'thin', scrollbarColor: '#7c3aed transparent' } as React.CSSProperties}
+                data-lenis-prevent
+              >
+                {animeData.seasons[displayedSeasonNumber - 1]?.episodes.map((ep, index) => {
+                  const isActive = Number(episode) === index + 1 && displayedSeasonNumber === Number(season);
+                  const epNum = String(index + 1).padStart(2, '0');
+                  return (
+                    <button
+                      key={index}
+                      ref={isActive ? activeEpisodePanelRef : null}
+                      onClick={() => {
+                        if (!id) return;
+                        window.location.href = `/watch/anime/${encodeId(id)}/season/${displayedSeasonNumber}/episode/${index + 1}`;
+                      }}
+                      className="ep-card w-full flex items-center gap-2.5 px-3 py-3 mb-1.5 text-left relative overflow-hidden"
+                      style={isActive ? { background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.2)' } : {}}
+                    >
+                      {isActive && (
+                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: 'linear-gradient(to bottom, #22c55e, #7c3aed)' }} />
+                      )}
+                      <div
+                        className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-white text-xs font-bold"
+                        style={isActive
+                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', borderRadius: '8px' }
+                          : { background: 'rgba(255,255,255,0.08)', borderRadius: '8px' }
+                        }
+                      >
+                        E{epNum}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium truncate">{ep.name || t('watch.episodeN', { n: index + 1 })}</p>
+                        <p className="text-xs mt-0.5" style={{ color: '#22c55e' }}>Disponible</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

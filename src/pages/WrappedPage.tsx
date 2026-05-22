@@ -2607,7 +2607,7 @@ const WrappedPage: React.FC = () => {
 
         ctx.fillStyle = '#ffffff';
         ctx.font = '900 54px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        ctx.fillText('PRAWLX', 356, 122);
+        ctx.fillText('Prowler', 356, 122);
         ctx.fillStyle = accentGradient;
         ctx.fillText('Wrapped', 557, 122);
 
@@ -2620,7 +2620,7 @@ const WrappedPage: React.FC = () => {
 
         ctx.fillStyle = 'rgba(255,255,255,0.52)';
         ctx.font = '800 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        fillCenteredText(`PRAWLX WRAPPED ${year}`, 188);
+        fillCenteredText(`Prowler WRAPPED ${year}`, 188);
 
         ctx.fillStyle = '#ffffff';
         ctx.font = '900 68px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -3208,6 +3208,7 @@ const WrappedPage: React.FC = () => {
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] opacity-30 pointer-events-none"
                 style={{ background: `radial-gradient(circle, ${bg.color.replace('0.15', '0.4')}, transparent)` }}
             />
+                </div>
             </div>
 
             {/* Top bar */}

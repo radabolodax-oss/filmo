@@ -26,7 +26,7 @@ const supportedSources = [
   { name: 'Purstream', color: '#d946ef' },
 ];
 
-// Timeline / Histoire de PRAWLX
+// Timeline / Histoire de Prowler
 const historyItems = [
   {
     icon: <Sparkles className="w-5 h-5" />,
@@ -96,7 +96,7 @@ const WhatIsMovixPage: React.FC = () => {
             animate={{ opacity: 1, scale: 1 }}
             className="mb-6 relative"
           >
-            {/* Logo PRAWLX - tilted left like the mammoth image */}
+            {/* Logo Prowler - tilted left like the mammoth image */}
             <motion.div
               initial={{ opacity: 0, rotate: -15, scale: 0.7 }}
               animate={{ opacity: 1, rotate: -8, scale: 1 }}
@@ -105,7 +105,7 @@ const WhatIsMovixPage: React.FC = () => {
             >
               <img
                 src="/movix.png"
-                alt="PRAWLX Logo"
+                alt="Prowler Logo"
                 className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 drop-shadow-[0_0_40px_rgba(220,38,38,0.35)]"
                 style={{ transform: 'rotate(-8deg)' }}
               />
@@ -113,8 +113,8 @@ const WhatIsMovixPage: React.FC = () => {
 
             <h1 className="text-4xl md:text-6xl font-black tracking-tight mb-4 pb-4">
               <span className="block py-2 leading-tight">
-                <ShinyText text={t('whatIsMovix.title').split('PRAWLX')[0]} speed={3} color="#ffffff" shineColor="#dc2626" className="inline" />
-                <ShinyText text="PRAWLX" speed={2} color="#dc2626" shineColor="#ffffff" className="inline" />
+                <ShinyText text={t('whatIsMovix.title').split('Prowler')[0]} speed={3} color="#ffffff" shineColor="#dc2626" className="inline" />
+                <ShinyText text="Prowler" speed={2} color="#dc2626" shineColor="#ffffff" className="inline" />
                 <ShinyText text={t('whatIsMovix.title').includes('?') ? ' ?' : ''} speed={3} color="#ffffff" shineColor="#dc2626" className="inline" />
               </span>
             </h1>
@@ -216,7 +216,7 @@ const WhatIsMovixPage: React.FC = () => {
           </Link>
         </motion.div>
 
-        {/* Histoire de PRAWLX */}
+        {/* Histoire de Prowler */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
@@ -342,7 +342,7 @@ const WhatIsMovixPage: React.FC = () => {
           >
             <img
               src="/movix.png"
-              alt="PRAWLX Logo"
+              alt="Prowler Logo"
               className="w-12 h-12 mx-auto mb-4 drop-shadow-lg"
             />
             <h3 className="text-xl font-bold text-white mb-2">{t('whatIsMovix.readyToTry')}</h3>

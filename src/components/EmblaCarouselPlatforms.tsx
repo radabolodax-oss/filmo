@@ -20,6 +20,17 @@ interface EmblaCarouselPlatformsProps {
 
 const EmblaCarouselPlatforms: React.FC<EmblaCarouselPlatformsProps> = ({ title, items }) => {
   const { t } = useTranslation();
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: 'start',
     dragFree: true,
@@ -122,9 +133,22 @@ const EmblaCarouselPlatforms: React.FC<EmblaCarouselPlatformsProps> = ({ title, 
                       alt={platform.alt}
                       className="w-full h-full object-contain p-8 group-hover:opacity-0 transition-opacity duration-300"
                       draggable="false"
-                      loading="lazy"
+                      loading={isMobile ? 'eager' : 'lazy'}
                       decoding="async"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        img.style.display = 'none';
+                        const fallback = img.parentElement?.querySelector('.logo-fallback') as HTMLElement | null;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
                     />
+                    <div
+                      className="logo-fallback w-full h-full items-center justify-center bg-neutral-800 rounded-xl absolute inset-0"
+                      style={{ display: 'none' }}
+                    >
+                      <span className="text-white font-bold text-sm text-center px-3 leading-tight">{platform.alt}</span>
+                    </div>
                     {platform.label && (
                       <p className="absolute bottom-2 left-0 right-0 text-center text-white text-xs font-bold bg-black/60 py-1 px-2 mx-4 rounded-lg">
                         {platform.label}

@@ -487,7 +487,7 @@ const Anime: React.FC = () => {
   }, [genreImageCacheKey, genreImageCacheTsKey, tmdbLanguage]);
 
   useEffect(() => {
-    document.title = `${t('animePage.title')} - PRAWLX`;
+    document.title = `${t('animePage.title')} - Prowler`;
   }, [i18n.language, t]);
 
   if (error) {

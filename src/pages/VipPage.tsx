@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { motion } from "framer-motion";
 import {
   Crown,
@@ -82,7 +82,7 @@ const VipPage: React.FC = () => {
               <Crown className="w-8 h-8 text-yellow-500" />
             </div>
             <BlurText
-              text={t("vip.becomeVip") + " PRAWLX"}
+              text={t("vip.becomeVip") + " Prowler"}
               delay={300}
               animateBy="words"
               direction="top"

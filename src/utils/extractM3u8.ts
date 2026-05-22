@@ -1,4 +1,4 @@
-// Utility functions to extract m3u8 URLs from supervideo and dropload players
+﻿// Utility functions to extract m3u8 URLs from supervideo and dropload players
 import { isUserVip } from './authUtils';
 import { getVipHeaders } from './vipUtils';
 import { PROXIES_EMBED_API, buildProxyUrl } from '../config/runtime';
@@ -26,7 +26,7 @@ function detectHosterFromPrefs(url: string): string | null {
 
 // Constante pour le serveur proxy embed
 // ===== Extension Nexus Extractors Bridge =====
-// When the PRAWLX extension is installed, extraction runs locally (no server needed).
+// When the Prowler extension is installed, extraction runs locally (no server needed).
 // Falls back to server-side extraction when extension is not available.
 
 declare global {
@@ -41,7 +41,7 @@ declare global {
 }
 
 /**
- * Check if the PRAWLX extension with Nexus extractors is available
+ * Check if the Prowler extension with Nexus extractors is available
  */
 function hasNexusExtractors(): boolean {
   return !!(window.hasMovixNexusExtractor && window.movixExtractM3u8);
@@ -1156,7 +1156,7 @@ export async function extractM3u8OnDetection(
 
   // If extension with Nexus extractors is available, use its bulk extraction for better performance
   if (extensionReady && window.movixExtractAllM3u8) {
-    console.log('🔌 Using PRAWLX Extension Nexus extractors for parallel extraction');
+    console.log('🔌 Using Prowler Extension Nexus extractors for parallel extraction');
     try {
       const extensionResult = await window.movixExtractAllM3u8(sources);
       if (extensionResult && extensionResult.results) {

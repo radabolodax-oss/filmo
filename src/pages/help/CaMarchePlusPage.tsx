@@ -8,7 +8,7 @@ const CaMarchePlusPage: React.FC = () => {
   const { t } = useTranslation();
 
   useEffect(() => {
-    document.title = `${t('help.caMarchePlus.title')} — PRAWLX`;
+    document.title = `${t('help.caMarchePlus.title')} — Prowler`;
   }, [t]);
 
   const telegramUrl =

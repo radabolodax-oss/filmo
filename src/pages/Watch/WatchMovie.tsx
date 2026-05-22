@@ -23,6 +23,7 @@ import { getTmdbLanguage } from '../../i18n';
 import { useProfile } from '../../context/ProfileContext';
 import { isContentAllowed, getClassificationLabel } from '../../utils/certificationUtils';
 import { getCoflixPreferredUrl } from '../../utils/coflix';
+import WatchInterstitial from '../../components/WatchInterstitial';
 
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
@@ -444,6 +445,7 @@ const WatchMovie: React.FC = () => {
   const [movieTitle, setMovieTitle] = useState<string>('');
   const [backdropPath, setBackdropPath] = useState<string | null>(null);
   const [posterPath, setPosterPath] = useState<string | null>(null);
+  const [showInterstitial, setShowInterstitial] = useState(true);
   const [contentCert, setContentCert] = useState<string>('');
   const [isBlocked, setIsBlocked] = useState(false);
 
@@ -645,7 +647,7 @@ const WatchMovie: React.FC = () => {
   // Ajout de l'état pour savoir si l'utilisateur a cliqué sur la pub
   const [hasClickedAd, setHasClickedAd] = useState(false);
 
-  // PRAWLX Wrapped 2026 - Track movie viewing time
+  // Prowler Wrapped 2026 - Track movie viewing time
   useWrappedTracker({
     mode: 'viewing',
     viewingData: id ? {
@@ -2263,8 +2265,8 @@ const WatchMovie: React.FC = () => {
           case 'frembed': {
             if (!isFrembedAvailable) return false;
             setSelectedSource('frembed');
-            setVideoSource(`https://frembed.click/api/film.php?id=${id}`);
-            setEmbedUrl(`https://frembed.click/api/film.php?id=${id}`);
+            setVideoSource(`https://frembed.click/embed/movie/${id}`);
+            setEmbedUrl(`https://frembed.click/embed/movie/${id}`);
             setEmbedType('frembed');
             currentSourceRef.current = 'frembed';
             return true;
@@ -3109,6 +3111,14 @@ const WatchMovie: React.FC = () => {
 
   return (
     <div style={{ minHeight: 'calc(var(--vh, 1vh) * 100)', overflow: 'hidden' }} className="w-full bg-black overflow-hidden fixed inset-0">
+      <AnimatePresence>
+        {showInterstitial && (
+          <WatchInterstitial
+            posterUrl={posterPath ? `https://image.tmdb.org/t/p/w780${posterPath}` : undefined}
+            onDone={() => setShowInterstitial(false)}
+          />
+        )}
+      </AnimatePresence>
       <style dangerouslySetInnerHTML={{
         __html: `
           .loading-container {
@@ -3398,7 +3408,7 @@ const WatchMovie: React.FC = () => {
                   setSelectedMp4Source(0);
                   setVideoSource(mp4Sources[0].url);
                 } else {
-                  // Fallback order: Supervideo (Omega), Multi (Coflix), Frembed, PRAWLX (custom)
+                  // Fallback order: Supervideo (Omega), Multi (Coflix), Frembed, Prowler (custom)
                   const supervideo = omegaData ? getSupervideoFromOmega(omegaData) : null;
                   if (supervideo && omegaData) {
                     setSelectedSource('omega');
@@ -3426,8 +3436,8 @@ const WatchMovie: React.FC = () => {
                       setEmbedType('coflix');
                     } else if (frembedAvailable) {
                       setSelectedSource('frembed');
-                      setVideoSource(`https://frembed.click/api/film.php?id=${id}`);
-                      setEmbedUrl(`https://frembed.click/api/film.php?id=${id}`);
+                      setVideoSource(`https://frembed.click/embed/movie/${id}`);
+                      setEmbedUrl(`https://frembed.click/embed/movie/${id}`);
                       setEmbedType('frembed');
                     } else if (customSources.length > 0) {
                       setSelectedSource('custom');
@@ -4246,7 +4256,7 @@ const WatchMovie: React.FC = () => {
           <div className="fixed top-6 right-8 z-[10000] flex items-center gap-2">
             {/* Bouton Ouvrir dans une nouvelle page */}
             <button
-              onClick={() => window.open(selectedSource === 'vostfr' ? `https://player.videasy.net/movie/${id}` : `https://frembed.click/api/film.php?id=${id}`, '_blank', 'noopener')}
+              onClick={() => window.open(embedUrl || (selectedSource === 'frembed' ? `https://frembed.click/embed/movie/${id}` : `https://player.videasy.net/movie/${id}`), '_blank', 'noopener')}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/90 border border-gray-600 hover:bg-gray-700/90 text-white font-medium text-sm transition-all duration-200"
               title={t('watch.openInNewPage')}
             >
@@ -4299,7 +4309,8 @@ const WatchMovie: React.FC = () => {
           </AnimatePresence>
 
           <iframe
-            src={selectedSource === 'vostfr' ? `https://player.videasy.net/movie/${id}` : `https://frembed.click/api/film.php?id=${id}`}
+            key={`iframe-${embedType || ''}-${embedUrl || ''}`}
+            src={embedUrl || (selectedSource === 'frembed' ? `https://frembed.click/embed/movie/${id}` : `https://player.videasy.net/movie/${id}`)}
             className="w-full h-full border-0"
             allowFullScreen
             referrerPolicy="strict-origin-when-cross-origin"
