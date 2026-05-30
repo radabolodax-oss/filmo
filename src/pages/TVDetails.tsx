@@ -3878,7 +3878,7 @@ const TVDetails: React.FC = () => {
       case 'videasy_net':  return `https://player.videasy.net/tv/${id}/${s}/${e}`;
       case 'vidsrccc':     return `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}`;
       case 'vidsrcsu':     return `https://vidsrc.su/embed/tv/${id}/${s}/${e}`;
-      case 'embed2':       return `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`;
+      case 'embed2':       return `https://www.2embed.cc/embedtv/${id}?s=${s}&e=${e}`;
       case 'embedsu':      return `https://embed.su/embed/tv/${id}/${s}/${e}`;
       case 'vostfr':       return `https://vidsrc.wtf/api/3/tv/?id=${id}&s=${s}&e=${e}`;
       case 'vidsrcwtf1':   return `https://vidsrc.wtf/api/1/tv/?id=${id}&s=${s}&e=${e}`;
@@ -6822,10 +6822,18 @@ const TVDetails: React.FC = () => {
         >
           {/* ── Player column (75%) ── */}
           <div className="w-full lg:w-3/4 min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
-            <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex-shrink-0">
+            <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex-shrink-0 flex items-center justify-between gap-3">
               <span className="text-sm text-gray-300 font-medium">
                 {tvShow?.name} — S{selectedSeason} E{selectedEpisode}
               </span>
+              <button
+                onClick={() => navigate(`/watch/tv/${encodedId}/s/${selectedSeason}/e/${selectedEpisode}`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff' }}
+              >
+                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                Lecteur complet
+              </button>
             </div>
             <iframe
               key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}`}
