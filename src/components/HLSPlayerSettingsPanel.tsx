@@ -1,4 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
+const MAIN_API = (import.meta.env.VITE_MAIN_API as string || '').replace(/\/+$/, '');
+const PURSTREAM_PROXY = (import.meta.env.VITE_PURSTREAM_PROXY as string || 'https://purstream.ac').replace(/\/+$/, '');
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import ReactCountryFlag from 'react-country-flag';
@@ -989,27 +992,20 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                       className="ml-4 pl-2 border-l-2 border-gray-700 mb-2"
                                     >
                                       {[
-                                        { id: 'peachify', label: 'Peachify' },
-                                        { id: 'vostfr', label: 'Videasy' },
-                                        { id: 'vidlink', label: 'Vidlink' },
-                                        { id: 'vidsrccc', label: 'Vidsrc.io' },
-                                        { id: 'vidsrcwtf1', label: 'Vidsrc.wtf 1' }
+                                        { id: 'vostfr',    label: 'Videasy' },
+                                        { id: 'vidlink',   label: 'Vidlink' },
+                                        ...(movieId ? [{ id: 'purstream', label: 'Purstream' }] : []),
                                       ].map((vostfrSource, index) => {
                                         // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
                                         // (épisode spécial / Spéciaux TMDB) tombe dans le fallback '#' qui fait
                                         // charger la page courante en boucle dans l'iframe.
                                         const sourceUrl = movieId ?
-                                          vostfrSource.id === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
+                                          vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
                                             vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
-                                              vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/movie?tmdb=${movieId}` :
-                                                vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                                                  `https://vidsrc.wtf/api/1/movie/?id=${movieId}` :
+                                              `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}` :
                                           (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
-                                            vostfrSource.id === 'peachify' ? `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626` :
-                                              vostfrSource.id === 'vidlink' ? `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                                vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}` :
-                                                  vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                                    `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
+                                            vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                              `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                             '#'; // Fallback if neither movie nor TV info is present
 
                                         // Active state check for VOSTFR sources in main menu

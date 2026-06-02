@@ -472,7 +472,7 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
                             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                                 <Link
-                                  to={`/${item.media_type}/${encodeId(item.id)}`}
+                                  to={`/${item.media_type}/${encodeId(item.id)}?autoplay=true`}
                                   className="inline-flex items-center gap-2 text-white px-4 sm:px-6 md:px-7 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl text-sm sm:text-base font-semibold transition-all"
                                   style={{ background: 'linear-gradient(135deg,#00e676,#a855f7)' }}
                                 >

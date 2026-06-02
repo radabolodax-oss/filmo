@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import axios from 'axios';
 import { Loader, Video, Star, Calendar, List, Check, ChevronRight, Play, Film, X, Building, MapPin, Languages, Library, Info, ArrowLeft, Image, Download, AlertTriangle, Archive, CheckCircle } from 'lucide-react';
@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import AddToListButton from '../components/AddToListButton';
 import DetailsSkeleton from '../components/skeletons/DetailsSkeleton';
-import WatchInterstitial from '../components/WatchInterstitial';
 
 import ShareButtons from '../components/ShareButtons';
 import HLSPlayer from '../components/HLSPlayer';
@@ -26,6 +25,8 @@ import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed 
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
+const PURSTREAM_PROXY = (import.meta.env.VITE_PURSTREAM_PROXY as string || 'https://purstream.ac').replace(/\/+$/, '');
+const NAKIOS_PROXY    = (import.meta.env.VITE_NAKIOS_PROXY as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
 
 interface Movie {
   title: string;
@@ -1001,7 +1002,7 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
   const [videoSource, setVideoSource] = useState<string | null>(null);
   const [customSources, setCustomSources] = useState<string[]>([]);
   // Change l'état initial pour ne pas sélectionner de lecteur par défaut et corrige le type
-  type PlayerSourceType = 'primary' | 'peachify' | 'vostfr' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'adfree' | 'multi' | 'omega' | 'darkino' | 'mp4' | number;
+  type PlayerSourceType = 'primary' | 'vostfr' | 'videasy' | 'purstream' | 'adfree' | 'multi' | 'omega' | 'darkino' | 'mp4' | number;
   const [selectedSource, setSelectedSource] = useState<PlayerSourceType | null>(null);
   const [frembedAvailable, setFrembedAvailable] = useState(true);
   const [adFreeSource, setAdFreeSource] = useState<string | null>(null);
@@ -1553,7 +1554,7 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
         <div className="relative">
           <button
             onClick={() => setShowVostfrOptions(!showVostfrOptions)}
-            className={`px-4 py-2 rounded flex items-center gap-2 ${(selectedSource === 'peachify' || selectedSource === 'vostfr' || selectedSource === 'videasy' || selectedSource === 'vidsrccc' || selectedSource === 'vidsrcsu' || selectedSource === 'vidsrcwtf1' || selectedSource === 'vidsrcwtf5')
+            className={`px-4 py-2 rounded flex items-center gap-2 ${(selectedSource === 'vostfr' || selectedSource === 'videasy' || selectedSource === 'purstream')
               ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
               : 'bg-gray-700 hover:bg-gray-600'
               }`}
@@ -1572,13 +1573,9 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
 
           {showVostfrOptions && (
             <div className="absolute z-50 top-full left-0 mt-1 bg-gray-800 rounded-lg shadow-lg overflow-hidden min-w-[200px]">
-              <button onClick={() => handleSelectSource('peachify')} className={`w-full px-4 py-2 text-left ${selectedSource === 'peachify' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Peachify</button>
-              <button onClick={() => handleSelectSource('vostfr')} className={`w-full px-4 py-2 text-left ${selectedSource === 'vostfr' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Vidsrc.wtf 3</button>
+              <button onClick={() => handleSelectSource('vostfr')} className={`w-full px-4 py-2 text-left ${selectedSource === 'vostfr' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Videasy</button>
               <button onClick={() => handleSelectSource('videasy')} className={`w-full px-4 py-2 text-left ${selectedSource === 'videasy' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Vidlink</button>
-              <button onClick={() => handleSelectSource('vidsrccc')} className={`w-full px-4 py-2 text-left ${selectedSource === 'vidsrccc' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Vidsrc.io</button>
-              <button onClick={() => handleSelectSource('vidsrcsu')} className={`w-full px-4 py-2 text-left ${selectedSource === 'vidsrcsu' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Vidsrc.su</button>
-              <button onClick={() => handleSelectSource('vidsrcwtf1')} className={`w-full px-4 py-2 text-left ${selectedSource === 'vidsrcwtf1' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Vidsrc.wtf 1</button>
-              <button onClick={() => handleSelectSource('vidsrcwtf5')} className={`w-full px-4 py-2 text-left ${selectedSource === 'vidsrcwtf5' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Vidsrc.wtf 5</button>
+              <button onClick={() => handleSelectSource('purstream')} className={`w-full px-4 py-2 text-left ${selectedSource === 'purstream' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Purstream</button>
             </div>
           )}
         </div>
@@ -1890,40 +1887,35 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
           <iframe
             id="video-player-iframe"
             sandbox={
-              // Only apply sandbox to "PAS DE PUBLICITE" players
-              ((selectedSource === 'multi' &&
-                coflixData?.player_links[selectedPlayerLink]?.quality?.includes("PAS DE PUBLICITE") &&
-                // Exclude specific players even if they have "PAS DE PUBLICITE"
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("lulustream") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("filemoon") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("supervideo") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("dropload") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("voe.sx") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("vidmoly") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("vidguard") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("do7go") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("uqload") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("veed") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("wish") &&
-                !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("lecteur6.com")
-              ) ||
-                (selectedSource === 'adfree' && adFreeSource))
-                ? "allow-scripts allow-same-origin allow-presentation"
-                : undefined // No sandbox for other players
+              selectedSource === 'purstream'
+                ? 'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-top-navigation'
+                : ((selectedSource === 'multi' &&
+                    coflixData?.player_links[selectedPlayerLink]?.quality?.includes("PAS DE PUBLICITE") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("lulustream") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("filemoon") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("supervideo") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("dropload") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("voe.sx") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("vidmoly") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("vidguard") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("do7go") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("uqload") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("veed") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("wish") &&
+                    !coflixData?.player_links[selectedPlayerLink]?.decoded_url?.includes("lecteur6.com")
+                  ) || (selectedSource === 'adfree' && adFreeSource))
+                    ? "allow-scripts allow-same-origin allow-presentation"
+                    : undefined
             }
             src={
               selectedSource === 'primary' ? `https://frembed.click/embed/movie/${movieId}` :
-                selectedSource === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
-                selectedSource === 'vostfr' ? `https://vidsrc.wtf/api/3/movie/?id=${movieId}` :
+                selectedSource === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
                   selectedSource === 'videasy' ? `https://vidlink.pro/movie/${movieId}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false` :
-                    selectedSource === 'vidsrccc' ? `https://vidsrc.io/embed/movie?tmdb=${movieId}` :
-                      selectedSource === 'vidsrcsu' ? `https://vidsrc.su/embed/movie/${movieId}` :
-                        selectedSource === 'vidsrcwtf1' ? `https://vidsrc.wtf/api/1/movie/?id=${movieId}` :
-                          selectedSource === 'vidsrcwtf5' ? `https://vidsrc.wtf/api/5/movie/?id=${movieId}` :
-                            selectedSource === 'adfree' ? adFreeSource || "" :
-                              selectedSource === 'multi' ? coflixData?.player_links?.[selectedPlayerLink]?.decoded_url || "" :
-                                selectedSource === 'omega' ? omegaData?.player_links?.[selectedOmegaPlayer]?.link || "" :
-                                  typeof selectedSource === 'number' ? customSources[selectedSource] : ""
+                    selectedSource === 'purstream' ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}` :
+                    selectedSource === 'adfree' ? adFreeSource || "" :
+                      selectedSource === 'multi' ? coflixData?.player_links?.[selectedPlayerLink]?.decoded_url || "" :
+                        selectedSource === 'omega' ? omegaData?.player_links?.[selectedOmegaPlayer]?.link || "" :
+                          typeof selectedSource === 'number' ? customSources[selectedSource] : ""
             }
             className="w-full h-full"
             allowFullScreen
@@ -1943,6 +1935,7 @@ const MovieDetails = (): JSX.Element => {
   const { id: encodedId } = useParams<{ id: string }>();
   const id = encodedId ? getTmdbId(encodedId) : null;
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { resetVipStatus } = useAdFreePopup(); // Récupérer la fonction reset
   const { currentProfile } = useProfile();
 
@@ -2023,12 +2016,14 @@ const MovieDetails = (): JSX.Element => {
   // Ajout d'un état pour suivre si le film est sorti
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
 
-  type InlineSource = 'frembed' | 'videasy' | 'videasy_net' | 'vidsrccc' | 'vidsrc' | 'vidsrcsu' | 'embed2' | 'embedsu' | 'vostfr' | 'vidsrcwtf1' | 'vidsrcwtf5';
+  type InlineSource = 'nakios' | 'purstream' | 'vidmoly' | 'videasy' | 'frembed';
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
-  const [showInterstitial, setShowInterstitial] = useState(false);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
-  const [showInlineSourcePicker, setShowInlineSourcePicker] = useState(false);
-
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
+  const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
+  const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
+  const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
+  const [purstreamStreamLoading, setPurstreamStreamLoading] = useState(false);
+  const [vidmolyEmbedUrl, setVidmolyEmbedUrl] = useState<string | null>(null);
   const [collection, setCollection] = useState<Collection | null>(null);
   const [loadingCollection, setLoadingCollection] = useState(false);
   const [images, setImages] = useState<MovieImages | null>(null);
@@ -2051,6 +2046,7 @@ const MovieDetails = (): JSX.Element => {
   const [showCollectionRightButton, setShowCollectionRightButton] = useState(true);
   const collectionRowRef = useRef<HTMLDivElement>(null);
 
+
   // Vérifier si la barre d'onglets est scrollable
   useEffect(() => {
     const checkIfScrollable = () => {
@@ -2070,6 +2066,21 @@ const MovieDetails = (): JSX.Element => {
     resetVipStatus();
   }, [id, resetVipStatus]);
 
+  // Autoplay : si ?autoplay=true dans l'URL, lancer le lecteur dès que le film charge
+  useEffect(() => {
+    if (!movie || searchParams.get('autoplay') !== 'true') return;
+    setShowInlinePlayer(true);
+    // Attendre la fin des animations framer-motion (delay 0.8s) + rendu React
+    const scrollWhenReady = () => {
+      const el = document.getElementById('video-player-section');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+    const t1 = setTimeout(scrollWhenReady, 900);
+    return () => clearTimeout(t1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movie?.id]);
 
   // Declare fetchMovieDetails type before using it
   const fetchMovieDetails = useCallback(async (): Promise<MovieExtended | undefined> => {
@@ -2405,50 +2416,6 @@ const MovieDetails = (): JSX.Element => {
             )}
           </motion.button>
 
-          {/* Source picker discret */}
-          <div className="relative self-stretch">
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              onClick={() => setShowInlineSourcePicker(v => !v)}
-              className="h-full flex flex-col items-center gap-2 px-3 sm:px-4 py-4 sm:py-5 bg-gray-800/80 hover:bg-gray-700 rounded-lg justify-center text-xs sm:text-sm border border-gray-600/60"
-              title="Changer de source"
-            >
-              <Film className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-              <span>Source</span>
-            </motion.button>
-            {showInlineSourcePicker && (
-              <div className="absolute left-0 bottom-full mb-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl min-w-[155px] z-50 overflow-hidden">
-                {([
-                  { id: 'frembed',     label: 'Frembed (VF)' },
-                  { id: 'videasy',     label: 'Vidlink' },
-                  { id: 'videasy_net', label: 'Videasy' },
-                  { id: 'vidsrccc',    label: 'Vidsrc.cc' },
-                  { id: 'vidsrc',      label: 'Vidsrc.io' },
-                  { id: 'vidsrcsu',    label: 'Vidsrc.su' },
-                  { id: 'embed2',      label: '2embed' },
-                  { id: 'embedsu',     label: 'Embed.su' },
-                  { id: 'vostfr',      label: 'VOSTFR' },
-                  { id: 'vidsrcwtf1',  label: 'Vidsrc.wtf 1' },
-                  { id: 'vidsrcwtf5',  label: 'Vidsrc.wtf 5' },
-                ] as { id: InlineSource; label: string }[]).map(src => (
-                  <button
-                    key={src.id}
-                    onClick={() => {
-                      setInlinePlayerSource(src.id);
-                      setShowInlineSourcePicker(false);
-                      if (!showInlinePlayer) handleWatchClick();
-                    }}
-                    className={`w-full px-4 py-2 text-left text-sm transition-colors ${inlinePlayerSource === src.id ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
-                  >
-                    {src.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
           {(!ENABLE_VIP_DOWNLOAD_CHECK || localStorage.getItem('is_vip') === 'true') && (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -2561,11 +2528,81 @@ const MovieDetails = (): JSX.Element => {
 
 
 
-  // Watch progress tracking functionality removed
+  // Résolution du flux Nakios film via le Worker → HLSPlayer natif
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'nakios' || !id) {
+      setNakiosStreamUrl(null);
+      return;
+    }
+    let cancelled = false;
+    setNakiosStreamLoading(true);
+    setNakiosStreamUrl(null);
+    fetch(`${NAKIOS_PROXY}/movie?id=${id}`)
+      .then(r => r.json())
+      .then(async (data) => {
+        if (cancelled) return;
+        const rawUrl =
+          data?.url || data?.stream || data?.link ||
+          data?.sources?.[0]?.url || data?.sources?.[0]?.file ||
+          data?.data?.url || data?.data?.stream || null;
+        if (rawUrl) {
+          setNakiosStreamUrl(`${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`);
+          return;
+        }
+        // Fallback : Nakios fournit un embed Vidmoly plutôt qu'un flux direct
+        const vidmolyEmbedUrl: string | null = data?._vidmolyUrl || null;
+        if (vidmolyEmbedUrl) {
+          const vRes = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(vidmolyEmbedUrl)}`);
+          const vData = await vRes.json();
+          const vUrl: string | null = vData?.url || null;
+          if (!cancelled) setNakiosStreamUrl(vUrl ? `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(vUrl)}` : null);
+          return;
+        }
+        if (!cancelled) setNakiosStreamUrl(null);
+      })
+      .catch(() => { if (!cancelled) setNakiosStreamUrl(null); })
+      .finally(() => { if (!cancelled) setNakiosStreamLoading(false); });
+    return () => { cancelled = true; };
+  }, [showInlinePlayer, inlinePlayerSource, id]);
+
+  // Résolution du flux Purstream via le Worker (pas d'iframe — lecteur natif)
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'purstream' || !id) {
+      setPurstreamStreamUrl(null);
+      return;
+    }
+    let cancelled = false;
+    setPurstreamStreamLoading(true);
+    setPurstreamStreamUrl(null);
+    fetch(`${PURSTREAM_PROXY}/stream?type=movie&tmdb=${id}`)
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setPurstreamStreamUrl(data.sources?.[0]?.url || null); })
+      .catch(() => { if (!cancelled) setPurstreamStreamUrl(null); })
+      .finally(() => { if (!cancelled) setPurstreamStreamLoading(false); });
+    return () => { cancelled = true; };
+  }, [showInlinePlayer, inlinePlayerSource, id]);
+
+  // Récupère l'URL embed Vidmoly depuis CoFlix (iframe directe, pas d'extraction)
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'vidmoly' || !id) {
+      setVidmolyEmbedUrl(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`${MAIN_API}/api/tmdb/movie/${id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        const links: Array<{ decoded_url?: string }> = data?.player_links || [];
+        const found = links.find(l => l.decoded_url?.toLowerCase().includes('vidmoly'));
+        setVidmolyEmbedUrl(found?.decoded_url?.replace(/vidmoly\.[a-z]{2,4}/, 'vidmoly.me') || null);
+      })
+      .catch(() => { if (!cancelled) setVidmolyEmbedUrl(null); });
+    return () => { cancelled = true; };
+  }, [showInlinePlayer, inlinePlayerSource, id]);
 
   const handleWatchClick = () => {
-    setShowInterstitial(true);
-    setShowInlineSourcePicker(false);
+    setShowInlinePlayer(true);
     setTimeout(() => scrollToPlayer(), 80);
   };
 
@@ -2635,17 +2672,10 @@ const MovieDetails = (): JSX.Element => {
 
   const getInlinePlayerUrl = () => {
     switch (inlinePlayerSource) {
-      case 'frembed':      return `https://frembed.click/embed/movie/${id}`;
-      case 'videasy':      return `https://vidlink.pro/movie/${id}?primaryColor=63f99f&secondaryColor=a2a2a2&iconColor=63f99f&autoplay=true`;
-      case 'videasy_net':  return `https://player.videasy.net/movie/${id}`;
-      case 'vidsrccc':     return `https://vidsrc.cc/v2/embed/movie/${id}`;
-      case 'vidsrcsu':     return `https://vidsrc.su/embed/movie/${id}`;
-      case 'embed2':       return `https://www.2embed.cc/embed/${id}`;
-      case 'embedsu':      return `https://embed.su/embed/movie/${id}`;
-      case 'vostfr':       return `https://vidsrc.wtf/api/3/movie/?id=${id}`;
-      case 'vidsrcwtf1':   return `https://vidsrc.wtf/api/1/movie/?id=${id}`;
-      case 'vidsrcwtf5':   return `https://vidsrc.wtf/api/5/movie/?id=${id}`;
-      default:             return `https://vidsrc.io/embed/movie?tmdb=${id}`;
+      case 'vidmoly':  return vidmolyEmbedUrl || '';
+      case 'videasy':  return `https://vidlink.pro/movie/${id}`;
+      case 'frembed':  return `https://frembed.click/embed/movie/${id}`;
+      default:         return `https://frembed.click/embed/movie/${id}`;
     }
   };
 
@@ -4378,59 +4408,66 @@ const MovieDetails = (): JSX.Element => {
                   {t('details.continueAnyway')}
                 </motion.button>
               </motion.div>
-            ) : showInterstitial ? (
-              <div
-                className="relative h-[500px] rounded-lg overflow-hidden"
-                style={{
-                  backgroundImage: movie?.backdrop_path
-                    ? `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.7)), url(https://image.tmdb.org/t/p/original${movie.backdrop_path})`
-                    : undefined,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundColor: '#000',
-                }}
-              >
-                <AnimatePresence>
-                  <WatchInterstitial
-                    contained
-                    posterUrl={movie?.backdrop_path ? `https://image.tmdb.org/t/p/original${movie.backdrop_path}` : undefined}
-                    onDone={() => { setShowInterstitial(false); setShowInlinePlayer(true); }}
-                  />
-                </AnimatePresence>
-              </div>
             ) : showInlinePlayer ? (
-              // Lecteur iframe + barre de sources en dessous
+              // Lecteur + barre de sources en dessous
               <motion.div
                 className="bg-black rounded-lg overflow-hidden"
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3 }}
               >
-                <iframe
-                  key={inlinePlayerSource}
-                  src={getInlinePlayerUrl()}
-                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                  allowFullScreen
-                  allow="autoplay; fullscreen; encrypted-media"
-                  style={{ border: 'none', display: 'block' }}
-                  title={movie?.title || 'Player'}
-                />
+                {(inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
+                  const loading       = inlinePlayerSource === 'nakios' ? nakiosStreamLoading : purstreamStreamLoading;
+                  const streamUrl     = inlinePlayerSource === 'nakios' ? nakiosStreamUrl    : purstreamStreamUrl;
+                  const fallbackLabel = inlinePlayerSource === 'nakios' ? 'Film indisponible sur Nakios' : 'Flux Purstream indisponible';
+                  return loading ? (
+                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                      <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    </div>
+                  ) : streamUrl ? (
+                    <HLSPlayer
+                      key={streamUrl}
+                      src={streamUrl}
+                      className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                      autoPlay={true}
+                      controls={true}
+                      poster={movie?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}` : undefined}
+                    />
+                  ) : (
+                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                      <span>{fallbackLabel}</span>
+                      <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
+                        Essayer Frembed
+                      </button>
+                    </div>
+                  );
+                })() : (
+                  <iframe
+                    key={inlinePlayerSource}
+                    src={getInlinePlayerUrl()}
+                    className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                    width="100%"
+                    height="100%"
+                    frameBorder={0}
+                    allowFullScreen
+                    allow="autoplay; fullscreen"
+                    style={{ display: 'block' }}
+                    title={movie?.title || 'Player'}
+                  />
+                )}
                 {/* Sources sous la vidéo */}
                 <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
                   <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
                     <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Source :</span>
                     {([
-                      { id: 'frembed',     label: 'Frembed (VF)' },
-                      { id: 'videasy',     label: 'Vidlink' },
-                      { id: 'videasy_net', label: 'Videasy' },
-                      { id: 'vidsrccc',    label: 'Vidsrc.cc' },
-                      { id: 'vidsrc',      label: 'Vidsrc.io' },
-                      { id: 'vidsrcsu',    label: 'Vidsrc.su' },
-                      { id: 'embed2',      label: '2embed' },
-                      { id: 'embedsu',     label: 'Embed.su' },
-                      { id: 'vostfr',      label: 'VOSTFR' },
-                      { id: 'vidsrcwtf1',  label: 'Wtf 1' },
-                      { id: 'vidsrcwtf5',  label: 'Wtf 5' },
+                      { id: 'nakios',      label: 'Nakios' },
+                      { id: 'purstream',   label: 'Purstream' },
+                      { id: 'vidmoly',     label: 'Vidmoly' },
+                      { id: 'videasy',     label: 'Videasy' },
+                      { id: 'frembed',     label: 'Frembed' },
                     ] as { id: InlineSource; label: string }[]).map(src => (
                       <button
                         key={src.id}

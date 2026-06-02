@@ -194,7 +194,7 @@ interface NightflixSource {
   label?: string;
 }
 
-type PlayerSourceType = 'primary' | 'vostfr' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'coflix' | 'frembed' | 'custom' | 'nexus_hls' | 'nexus_file' | 'fstream' | 'wiflix' | 'viper' | 'vidmoly' | 'dropload' | 'adfree' | 'rivestream_hls' | 'rivestream' | 'bravo' | number;
+type PlayerSourceType = 'primary' | 'vostfr' | 'purstream' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'coflix' | 'frembed' | 'custom' | 'nexus_hls' | 'nexus_file' | 'fstream' | 'wiflix' | 'viper' | 'vidmoly' | 'dropload' | 'adfree' | 'rivestream_hls' | 'rivestream' | 'bravo' | number;
 
 function formatPremidSourceDetail(...parts: Array<string | null | undefined>) {
   const normalizedParts = parts
@@ -2607,7 +2607,7 @@ const WatchMovie: React.FC = () => {
 
   // Function to handle next movie navigation
   const handleNextMovie = async (movieId: number) => {
-    window.location.href = `/watch/movie/${movieId}`;
+    window.location.href = `/movie/${movieId}`;
   };
 
   // Listener pour l'événement showSourcesMenu (déclenché par HLSPlayer en cas d'erreur 403)

@@ -805,7 +805,7 @@ const WatchTv: React.FC = () => {
     if (!id) return;
     console.log(`[Debug] Navigating to next episode: S${targetSeason}E${targetEpisode}`);
     // Replace navigate with full page reload
-    window.location.href = `/watch/tv/${encodeId(id)}/s/${targetSeason}/e/${targetEpisode}`;
+    window.location.href = `/tv/${encodeId(id)}/s/${targetSeason}/e/${targetEpisode}`;
   };
 
   // Helper function to extract sibnet ID from URL or other source

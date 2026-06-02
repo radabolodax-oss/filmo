@@ -5,7 +5,6 @@ import { Clapperboard, Tv2, Sparkles, LayoutGrid, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const HIDDEN_PREFIXES = [
-  '/watch/',
   '/watchparty/room/',
   '/ftv/watch/',
   '/wrapped',
@@ -18,7 +17,9 @@ const HIDDEN_PREFIXES = [
 const BottomNav: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
-  const isHidden = HIDDEN_PREFIXES.some((p) => location.pathname.startsWith(p));
+  const isHidden = HIDDEN_PREFIXES.some((p) => location.pathname.startsWith(p)) ||
+    (location.pathname.startsWith('/tv/') && location.pathname.includes('/s/')) ||
+    (location.pathname.startsWith('/anime/') && location.pathname.includes('/season/'));
   if (isHidden) return null;
 
   const tabs = [

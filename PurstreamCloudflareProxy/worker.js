@@ -1,110 +1,140 @@
 /**
- * Purstream Cloudflare Worker — Reverse proxy avec réécriture HTML
+ * Purstream Cloudflare Worker — Proxy API de streaming
  *
- * Méthode identique à MonFlix :
- * - Toutes les requêtes /* sont proxifiées vers purstream.ac
- * - Le HTML est réécrit : "https://purstream.ac" → URL du Worker
- *   => le navigateur charge assets/API via le Worker (CORS ok)
- * - Assets, JS, JSON : streaming direct + CORS headers
+ * Le Worker résout TMDB ID → Purstream ID → URL de flux (m3u8/mp4)
+ * côté serveur avec le cookie de session, et renvoie le JSON au frontend.
+ * Le frontend joue le flux dans son propre lecteur HLS (pas d'iframe).
  *
- * Secret requis : wrangler secret put PURSTREAM_SESSION
+ * Routes :
+ *   GET /stream?type=movie&tmdb={id}
+ *   GET /stream?type=tv&tmdb={id}&season={s}&episode={e}
+ *   GET /health
+ *
+ * Secrets requis :
+ *   wrangler secret put PURSTREAM_SESSION
+ *   wrangler secret put TMDB_API_KEY
  */
 
-const UPSTREAM = 'https://purstream.ac';
+const PURSTREAM_API = 'https://api.purstream.ac/api/v1';
+const TMDB_API     = 'https://api.themoviedb.org/3';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
 
-const STRIP_REQUEST = new Set([
-  'host', 'cf-connecting-ip', 'cf-ipcountry', 'cf-ray',
-  'cf-visitor', 'x-forwarded-for', 'x-real-ip',
-]);
-
-const STRIP_RESPONSE = new Set([
-  'x-frame-options',
-  'content-security-policy',
-  'content-security-policy-report-only',
-  'strict-transport-security',
-]);
-
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
   'Access-Control-Allow-Headers': '*',
-  'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
 };
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...CORS },
+  });
+}
+
+/** Récupère le titre depuis TMDB */
+async function getTmdbTitle(type, tmdbId, apiKey) {
+  const endpoint = type === 'movie' ? `movie/${tmdbId}` : `tv/${tmdbId}`;
+  const res = await fetch(`${TMDB_API}/${endpoint}?api_key=${apiKey}&language=fr-FR`);
+  if (!res.ok) throw new Error(`TMDB ${res.status}`);
+  const d = await res.json();
+  return {
+    title:         type === 'movie' ? d.title         : d.name,
+    originalTitle: type === 'movie' ? d.original_title : d.original_name,
+  };
+}
+
+/** Cherche le contenu sur Purstream et retourne son ID interne */
+async function resolvePurstreamId(type, tmdbId, tmdbApiKey, session) {
+  const { title, originalTitle } = await getTmdbTitle(type, tmdbId, tmdbApiKey);
+  const queries = [title];
+  if (originalTitle && originalTitle !== title) queries.push(originalTitle);
+
+  const headers = {
+    'Cookie':     `purstream_session=${session}`,
+    'User-Agent': UA,
+    'Accept':     'application/json',
+    'Referer':    'https://purstream.ac/',
+  };
+
+  for (const query of queries) {
+    const res = await fetch(
+      `${PURSTREAM_API}/search-bar/search/${encodeURIComponent(query)}`,
+      { headers }
+    );
+    if (!res.ok) continue;
+    const data = await res.json();
+    const items = data.data?.items?.movies?.items || [];
+    const match = items.find(item => item.type === type);
+    if (match) return match.id;
+  }
+
+  throw new Error(`"${title}" introuvable sur Purstream`);
+}
+
+/** Récupère les sources de flux depuis l'API Purstream (films uniquement) */
+async function fetchPurstreamStream(purstreamId, _type, _season, _episode, session) {
+  const path = `/stream/${purstreamId}`;
+
+  const res = await fetch(`${PURSTREAM_API}${path}`, {
+    headers: {
+      'Cookie':     `purstream_session=${session}`,
+      'User-Agent': UA,
+      'Accept':     'application/json',
+      'Referer':    'https://purstream.ac/',
+    },
+  });
+
+  if (!res.ok) throw new Error(`Stream API ${res.status}`);
+  const data = await res.json();
+  if (data.type !== 'success') throw new Error(data.message || 'Purstream API error');
+
+  const sources = data.data?.items?.sources || [];
+  if (sources.length === 0) throw new Error('Aucune source disponible');
+
+  return sources.map(s => ({
+    url:    s.stream_url,
+    name:   s.source_name,
+    format: s.format || 'hls',
+  }));
+}
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const workerOrigin = url.origin; // ex: https://purstream-proxy.radabolodax.workers.dev
 
-    // Preflight CORS
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: { ...CORS, 'Access-Control-Max-Age': '86400' },
-      });
+      return new Response(null, { status: 204, headers: { ...CORS, 'Access-Control-Max-Age': '86400' } });
     }
 
-    // Santé
     if (url.pathname === '/health') {
-      return new Response(JSON.stringify({ status: 'ok' }), {
-        headers: { 'Content-Type': 'application/json', ...CORS },
-      });
+      return json({ status: 'ok', worker: 'purstream-proxy' });
     }
 
-    const session = env.PURSTREAM_SESSION;
-    if (!session) {
-      return new Response('PURSTREAM_SESSION secret non configuré', { status: 500, headers: CORS });
+    // ── Route principale : /stream ──────────────────────────────────────────
+    if (url.pathname === '/stream') {
+      const session    = env.PURSTREAM_SESSION;
+      const tmdbApiKey = env.TMDB_API_KEY;
+
+      if (!session)    return json({ error: 'PURSTREAM_SESSION secret manquant' }, 500);
+      if (!tmdbApiKey) return json({ error: 'TMDB_API_KEY secret manquant' }, 500);
+
+      const type   = url.searchParams.get('type');
+      const tmdbId = url.searchParams.get('tmdb');
+
+      if (type !== 'movie') return json({ error: 'Purstream ne supporte que type=movie' }, 400);
+      if (!tmdbId)          return json({ error: 'Paramètre tmdb requis' }, 400);
+
+      try {
+        const purstreamId = await resolvePurstreamId('movie', tmdbId, tmdbApiKey, session);
+        const sources     = await fetchPurstreamStream(purstreamId, 'movie', null, null, session);
+        return json({ sources });
+      } catch (err) {
+        console.error('[PURSTREAM]', err.message);
+        return json({ error: err.message }, 502);
+      }
     }
 
-    // URL upstream : même chemin + query que la requête reçue
-    const targetUrl = `${UPSTREAM}${url.pathname}${url.search}`;
-
-    // Headers upstream
-    const upstreamHeaders = new Headers();
-    for (const [key, value] of request.headers.entries()) {
-      if (!STRIP_REQUEST.has(key.toLowerCase())) upstreamHeaders.set(key, value);
-    }
-    upstreamHeaders.set('Host', 'purstream.ac');
-    upstreamHeaders.set('Cookie', `purstream_session=${session}`);
-    upstreamHeaders.set('User-Agent', UA);
-    upstreamHeaders.set('Referer', UPSTREAM + '/');
-    upstreamHeaders.set('Origin', UPSTREAM);
-
-    let upstream;
-    try {
-      upstream = await fetch(targetUrl, {
-        method: request.method,
-        headers: upstreamHeaders,
-        body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
-        redirect: 'follow',
-      });
-    } catch (err) {
-      return new Response(`Erreur fetch: ${err.message}`, { status: 502, headers: CORS });
-    }
-
-    // Headers de réponse : copier upstream en filtrant les headers bloquants
-    const responseHeaders = new Headers();
-    for (const [key, value] of upstream.headers.entries()) {
-      if (!STRIP_RESPONSE.has(key.toLowerCase())) responseHeaders.set(key, value);
-    }
-    // Poser CORS + iframe en dernier (écrasent ceux d'upstream)
-    for (const [k, v] of Object.entries(CORS)) responseHeaders.set(k, v);
-    responseHeaders.set('X-Frame-Options', 'ALLOWALL');
-    responseHeaders.set('Content-Security-Policy', "frame-ancestors *;");
-
-    const contentType = upstream.headers.get('Content-Type') || '';
-
-    // HTML : réécrire "https://purstream.ac" → URL du Worker
-    // => toutes les src/href/fetch() de la page pointeront vers le Worker
-    if (contentType.includes('text/html')) {
-      let html = await upstream.text();
-      html = html.replaceAll(UPSTREAM, workerOrigin);
-      responseHeaders.set('Content-Type', 'text/html; charset=utf-8');
-      return new Response(html, { status: upstream.status, headers: responseHeaders });
-    }
-
-    // Tout le reste (JS, CSS, images, JSON, HLS…) : streaming direct sans modifier le contenu
-    return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+    return json({ error: 'Not Found' }, 404);
   },
 };

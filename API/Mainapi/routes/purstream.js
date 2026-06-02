@@ -15,8 +15,83 @@ const { generateCacheKey, CACHE_DIR } = require('../utils/cacheManager');
 const { fetchTmdbDetails, fetchTmdbImages } = require('../utils/tmdbCache');
 const { pickRandomProxy, getProxyAgent } = require('../utils/proxyManager');
 
-const PURSTREAM_BASE = 'https://api.purstream.cc/api/v1';
+const PURSTREAM_BASE = 'https://api.purstream.ac/api/v1';
 const PURSTREAM_CACHE_DIR = CACHE_DIR.PURSTREAM;
+
+// ---------------------------------------------------------------------------
+// Session Purstream — renouvellement automatique toutes les 90 minutes
+// ---------------------------------------------------------------------------
+let currentSession = process.env.PURSTREAM_SESSION || 'eyJpdiI6IlljUy9DVTgyODlhekN3VDhsZkIybGc9PSIsInZhbHVlIjoibTRPWDBWZitub0JPcW5DaVRvQ2kydUJ5T3haUW82dlI5WFo4ck1nVUVRc2NKN2Z0UWMrK1MzRHcyNHR6aGFMTnZ3UW5Ka0Q2SHN3VUg2RE9WeENxS3ZPb1d1b3BRVFU0OVpOUStaVlYraWh1QWIzYTN0Z1E1VHZWT1A1ZWhuR3YiLCJtYWMiOiJhMDgwZTVkYzI3NjA2OWI2MjAxZTkzOTdmOGI1ZTM4NzliYzE0OWQzZTRkM2RlMTY4ZDgxYzZhNWE2OWViZDIyIiwidGFnIjoiIn0%3D';
+let _renewalInterval = null;
+
+const PURSTREAM_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
+
+/** Se connecte sur purstream.ac et met à jour currentSession. Retourne true si succès. */
+async function loginPurstream() {
+  const email = process.env.PURSTREAM_EMAIL;
+  const password = process.env.PURSTREAM_PASSWORD;
+
+  if (!email || !password) {
+    console.warn('[PURSTREAM] PURSTREAM_EMAIL / PURSTREAM_PASSWORD absents — renouvellement désactivé');
+    return false;
+  }
+
+  try {
+    // 1. GET /login pour récupérer le token CSRF Laravel + cookies initiaux
+    const pageRes = await axios.get('https://purstream.ac/login', {
+      timeout: 15000,
+      headers: {
+        'User-Agent': PURSTREAM_UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    const tokenMatch = pageRes.data.match(/name="_token"[^>]+value="([^"]+)"/);
+    if (!tokenMatch) throw new Error('Token CSRF introuvable dans la page de login');
+    const csrfToken = tokenMatch[1];
+
+    const initialCookies = (pageRes.headers['set-cookie'] || [])
+      .map(c => c.split(';')[0])
+      .join('; ');
+
+    // 2. POST /login avec les credentials
+    const body = new URLSearchParams({ _token: csrfToken, email, password }).toString();
+    const loginRes = await axios.post('https://purstream.ac/login', body, {
+      timeout: 15000,
+      maxRedirects: 0,
+      validateStatus: s => s < 500,
+      headers: {
+        'User-Agent': PURSTREAM_UA,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Referer': 'https://purstream.ac/login',
+        'Cookie': initialCookies,
+      },
+    });
+
+    // 3. Extraire purstream_session depuis Set-Cookie
+    const setCookies = loginRes.headers['set-cookie'] || [];
+    const sessionCookie = setCookies
+      .map(c => c.match(/purstream_session=([^;]+)/))
+      .find(Boolean)?.[1];
+
+    if (!sessionCookie) throw new Error('Cookie purstream_session absent de la réponse login');
+
+    currentSession = sessionCookie;
+    console.log('[PURSTREAM] Session renouvelée avec succès');
+    return true;
+  } catch (err) {
+    console.error(`[PURSTREAM] Échec du renouvellement de session: ${err.message}`);
+    return false;
+  }
+}
+
+/** Démarre le renouvellement automatique (appel initial + setInterval 90 min). */
+function startSessionRenewal() {
+  if (_renewalInterval) return;
+  loginPurstream().catch(() => {});
+  _renewalInterval = setInterval(() => loginPurstream().catch(() => {}), 90 * 60 * 1000);
+  if (_renewalInterval.unref) _renewalInterval.unref();
+}
 
 // ---------------------------------------------------------------------------
 // Dependencies injected via configure()
@@ -37,6 +112,7 @@ function configure(deps) {
   if (deps.getFromCacheNoExpiration) getFromCacheNoExpiration = deps.getFromCacheNoExpiration;
   if (deps.saveToCache) saveToCache = deps.saveToCache;
   if (deps.shouldUpdateCache) shouldUpdateCache = deps.shouldUpdateCache;
+  startSessionRenewal();
 }
 
 /** Wrap une URL m3u8 dans le proxy cinep si VIP et PROXY_SERVER_URL configuré */
@@ -54,14 +130,17 @@ async function purstreamRequest(urlPath) {
   const proxy = pickRandomProxy();
   const agent = proxy ? getProxyAgent(proxy) : null;
 
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+    'Accept': 'application/json',
+    'Cookie': `purstream_session=${currentSession}`,
+  };
+
   return axios({
     url: `${PURSTREAM_BASE}${urlPath}`,
     method: 'get',
     timeout: 10000,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
-      'Accept': 'application/json'
-    },
+    headers,
     ...(agent ? { httpAgent: agent, httpsAgent: agent, proxy: false } : {}),
     decompress: true
   });
@@ -444,3 +523,4 @@ async function backgroundUpdateStreamTv(tmdbId, season, episode, cacheKey) {
 
 module.exports = router;
 module.exports.configure = configure;
+module.exports.getCurrentSession = () => currentSession;

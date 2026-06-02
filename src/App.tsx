@@ -1,5 +1,10 @@
 ﻿import React, { useEffect, useLayoutEffect, useState, useRef, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigationType, useNavigate, matchPath } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigationType, useNavigate, matchPath, useParams } from 'react-router-dom';
+
+// Redirects: /watch/* → cleaner URLs without /watch/ prefix
+const WatchMovieRedirect = () => { const { tmdbid } = useParams(); return <Navigate to={`/movie/${tmdbid}`} replace />; };
+const WatchTvRedirect = () => { const { tmdbid, season, episode } = useParams(); return <Navigate to={`/tv/${tmdbid}/s/${season}/e/${episode}`} replace />; };
+const WatchAnimeRedirect = () => { const { id, season, episode } = useParams(); return <Navigate to={`/anime/${id}/season/${season}/episode/${episode}`} replace />; };
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
 import Header from './components/Header';
@@ -552,7 +557,9 @@ const PersistenceManager = () => {
   }, []);
 
   // Check if we're on a watch route - if so, disable initial data loading but allow sync
-  const isWatchRoute = location.pathname.startsWith('/watch/') || location.pathname.startsWith('/watchparty/room/');
+  const isWatchRoute = (location.pathname.startsWith('/tv/') && location.pathname.includes('/s/')) ||
+    (location.pathname.startsWith('/anime/') && location.pathname.includes('/season/')) ||
+    location.pathname.startsWith('/watchparty/room/');
 
   // Store current user info in a ref to track changes
   const currentUserInfo = React.useRef<{ type: string | null, id: string | null }>(
@@ -1554,7 +1561,8 @@ const ProfileGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [loadingTimedOut, setLoadingTimedOut] = React.useState(false);
 
   // Skip profile gate on watch routes and BIP39 link flows
-  const isWatchRoute = location.pathname.startsWith('/watch/');
+  const isWatchRoute = (location.pathname.startsWith('/tv/') && location.pathname.includes('/s/')) ||
+    (location.pathname.startsWith('/anime/') && location.pathname.includes('/season/'));
   const isBip39LinkRoute = location.pathname.startsWith('/link-bip39');
   const isOauthAuthorizeRoute = location.pathname.startsWith('/oauth/authorize');
 
@@ -1643,7 +1651,10 @@ const AppWithIntro: React.FC = () => {
   useTVMode();
 
   // Détecter si on est sur une route /watch ou la page 404
-  const isWatchRoute = location.pathname.startsWith('/watch/') || location.pathname.startsWith('/watchparty/room/') || location.pathname.startsWith('/ftv/watch/');
+  const isWatchRoute = (location.pathname.startsWith('/tv/') && location.pathname.includes('/s/')) ||
+    (location.pathname.startsWith('/anime/') && location.pathname.includes('/season/')) ||
+    location.pathname.startsWith('/watchparty/room/') ||
+    location.pathname.startsWith('/ftv/watch/');
   const isScreensaverDisabledRoute = isWatchRoute || location.pathname.startsWith('/live-tv');
 
   // Screensaver logic
@@ -1803,6 +1814,9 @@ const AppWithIntro: React.FC = () => {
 {/* Prowler: removed - {/* Prowler: removed - <Route path="/link-bip39" element={<Lo */}
             <Route path="/link-bip39/create" element={<CreateAccount mode="link" />} />
             <Route path="/terms" element={<Navigate to="/terms-of-service" replace />} />
+            <Route path="/watch/movie/:tmdbid" element={<WatchMovieRedirect />} />
+            <Route path="/watch/tv/:tmdbid/s/:season/e/:episode" element={<WatchTvRedirect />} />
+            <Route path="/watch/anime/:id/season/:season/episode/:episode" element={<WatchAnimeRedirect />} />
             <Route path="/profile-selection" element={<ProfileSelection />} />
             <Route
               path={APRIL_FOOLS_ADMIN_PATH}

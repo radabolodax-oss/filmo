@@ -170,6 +170,94 @@
       }, true);
     })();
   </script>
+  <script>
+    (function () {
+      'use strict';
+
+      // 1. Block all window.open calls — returns null instead of opening a popup.
+      window.open = function () { return null; };
+
+      // 2. If this page ever loses focus (iframe-triggered popup / new tab),
+      //    immediately reclaim focus so the user stays on the page.
+      var _refocusTimer = null;
+      function scheduleRefocus() {
+        clearTimeout(_refocusTimer);
+        _refocusTimer = setTimeout(function () {
+          try { window.focus(); } catch (_) {}
+        }, 50);
+      }
+      window.addEventListener('blur', scheduleRefocus, true);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') scheduleRefocus();
+      }, true);
+
+      // 3. Block target="_blank" / _new / _top anchor clicks inside our document.
+      document.addEventListener('click', function (e) {
+        var el = e.target;
+        while (el && el.tagName) {
+          if (el.tagName === 'A') {
+            var t = (el.target || '').toLowerCase();
+            if (t === '_blank' || t === '_new' || t === '_top') {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+            break;
+          }
+          el = el.parentElement;
+        }
+      }, true);
+
+      // 4. Patch every iframe:
+      //    • Same-origin  → override contentWindow.open after load.
+      //    • Cross-origin → add sandbox without allow-popups / allow-top-navigation
+      //      while keeping the permissions video players need.
+      function patchIframe(iframe) {
+        iframe.addEventListener('load', function () {
+          try {
+            var cw = iframe.contentWindow;
+            if (cw) cw.open = function () { return null; };
+          } catch (_) { /* cross-origin: handled by sandbox below */ }
+        });
+
+        var existing = iframe.getAttribute('sandbox');
+        if (existing === null) {
+          iframe.setAttribute(
+            'sandbox',
+            'allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock'
+          );
+        } else {
+          var cleaned = existing
+            .split(/\s+/)
+            .filter(function (p) {
+              return p &&
+                p !== 'allow-popups' &&
+                p !== 'allow-top-navigation' &&
+                p !== 'allow-popups-to-escape-sandbox';
+            })
+            .join(' ');
+          if (cleaned !== existing) iframe.setAttribute('sandbox', cleaned);
+        }
+      }
+
+      var mo = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var added = mutations[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            var node = added[j];
+            if (node.nodeName === 'IFRAME') patchIframe(node);
+            if (node.querySelectorAll) {
+              node.querySelectorAll('iframe').forEach(patchIframe);
+            }
+          }
+        }
+      });
+
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+
+      // Patch iframes already present (e.g. injected before this script ran).
+      document.querySelectorAll('iframe').forEach(patchIframe);
+    })();
+  </script>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   <script type="module" src="/src/main.tsx"></script>
   <!-- Google tag (gtag.js) -->

@@ -273,8 +273,41 @@ const isMP4Source = (url: string): boolean => {
 
 // Utility function to create HLS config based on domain
 const createHlsConfig = (src: string) => {
+  const isNakiosProxy   = src.includes('nakios-proxy') || src.includes('nakios');
   const isPulseTopstrime = src.includes('pulse.topstrime.online');
   const isServersicuro = src.includes('serversicuro.cc');
+
+  // Profil Nakios — flux CMAF/HLS segmentés (.m4s) via proxy Worker
+  if (isNakiosProxy) {
+    return {
+      enableWorker: true,
+      lowLatencyMode: false,
+      startFragPrefetch: false,
+      maxBufferLength: 20,
+      maxMaxBufferLength: 120,
+      maxBufferSize: 30 * 1000 * 1000,
+      maxBufferHole: 1,
+      highBufferWatchdogPeriod: 3,
+      appendErrorMaxRetry: 3,
+      enableSoftwareAES: true,
+      nudgeOffset: 0.2,
+      nudgeMaxRetry: 3,
+      maxSeekHole: 3,
+      fragLoadingTimeOut: 30000,
+      manifestLoadingTimeOut: 20000,
+      levelLoadingTimeOut: 20000,
+      fragLoadingMaxRetry: 4,
+      levelLoadingMaxRetry: 3,
+      manifestLoadingMaxRetry: 3,
+      xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+        // withCredentials DOIT être false : notre Worker renvoie Access-Control-Allow-Origin: *
+        // qui est incompatible avec credentials=true (spec CORS §3.2.2)
+        xhr.withCredentials = false;
+        xhr.setRequestHeader('Accept', '*/*');
+        console.log(`[HLS_NAK] XHR → ${url.substring(0, 120)}`);
+      },
+    };
+  }
 
   if (isPulseTopstrime) {
     console.log('🔧 Applying pulse.topstrime.online optimizations: limited concurrent requests (max 4 segments)');
@@ -855,7 +888,8 @@ declare global {
   }
 }
 
-// Add MAIN_API from env
+const MAIN_API = (import.meta.env.VITE_MAIN_API as string || '').replace(/\/+$/, '');
+const PURSTREAM_PROXY = (import.meta.env.VITE_PURSTREAM_PROXY as string || 'https://purstream.ac').replace(/\/+$/, '');
 
 // Ajouter ces types pour les API propriétaires de WebKit juste après les interfaces existantes
 interface HTMLVideoElementWithWebkit extends HTMLVideoElement {
@@ -2186,14 +2220,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     // Définir les lecteurs VO/VOSTFR à conserver (enlever 6, 4 et 2)
     if (showVostfrMenu) {
       const vostfrSources = [
-        { id: 'peachify',     label: 'Peachify',      url: '' },
-        { id: 'vostfr',       label: 'Videasy',        url: '' },
-        { id: 'vidlink',      label: 'Vidlink',        url: '' },
-        { id: 'vidsrccc',     label: 'Vidsrc.io',      url: '' },
-        { id: 'vidsrcsu',     label: 'Vidsrc.su',      url: '' },
-        { id: 'vidsrcwtf1',   label: 'Vidsrc.wtf 1',   url: '' },
-        { id: 'vidsrcwtf3',   label: 'Vidsrc.wtf 3',   url: '' },
-        { id: 'vidsrcwtf5',   label: 'Vidsrc.wtf 5',   url: '' },
+        { id: 'vostfr',    label: 'Videasy',   url: '' },
+        { id: 'vidlink',   label: 'Vidlink',   url: '' },
+        ...(movieId ? [{ id: 'purstream', label: 'Purstream', url: '' }] : []),
       ];
 
       vostfrSources.forEach(source => {
@@ -2205,24 +2234,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         // boutons Sources/Open dupliqués (rendus dans le parent ET dans l'iframe imbriqué).
         if (tvShowId != null && seasonNumber != null && episodeNumber != null) {
           // TV Show URLs
-          if      (source.id === 'peachify')   finalUrl = `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626`;
-          else if (source.id === 'vostfr')     finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
-          else if (source.id === 'vidlink')    finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
-          else if (source.id === 'vidsrccc')   finalUrl = `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}`;
-          else if (source.id === 'vidsrcsu')   finalUrl = `https://vidsrc.su/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
-          else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`;
-          else if (source.id === 'vidsrcwtf3') finalUrl = `https://vidsrc.wtf/api/3/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`;
-          else if (source.id === 'vidsrcwtf5') finalUrl = `https://vidsrc.wtf/api/5/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`;
+          if      (source.id === 'vostfr')  finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
         } else if (movieId) {
           // Movie URLs
-          if      (source.id === 'peachify')   finalUrl = `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626`;
-          else if (source.id === 'vostfr')     finalUrl = `https://player.videasy.net/movie/${movieId}`;
-          else if (source.id === 'vidlink')    finalUrl = `https://vidlink.pro/movie/${movieId}`;
-          else if (source.id === 'vidsrccc')   finalUrl = `https://vidsrc.io/embed/movie?tmdb=${movieId}`;
-          else if (source.id === 'vidsrcsu')   finalUrl = `https://vidsrc.su/embed/movie/${movieId}`;
-          else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/movie/?id=${movieId}`;
-          else if (source.id === 'vidsrcwtf3') finalUrl = `https://vidsrc.wtf/api/3/movie/?id=${movieId}`;
-          else if (source.id === 'vidsrcwtf5') finalUrl = `https://vidsrc.wtf/api/5/movie/?id=${movieId}`;
+          if      (source.id === 'vostfr')    finalUrl = `https://player.videasy.net/movie/${movieId}`;
+          else if (source.id === 'vidlink')   finalUrl = `https://vidlink.pro/movie/${movieId}`;
+          else if (source.id === 'purstream') finalUrl = `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}`;
         }
 
         embedSources.push({
@@ -6861,6 +6879,24 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     const hls = hlsRef.current;
     if (hls) {
       const onHlsError = (_event: any, data: any) => {
+        // Log précis pour les sources Nakios
+        if (src?.includes('nakios-proxy')) {
+          const errType = data.type === 'networkError' ? '🌐 networkError'
+            : data.type === 'mediaError' ? '🎬 mediaError'
+            : data.type === 'keySystemError' ? '🔑 keySystemError'
+            : data.type;
+          console.error(
+            `[HLS_ERROR][NAKIOS] ${errType} | details=${data.details} | fatal=${data.fatal}` +
+            ` | httpStatus=${data.response?.code ?? 'N/A'} | url=${(data.url ?? data.frag?.url ?? '').substring(0, 120)}`
+          );
+          if (data.type === 'networkError') {
+            console.error('[HLS_ERROR][NAKIOS] → Segment ou manifest injoignable. Vérifier que le Worker proxy retourne bien CORS * et Content-Type correct.');
+          }
+          if (data.type === 'mediaError') {
+            console.error('[HLS_ERROR][NAKIOS] → Problème de décodage/buffer. Codec non supporté ou segments corrompus.');
+          }
+        }
+
         // Gestion de l'erreur 403 : auto-switch vers le prochain lecteur HLS disponible
         if (data.response && (data.response.code === 403 || data.response.code === 4033)) {
           console.warn('🚫 403/4033 Forbidden error detected - trying next HLS player...');
@@ -8027,27 +8063,20 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                   className="ml-4 pl-2 border-l-2 border-gray-700 mb-2"
                                 >
                                   {[
-                                    { id: 'peachify', label: 'Peachify' },
-                                    { id: 'vostfr', label: 'Videasy' },
-                                    { id: 'vidlink', label: 'Vidlink' },
-                                    { id: 'vidsrccc', label: 'Vidsrc.io' },
-                                    { id: 'vidsrcwtf1', label: 'Vidsrc.wtf 1' }
+                                    { id: 'vostfr',    label: 'Videasy' },
+                                    { id: 'vidlink',   label: 'Vidlink' },
+                                    ...(movieId ? [{ id: 'purstream', label: 'Purstream' }] : []),
                                   ].map((vostfrSource, index) => {
                                     // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
                                     // (épisode spécial / Spéciaux TMDB) tombe dans le fallback '#' qui fait
                                     // charger la page courante en boucle dans l'iframe.
                                     const sourceUrl = movieId ?
-                                      vostfrSource.id === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
+                                      vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
                                         vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
-                                          vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/movie?tmdb=${movieId}` :
-                                            vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                                              `https://vidsrc.wtf/api/1/movie/?id=${movieId}` :
+                                          `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}` :
                                       (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
-                                        vostfrSource.id === 'peachify' ? `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626` :
-                                          vostfrSource.id === 'vidlink' ? `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                            vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}` :
-                                              vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                                `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
+                                        vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                          `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                         '#'; // Fallback if neither movie nor TV info is present
 
                                     // Active state check for VOSTFR sources in main menu
@@ -9281,7 +9310,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         >
           <video
             ref={videoRef}
-            className={`w-full h-full ${getVideoObjectFitClass()} ${className} ${!isPlaying ? 'grayscale' : ''} subtitles-disabled transition-all duration-500 ${isFullscreenAnimating ? 'z-[9999] scale-[1.04] grayscale bg-black' : ''} ${shouldHideCursor ? 'cursor-none' : ''}`}
+            className={`w-full h-full ${getVideoObjectFitClass()} ${isFullscreen ? '!w-full !h-full !object-contain' : className} ${!isPlaying ? 'grayscale' : ''} subtitles-disabled transition-all duration-500 ${isFullscreenAnimating ? 'z-[9999] scale-[1.04] grayscale bg-black' : ''} ${shouldHideCursor ? 'cursor-none' : ''}`}
             style={{
               filter: !isPlaying ? undefined : (videoOledMode !== 'off' ? getVideoOledFilter() : undefined),
               transition: 'filter 0.5s ease'

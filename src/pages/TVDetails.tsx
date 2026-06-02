@@ -2,13 +2,12 @@
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import axios from 'axios';
-import { Loader, Video, Star, Calendar, List, Check, FolderPlus, ChevronRight, AlertTriangle, Play, X, MapPin, Languages, Building, ArrowLeft, Image, Download, Shield, EyeOff, Archive, CheckCircle, Film } from 'lucide-react';
+import { Loader, Video, Star, Calendar, List, Check, FolderPlus, ChevronRight, AlertTriangle, Play, X, MapPin, Languages, Building, ArrowLeft, Image, Download, Shield, EyeOff, Archive, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import AddToListMenu from '../components/AddToListMenu';
 import DetailsSkeleton from '../components/skeletons/DetailsSkeleton';
-import WatchInterstitial from '../components/WatchInterstitial';
 
 import ShareButtons from '../components/ShareButtons';
 import HLSPlayer, { HLSPlayerRef } from '../components/HLSPlayer';
@@ -43,6 +42,7 @@ import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed 
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
+const NAKIOS_PROXY = (import.meta.env.VITE_NAKIOS_PROXY as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
 
 interface TVShow {
   id?: string | number;
@@ -1186,7 +1186,7 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
   const { t } = useTranslation();
   const [videoSource, setVideoSource] = useState<string | null>(null);
   const [customSources, setCustomSources] = useState<string[]>([]);
-  const [selectedSource, setSelectedSource] = useState<'primary' | 'peachify' | 'vostfr' | 'multi' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'omega' | 'darkino' | 'mp4' | number | null>(null); // Ajout de 'mp4'
+  const [selectedSource, setSelectedSource] = useState<'primary' | 'vostfr' | 'multi' | 'videasy' | 'omega' | 'darkino' | 'mp4' | number | null>(null); // Ajout de 'mp4'
   const [frembedAvailable, setFrembedAvailable] = useState<boolean>(true);
   const [, setIsLoading] = useState(true);
   const [coflixData, setCoflixData] = useState<CoflixResponse | null>(null);
@@ -1345,6 +1345,7 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
 
   // Fetch video sources effect
   useEffect(() => {
+    if (animeMode) return; // En mode anime les sources viennent de FRAnime, pas de CoFlix/Omega/Darkino
     let isCurrent = true; // flag pour annuler la mise à jour d'état si l'épisode change
     const maxRetries = 3;
 
@@ -1498,7 +1499,7 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
     return () => {
       isCurrent = false;
     };
-  }, [showId, seasonNumber, episodeNumber, tvShowName, releaseYear]); // Dependencies for fetching sources
+  }, [showId, seasonNumber, episodeNumber, tvShowName, releaseYear, animeMode]); // Dependencies for fetching sources
 
   // Update iframe video source based on selection (excluding darkino and mp4)
   useEffect(() => {
@@ -1507,30 +1508,15 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
       // Handled by HLSPlayer component
       return;
     }
-    switch (selectedSource as 'primary' | 'peachify' | 'vostfr' | 'multi' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'omega' | 'darkino' | 'mp4' | number) {
+    switch (selectedSource as 'primary' | 'vostfr' | 'multi' | 'videasy' | 'omega' | 'darkino' | 'mp4' | number) {
       case 'primary':
         newSrc = `https://frembed.click/embed/serie/${showId}?sa=${seasonNumber}&epi=${episodeNumber}`;
         break;
-      case 'peachify':
-        newSrc = `https://peachify.top/embed/tv/${showId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626`;
-        break;
       case 'vostfr':
-        newSrc = `https://vidsrc.wtf/api/3/tv/?id=${showId}&s=${seasonNumber}&e=${episodeNumber}`;
+        newSrc = `https://player.videasy.net/tv/${showId}/${seasonNumber}/${episodeNumber}`;
         break;
       case 'videasy':
         newSrc = `https://vidlink.pro/tv/${showId}?s=${seasonNumber}&e=${episodeNumber}&primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
-        break;
-      case 'vidsrccc':
-        newSrc = `https://vidsrc.io/embed/tv?tmdb=${showId}&season=${seasonNumber}&episode=${episodeNumber}`;
-        break;
-      case 'vidsrcsu':
-        newSrc = `https://vidsrc.su/embed/tv/${showId}/${seasonNumber}/${episodeNumber}`;
-        break;
-      case 'vidsrcwtf1':
-        newSrc = `https://vidsrc.wtf/api/1/tv/?id=${showId}&s=${seasonNumber}&e=${episodeNumber}`;
-        break;
-      case 'vidsrcwtf5':
-        newSrc = `https://vidsrc.wtf/api/5/tv/?id=${showId}&s=${seasonNumber}&e=${episodeNumber}`;
         break;
       case 'multi':
         if (coflixData?.current_episode?.player_links &&
@@ -1745,7 +1731,7 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
         <div className="relative">
           <button
             onClick={() => setShowVostfrOptions(!showVostfrOptions)}
-            className={`px-4 py-2 rounded flex items-center gap-2 ${(selectedSource === 'peachify' || selectedSource === 'vostfr' || selectedSource === 'videasy' || selectedSource === 'vidsrccc' || selectedSource === 'vidsrcsu' || selectedSource === 'vidsrcwtf1' || selectedSource === 'vidsrcwtf5')
+            className={`px-4 py-2 rounded flex items-center gap-2 ${(selectedSource === 'vostfr' || selectedSource === 'videasy')
               ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
               : 'bg-gray-700 hover:bg-gray-600'
               }`}
@@ -1765,23 +1751,13 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
           {showVostfrOptions && (
             <div className="absolute z-50 top-full left-0 mt-1 bg-gray-800 rounded-lg shadow-lg overflow-hidden min-w-[200px]">
               <button
-                onClick={() => handleSelectSource('peachify')}
-                className={`w-full px-4 py-2 text-left ${selectedSource === 'peachify'
-                  ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-                  : 'hover:bg-gray-700'
-                  }`}
-              >
-                Peachify
-              </button>
-
-              <button
                 onClick={() => handleSelectSource('vostfr')}
                 className={`w-full px-4 py-2 text-left ${selectedSource === 'vostfr'
                   ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
                   : 'hover:bg-gray-700'
                   }`}
               >
-                Vidsrc.wtf 3
+                Videasy
               </button>
 
               <button
@@ -1792,46 +1768,6 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
                   }`}
               >
                 Vidlink
-              </button>
-
-              <button
-                onClick={() => handleSelectSource('vidsrccc')}
-                className={`w-full px-4 py-2 text-left ${selectedSource === 'vidsrccc'
-                  ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-                  : 'hover:bg-gray-700'
-                  }`}
-              >
-                Vidsrc.io
-              </button>
-
-              <button
-                onClick={() => handleSelectSource('vidsrcsu')}
-                className={`w-full px-4 py-2 text-left ${selectedSource === 'vidsrcsu'
-                  ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-                  : 'hover:bg-gray-700'
-                  }`}
-              >
-                Vidsrc.su
-              </button>
-
-              <button
-                onClick={() => handleSelectSource('vidsrcwtf1')}
-                className={`w-full px-4 py-2 text-left ${selectedSource === 'vidsrcwtf1'
-                  ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-                  : 'hover:bg-gray-700'
-                  }`}
-              >
-                Vidsrc.wtf 1
-              </button>
-
-              <button
-                onClick={() => handleSelectSource('vidsrcwtf5')}
-                className={`w-full px-4 py-2 text-left ${selectedSource === 'vidsrcwtf5'
-                  ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-                  : 'hover:bg-gray-700'
-                  }`}
-              >
-                Vidsrc.wtf 5
               </button>
             </div>
           )}
@@ -2463,12 +2399,12 @@ const TVDetails: React.FC = () => {
 
   const cinemaMode = true;
 
-  type InlineSource = 'frembed' | 'videasy' | 'videasy_net' | 'vidsrccc' | 'vidsrc' | 'vidsrcsu' | 'embed2' | 'embedsu' | 'vostfr' | 'vidsrcwtf1' | 'vidsrcwtf5';
+  type InlineSource = 'nakios' | 'vidmoly' | 'videasy' | 'frembed';
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
-  const [showInterstitial, setShowInterstitial] = useState(false);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
-  const [showInlineSourcePicker, setShowInlineSourcePicker] = useState(false);
-  const [animeExtraSource, setAnimeExtraSource] = useState<InlineSource | null>(null);
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
+  const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
+  const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
+  const [vidmolyEmbedUrl, setVidmolyEmbedUrl] = useState<string | null>(null);
   const [panelSeason, setPanelSeason] = useState<number | null>(null);
   const episodeListRef = useRef<HTMLDivElement | null>(null);
   const activeEpisodeRef = useRef<HTMLButtonElement | null>(null);
@@ -2579,8 +2515,6 @@ const TVDetails: React.FC = () => {
   useEffect(() => {
     resetVipStatus();
     setShowInlinePlayer(false);
-    setShowInlineSourcePicker(false);
-    setAnimeExtraSource(null);
     setPanelSeason(null);
   }, [id, resetVipStatus]);
 
@@ -3073,6 +3007,14 @@ const TVDetails: React.FC = () => {
     }
   }, [tvShow, selectedSeason, selectedEpisode, updateWatchProgress]);
 
+  // Autoplay : si ?autoplay=true dans l'URL, lancer le lecteur dès que la série charge
+  useEffect(() => {
+    if (!tvShow) return;
+    if (searchParams.get('autoplay') !== 'true') return;
+    handleContinueWatching();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tvShow?.id]);
+
   const updateWatchStatus = (type: keyof WatchStatus, value: boolean, episodeKey?: string) => {
     setWatchStatus(prev => {
       let newStatus;
@@ -3470,7 +3412,6 @@ const TVDetails: React.FC = () => {
     else if (hasVostfr) setSelectedLanguage('vostfr');
     else if (episode.streaming_links.length > 0) setSelectedLanguage(episode.streaming_links[0].language);
     setSelectedPlayer('0');
-    setAnimeExtraSource(null);
     setTimeout(() => {
       if (animeVideoPlayerSectionRef.current) {
         animeVideoPlayerSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -3510,51 +3451,6 @@ const TVDetails: React.FC = () => {
             </div>
           </motion.button>
 
-          {/* Source picker discret — séries uniquement */}
-          {!animeMode && (
-            <div className="relative self-stretch">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                onClick={() => setShowInlineSourcePicker(v => !v)}
-                className="h-full flex flex-col items-center gap-2 px-3 sm:px-4 py-4 sm:py-5 bg-gray-800/80 hover:bg-gray-700 rounded-lg justify-center text-xs sm:text-sm border border-gray-600/60"
-                title="Changer de source"
-              >
-                <Film className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                <span>Source</span>
-              </motion.button>
-              {showInlineSourcePicker && (
-                <div className="absolute left-0 bottom-full mb-2 bg-gray-900 border border-gray-700 rounded-lg shadow-xl min-w-[155px] z-50 overflow-hidden">
-                  {([
-                    { id: 'frembed',     label: 'Frembed (VF)' },
-                    { id: 'videasy',     label: 'Vidlink' },
-                    { id: 'videasy_net', label: 'Videasy' },
-                    { id: 'vidsrccc',    label: 'Vidsrc.cc' },
-                    { id: 'vidsrc',      label: 'Vidsrc.io' },
-                    { id: 'vidsrcsu',    label: 'Vidsrc.su' },
-                    { id: 'embed2',      label: '2embed' },
-                    { id: 'embedsu',     label: 'Embed.su' },
-                    { id: 'vostfr',      label: 'VOSTFR' },
-                    { id: 'vidsrcwtf1',  label: 'Vidsrc.wtf 1' },
-                    { id: 'vidsrcwtf5',  label: 'Vidsrc.wtf 5' },
-                  ] as { id: InlineSource; label: string }[]).map(src => (
-                    <button
-                      key={src.id}
-                      onClick={() => {
-                        setInlinePlayerSource(src.id);
-                        setShowInlineSourcePicker(false);
-                        if (!showInlinePlayer) handleContinueWatching();
-                      }}
-                      className={`w-full px-4 py-2 text-left text-sm transition-colors ${inlinePlayerSource === src.id ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
-                    >
-                      {src.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     );
@@ -3817,7 +3713,13 @@ const TVDetails: React.FC = () => {
         }
 
         const defaultToStandardMode = shouldDefaultAnimeModeToOff(id || '');
-        setAnimeMode(Boolean(resolvedAnimeData?.seasons?.length) && !defaultToStandardMode);
+        const hasAnimationGenre = (tvShow?.genres ?? []).some((g: { id: number }) => g.id === 16);
+        const isAnimeRoute = window.location.pathname.includes('/anime');
+        setAnimeMode(
+          Boolean(resolvedAnimeData?.seasons?.length) &&
+          !defaultToStandardMode &&
+          (hasAnimationGenre || isAnimeRoute)
+        );
       }
     };
 
@@ -3869,21 +3771,72 @@ const TVDetails: React.FC = () => {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  /** Extrait l'URL vidéo depuis la réponse JSON de Nakios (plusieurs structures possibles) */
+  const extractNakiosUrl = (data: any): string | null => {
+    if (!data) return null;
+    // Format direct
+    if (typeof data.url === 'string' && data.url) return data.url;
+    if (typeof data.stream === 'string' && data.stream) return data.stream;
+    if (typeof data.link === 'string' && data.link) return data.link;
+    // Format sources tableau
+    if (Array.isArray(data.sources) && data.sources.length > 0) {
+      const src = data.sources[0];
+      return src.file || src.url || src.src || null;
+    }
+    // Format data imbriqué
+    if (data.data) return extractNakiosUrl(data.data);
+    return null;
+  };
+
+  // Résolution du flux Nakios via le Worker
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'nakios' || !id || !selectedSeason || !selectedEpisode) {
+      setNakiosStreamUrl(null);
+      return;
+    }
+    let cancelled = false;
+    setNakiosStreamLoading(true);
+    setNakiosStreamUrl(null);
+    fetch(`${NAKIOS_PROXY}/series?id=${id}&s=${selectedSeason}&e=${selectedEpisode}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        const rawUrl = extractNakiosUrl(data);
+        // Toujours passer par le proxy Worker pour CORS + réécriture M3U8
+        setNakiosStreamUrl(rawUrl ? `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}` : null);
+      })
+      .catch(() => { if (!cancelled) setNakiosStreamUrl(null); })
+      .finally(() => { if (!cancelled) setNakiosStreamLoading(false); });
+    return () => { cancelled = true; };
+  }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode]);
+
+  // Récupère l'URL embed Vidmoly depuis CoFlix (iframe directe, pas d'extraction)
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'vidmoly' || !id || !selectedSeason || !selectedEpisode || animeMode) {
+      setVidmolyEmbedUrl(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`${MAIN_API}/api/tmdb/tv/${id}?season=${selectedSeason}&episode=${selectedEpisode}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return;
+        const links: Array<{ decoded_url?: string }> = data?.player_links || [];
+        const found = links.find(l => l.decoded_url?.toLowerCase().includes('vidmoly'));
+        setVidmolyEmbedUrl(found?.decoded_url?.replace(/vidmoly\.[a-z]{2,4}/, 'vidmoly.me') || null);
+      })
+      .catch(() => { if (!cancelled) setVidmolyEmbedUrl(null); });
+    return () => { cancelled = true; };
+  }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode, animeMode]);
+
   const getInlinePlayerUrl = () => {
     const s = selectedSeason ?? 1;
     const e = selectedEpisode ?? 1;
     switch (inlinePlayerSource) {
-      case 'frembed':      return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
-      case 'videasy':      return `https://vidlink.pro/tv/${id}/${s}/${e}?primaryColor=63f99f&secondaryColor=a2a2a2&iconColor=63f99f&autoplay=true`;
-      case 'videasy_net':  return `https://player.videasy.net/tv/${id}/${s}/${e}`;
-      case 'vidsrccc':     return `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}`;
-      case 'vidsrcsu':     return `https://vidsrc.su/embed/tv/${id}/${s}/${e}`;
-      case 'embed2':       return `https://www.2embed.cc/embedtv/${id}?s=${s}&e=${e}`;
-      case 'embedsu':      return `https://embed.su/embed/tv/${id}/${s}/${e}`;
-      case 'vostfr':       return `https://vidsrc.wtf/api/3/tv/?id=${id}&s=${s}&e=${e}`;
-      case 'vidsrcwtf1':   return `https://vidsrc.wtf/api/1/tv/?id=${id}&s=${s}&e=${e}`;
-      case 'vidsrcwtf5':   return `https://vidsrc.wtf/api/5/tv/?id=${id}&s=${s}&e=${e}`;
-      default:             return `https://vidsrc.io/embed/tv?tmdb=${id}&season=${s}&episode=${e}`;
+      case 'vidmoly':  return vidmolyEmbedUrl || '';
+      case 'videasy':  return `https://vidlink.pro/tv/${id}/${s}/${e}`;
+      case 'frembed':  return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
+      default:         return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
     }
   };
 
@@ -6787,30 +6740,6 @@ const TVDetails: React.FC = () => {
         </AnimatePresence>
       )}
 
-      {/* Interstitiel uBlock/AdGuard — contenu dans la section lecteur */}
-      {showInterstitial && !animeMode && (
-        <div
-          id="inline-player-section"
-          className="relative mt-10 h-[500px] rounded-lg overflow-hidden"
-          style={{
-            backgroundImage: tvShow?.backdrop_path
-              ? `linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.7)), url(https://image.tmdb.org/t/p/original${tvShow.backdrop_path})`
-              : undefined,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundColor: '#000',
-          }}
-        >
-          <AnimatePresence>
-            <WatchInterstitial
-              contained
-              posterUrl={tvShow?.backdrop_path ? `https://image.tmdb.org/t/p/original${tvShow.backdrop_path}` : undefined}
-              onDone={() => { setShowInterstitial(false); setShowInlinePlayer(true); }}
-            />
-          </AnimatePresence>
-        </div>
-      )}
-
       {/* Lecteur inline (séries — non-anime) */}
       {showInlinePlayer && !animeMode && selectedSeason !== null && selectedEpisode && (
         <motion.div
@@ -6822,28 +6751,50 @@ const TVDetails: React.FC = () => {
         >
           {/* ── Player column (75%) ── */}
           <div className="w-full lg:w-3/4 min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
-            <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex-shrink-0 flex items-center justify-between gap-3">
+            <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex-shrink-0">
               <span className="text-sm text-gray-300 font-medium">
                 {tvShow?.name} — S{selectedSeason} E{selectedEpisode}
               </span>
-              <button
-                onClick={() => navigate(`/watch/tv/${encodedId}/s/${selectedSeason}/e/${selectedEpisode}`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff' }}
-              >
-                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                Lecteur complet
-              </button>
             </div>
-            <iframe
-              key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}`}
-              src={getInlinePlayerUrl()}
-              className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-              allowFullScreen
-              allow="autoplay; fullscreen; encrypted-media"
-              style={{ border: 'none', display: 'block' }}
-              title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
-            />
+            {inlinePlayerSource === 'nakios' ? (() => {
+              const loading   = nakiosStreamLoading;
+              const streamUrl = nakiosStreamUrl;
+              const label     = 'Épisode indisponible sur Nakios';
+              return loading ? (
+                <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                  <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                </div>
+              ) : streamUrl ? (
+                <HLSPlayer
+                  key={`${inlinePlayerSource}-${streamUrl}`}
+                  src={streamUrl}
+                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                  autoPlay={true}
+                  controls={true}
+                  poster={tvShow?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${tvShow.backdrop_path}` : undefined}
+                />
+              ) : (
+                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                  <span>{label}</span>
+                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
+                    Essayer Frembed
+                  </button>
+                </div>
+              );
+            })() : (
+              <iframe
+                key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}`}
+                src={getInlinePlayerUrl()}
+                className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                allowFullScreen
+                allow="autoplay; fullscreen; encrypted-media"
+                style={{ border: 'none', display: 'block' }}
+                title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
+              />
+            )}
             {/* Sources sous la vidéo */}
             <div
               className="border-t px-3 py-2.5 flex-shrink-0"
@@ -6857,17 +6808,10 @@ const TVDetails: React.FC = () => {
               <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
                 {([
-                  { id: 'frembed',     label: 'Frembed (VF)' },
-                  { id: 'videasy',     label: 'Vidlink' },
-                  { id: 'videasy_net', label: 'Videasy' },
-                  { id: 'vidsrccc',    label: 'Vidsrc.cc' },
-                  { id: 'vidsrc',      label: 'Vidsrc.io' },
-                  { id: 'vidsrcsu',    label: 'Vidsrc.su' },
-                  { id: 'embed2',      label: '2embed' },
-                  { id: 'embedsu',     label: 'Embed.su' },
-                  { id: 'vostfr',      label: 'VOSTFR' },
-                  { id: 'vidsrcwtf1',  label: 'Wtf 1' },
-                  { id: 'vidsrcwtf5',  label: 'Wtf 5' },
+                  { id: 'nakios',      label: 'Nakios' },
+                  { id: 'vidmoly',     label: 'Vidmoly' },
+                  { id: 'videasy',     label: 'Videasy' },
+                  { id: 'frembed',     label: 'Frembed' },
                 ] as { id: InlineSource; label: string }[]).map(src => (
                   <button
                     key={src.id}
@@ -7031,68 +6975,43 @@ const TVDetails: React.FC = () => {
                 </div>
               )}
 
-              {/* Iframe */}
-              {((selectedLanguage && selectedPlayer !== null) || animeExtraSource) && (
-                <>
+              {/* Lecteur anime — HLSPlayer si Vidmoly, iframe sinon */}
+              {selectedLanguage && selectedPlayer !== null && (() => {
+                const link = (selectedAnimeEpisode.streaming_links as any[])?.find((l: any) => l.language === selectedLanguage);
+                const playerUrl: string = link?.players?.[parseInt(selectedPlayer ?? '0')] ?? '';
+                const isVidmoly = playerUrl.toLowerCase().includes('vidmoly');
+
+                if (isVidmoly) {
+                  return (
+                    <div className="relative w-full flex-1" style={{ paddingBottom: '56.25%', minHeight: 200 }}>
+                      <iframe
+                        key={`${selectedLanguage}-${selectedPlayer}`}
+                        src={playerUrl}
+                        className="absolute top-0 left-0 w-full h-full"
+                        width="100%"
+                        height="100%"
+                        frameBorder={0}
+                        allowFullScreen
+                        allow="autoplay; fullscreen"
+                        title={`${tvShow?.name} - S${selectedSeason} E${selectedEpisode}`}
+                      />
+                    </div>
+                  );
+                }
+
+                return (
                   <div className="relative w-full flex-1" style={{ paddingBottom: '56.25%', minHeight: 200 }}>
                     <iframe
-                      key={animeExtraSource ?? `${selectedLanguage}-${selectedPlayer}`}
-                      src={animeExtraSource
-                        ? getInlinePlayerUrl()
-                        : selectedAnimeEpisode.streaming_links
-                            .find((link: any) => link.language === selectedLanguage)
-                            ?.players[parseInt(selectedPlayer ?? '0')] ?? ''}
+                      key={`${selectedLanguage}-${selectedPlayer}`}
+                      src={playerUrl}
                       className="absolute top-0 left-0 w-full h-full"
                       allowFullScreen
                       allow="autoplay; encrypted-media; fullscreen"
                       title={`${tvShow?.name} - S${selectedSeason} E${selectedEpisode}`}
                     />
                   </div>
-                  {/* Sources */}
-                  <div
-                    className="border-t px-3 py-2.5 flex-shrink-0"
-                    style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      backdropFilter: 'blur(20px) saturate(180%)',
-                      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                      borderColor: 'rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-                      <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
-                      <button
-                        onClick={() => setAnimeExtraSource(null)}
-                        className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
-                        style={animeExtraSource === null
-                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' }
-                          : { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }
-                        }
-                      >
-                        Natif
-                      </button>
-                      {([
-                        { id: 'frembed', label: 'Frembed (VF)' }, { id: 'videasy', label: 'Vidlink' },
-                        { id: 'videasy_net', label: 'Videasy' }, { id: 'vidsrccc', label: 'Vidsrc.cc' },
-                        { id: 'vidsrc', label: 'Vidsrc.io' }, { id: 'vidsrcsu', label: 'Vidsrc.su' },
-                        { id: 'embed2', label: '2embed' }, { id: 'embedsu', label: 'Embed.su' },
-                        { id: 'vostfr', label: 'VOSTFR' }, { id: 'vidsrcwtf1', label: 'Wtf 1' }, { id: 'vidsrcwtf5', label: 'Wtf 5' },
-                      ] as { id: InlineSource; label: string }[]).map(src => (
-                        <button
-                          key={src.id}
-                          onClick={() => setAnimeExtraSource(src.id)}
-                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
-                          style={animeExtraSource === src.id
-                            ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' }
-                            : { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }
-                          }
-                        >
-                          {src.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+                );
+              })()}
             </div>
 
             {/* ── Anime episode panel (25%) ── */}

@@ -469,6 +469,7 @@ app.use('/api', downloadRouter);
 app.use('/api/fstream', require('./routes/fstream'));
 app.use('/api/wiflix', require('./routes/wiflix'));
 app.use('/api/frembed', require('./routes/frembed'));
+app.use('/api/vidmoly', require('./routes/vidmoly'));
 app.use('/api', require('./routes/sync'));
 app.use('/api/profiles', require('./routes/profiles'));
 app.use('/api/help', require('./routes/helpFeedback'));
@@ -495,6 +496,9 @@ purstreamRouter.configure({
   shouldUpdateCache,
 });
 app.use("/api/purstream", purstreamRouter);
+
+const proxyRouter = require('./routes/proxyRouter');
+app.use('/proxy', proxyRouter);
 
 const downloadLinksLeaderboardRouter = require('./routes/downloadLinksLeaderboard');
 app.use('/api/download-links', downloadLinksLeaderboardRouter);

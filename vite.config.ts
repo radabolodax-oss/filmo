@@ -73,6 +73,13 @@ export default defineConfig({
       interval: 100,
       ignored: ['**/node_modules/**', '**/.git/**'],
     },
+    proxy: {
+      '/api-proxy': {
+        target: 'http://localhost:25565',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-proxy/, ''),
+      },
+    },
   },
   preview: {
     host: true,

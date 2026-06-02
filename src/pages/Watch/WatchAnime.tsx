@@ -1132,7 +1132,7 @@ const WatchAnime: React.FC = () => {
   // Handle next episode (for HLSPlayer)
   const handleNextEpisodeFromPlayer = (seasonNum: number, episodeNum: number) => {
     if (!id) return;
-    window.location.href = `/watch/anime/${encodeId(id)}/season/${seasonNum}/episode/${episodeNum}`;
+    window.location.href = `/anime/${encodeId(id)}/season/${seasonNum}/episode/${episodeNum}`;
   };
 
   // Handle next episode (for buttons)
@@ -1159,7 +1159,7 @@ const WatchAnime: React.FC = () => {
 
     // Use window.location.href for full page reload
     if (!id) return;
-    window.location.href = `/watch/anime/${encodeId(id)}/season/${targetSeason}/episode/${targetEpisode}`;
+    window.location.href = `/anime/${encodeId(id)}/season/${targetSeason}/episode/${targetEpisode}`;
   };
 
   // Handle previous episode
@@ -1184,7 +1184,7 @@ const WatchAnime: React.FC = () => {
       }
     }
     // Use window.location.href for full page reload
-    window.location.href = `/watch/anime/${encodeId(id)}/season/${targetSeason}/episode/${targetEpisode}`;
+    window.location.href = `/anime/${encodeId(id)}/season/${targetSeason}/episode/${targetEpisode}`;
   };
 
   useEffect(() => {
@@ -1387,7 +1387,7 @@ const WatchAnime: React.FC = () => {
                           <button
                             key={i}
                             className="bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded text-sm"
-                            onClick={() => id && navigate(`/watch/anime/${encodeId(id)}/season/${idx + 1}/episode/${i + 1}`)}
+                            onClick={() => id && navigate(`/anime/${encodeId(id)}/season/${idx + 1}/episode/${i + 1}`)}
                           >
                             Ep {i + 1}
                           </button>
@@ -1412,7 +1412,7 @@ const WatchAnime: React.FC = () => {
               {animeData && animeData.seasons.length > 0 && (
                 <button
                   className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md"
-                  onClick={() => id && navigate(`/watch/anime/${encodeId(id)}/season/1/episode/1`)}
+                  onClick={() => id && navigate(`/anime/${encodeId(id)}/season/1/episode/1`)}
                 >
                   {t('watch.startSeries')}
                 </button>
@@ -1850,7 +1850,7 @@ const WatchAnime: React.FC = () => {
                       ref={isActive ? activeEpisodePanelRef : null}
                       onClick={() => {
                         if (!id) return;
-                        window.location.href = `/watch/anime/${encodeId(id)}/season/${displayedSeasonNumber}/episode/${index + 1}`;
+                        window.location.href = `/anime/${encodeId(id)}/season/${displayedSeasonNumber}/episode/${index + 1}`;
                       }}
                       className="ep-card w-full flex items-center gap-2.5 px-3 py-3 mb-1.5 text-left relative overflow-hidden"
                       style={isActive ? { background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.2)' } : {}}

@@ -174,11 +174,11 @@ const FloatingPlayer: React.FC = () => {
 
   // Close mini player when returning to watch page
   useEffect(() => {
-    if (location.pathname.startsWith('/watch/')) {
+    if (location.pathname.startsWith('/movie/') || location.pathname.startsWith('/tv/')) {
       // If we're on a watch page, check if it matches our current video
       const isCurrentVideo =
-        (videoType === 'movie' && location.pathname === `/watch/movie/${videoId}`) ||
-        (videoType === 'tv' && location.pathname === `/watch/tv/${videoId}/s/${seasonNumber}/e/${episodeNumber}`);
+        (videoType === 'movie' && location.pathname === `/movie/${videoId}`) ||
+        (videoType === 'tv' && location.pathname === `/tv/${videoId}/s/${seasonNumber}/e/${episodeNumber}`);
 
       if (isCurrentVideo) {
         disableMiniPlayer();
@@ -240,9 +240,9 @@ const FloatingPlayer: React.FC = () => {
   // Handle maximize (return to full player)
   const handleMaximize = () => {
     if (videoType === 'movie') {
-      navigate(`/watch/movie/${videoId}`);
+      navigate(`/movie/${videoId}`);
     } else if (videoType === 'tv') {
-      navigate(`/watch/tv/${videoId}/s/${seasonNumber}/e/${episodeNumber}`);
+      navigate(`/tv/${videoId}/s/${seasonNumber}/e/${episodeNumber}`);
     }
     returnToPlayer();
   };
