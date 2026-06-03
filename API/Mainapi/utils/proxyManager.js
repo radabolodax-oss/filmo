@@ -797,9 +797,15 @@ async function makeAnimeSamaRequest(targetUrl, options = {}) {
     .slice(0, MAX_ANIMESAMA_CYCLETLS_ATTEMPTS);
 
   if (pool.length === 0) {
-    throw new Error(
-      "[ANIMESAMA CYCLETLS] aucun proxy SOCKS5 defini dans SOCKS5_PROXIES",
-    );
+    const res = await axios({
+      method: lowerMethod,
+      url: cleanTargetUrl,
+      data: body || undefined,
+      headers: defaultHeaders,
+      timeout: timeout * 1000,
+      validateStatus: () => true,
+    });
+    return { data: typeof res.data === 'string' ? res.data : JSON.stringify(res.data), status: res.status, headers: res.headers };
   }
 
   const cycleTLS = await getCycleTLS();

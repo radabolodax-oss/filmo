@@ -25,7 +25,7 @@ import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed 
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
-const PURSTREAM_PROXY = (import.meta.env.VITE_PURSTREAM_PROXY as string || 'https://purstream.ac').replace(/\/+$/, '');
+const PURSTREAM_PROXY = (import.meta.env.VITE_PURSTREAM_PROXY as string || 'https://purstream-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
 const NAKIOS_PROXY    = (import.meta.env.VITE_NAKIOS_PROXY as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
 
 interface Movie {
@@ -2016,7 +2016,7 @@ const MovieDetails = (): JSX.Element => {
   // Ajout d'un état pour suivre si le film est sorti
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
 
-  type InlineSource = 'nakios' | 'purstream' | 'vidmoly' | 'videasy' | 'frembed';
+  type InlineSource = 'nakios' | 'purstream' | 'animesama' | 'videasy' | 'vidlink' | 'vidmoly' | 'frembed';
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
   const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
@@ -2024,6 +2024,10 @@ const MovieDetails = (): JSX.Element => {
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
   const [purstreamStreamLoading, setPurstreamStreamLoading] = useState(false);
   const [vidmolyEmbedUrl, setVidmolyEmbedUrl] = useState<string | null>(null);
+  const [animeSamaMovieEpisode, setAnimeSamaMovieEpisode] = useState<any>(null);
+  const [animeSamaMovieLoading, setAnimeSamaMovieLoading] = useState(false);
+  const [animeSamaMovieLang, setAnimeSamaMovieLang] = useState<string | null>(null);
+  const [animeSamaMoviePlayer, setAnimeSamaMoviePlayer] = useState<string>('0');
   const [collection, setCollection] = useState<Collection | null>(null);
   const [loadingCollection, setLoadingCollection] = useState(false);
   const [images, setImages] = useState<MovieImages | null>(null);
@@ -2546,7 +2550,10 @@ const MovieDetails = (): JSX.Element => {
           data?.sources?.[0]?.url || data?.sources?.[0]?.file ||
           data?.data?.url || data?.data?.stream || null;
         if (rawUrl) {
-          setNakiosStreamUrl(`${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`);
+          const finalUrl = rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
+            ? rawUrl
+            : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
+          setNakiosStreamUrl(finalUrl);
           return;
         }
         // Fallback : Nakios fournit un embed Vidmoly plutôt qu'un flux direct
@@ -2601,9 +2608,37 @@ const MovieDetails = (): JSX.Element => {
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id]);
 
+  // Chargement Anime-Sama pour les films
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'animesama' || !movie?.title) return;
+    if (animeSamaMovieEpisode) return;
+    let cancelled = false;
+    setAnimeSamaMovieLoading(true);
+    fetch(`${MAIN_API}/api/animesama/search?q=${encodeURIComponent(movie.title)}`)
+      .then(r => r.json())
+      .then(async (results: any[]) => {
+        if (cancelled || !results?.length) return;
+        const best = results[0];
+        const epRes = await fetch(`${MAIN_API}/api/animesama/episodes?id=${best.id}&episode=1`);
+        const epData = await epRes.json();
+        if (cancelled) return;
+        setAnimeSamaMovieEpisode(epData);
+        const links: any[] = epData?.streaming_links ?? [];
+        const hasVf = links.some(l => l.language === 'vf');
+        const hasVostfr = links.some(l => l.language === 'vostfr');
+        setAnimeSamaMovieLang(hasVf ? 'vf' : hasVostfr ? 'vostfr' : links[0]?.language ?? null);
+        setAnimeSamaMoviePlayer('0');
+      })
+      .catch(() => { if (!cancelled) setAnimeSamaMovieEpisode(null); })
+      .finally(() => { if (!cancelled) setAnimeSamaMovieLoading(false); });
+    return () => { cancelled = true; };
+  }, [showInlinePlayer, inlinePlayerSource, movie, animeSamaMovieEpisode, MAIN_API]);
+
   const handleWatchClick = () => {
+    const isAnimeFilm = movie?.genres?.some((g: any) => g.id === 16 || g.name === 'Animation');
+    setInlinePlayerSource(isAnimeFilm ? 'animesama' : 'vidlink');
     setShowInlinePlayer(true);
-    setTimeout(() => scrollToPlayer(), 80);
+    scrollToPlayer();
   };
 
   const fetchRecommendations = async () => {
@@ -2664,16 +2699,30 @@ const MovieDetails = (): JSX.Element => {
   }, [movie, id]);
 
   const scrollToPlayer = () => {
-    const playerSection = document.getElementById('video-player-section');
-    if (playerSection) {
-      playerSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.getElementById('video-player-section');
+      if (!el) return;
+      const targetY = el.getBoundingClientRect().top + window.scrollY - 72;
+      const startY = window.scrollY;
+      const dist = targetY - startY;
+      if (Math.abs(dist) < 2) return;
+      const duration = Math.min(350, 120 + Math.abs(dist) * 0.15);
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const p = Math.min((now - t0) / duration, 1);
+        const ease = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+        window.scrollTo(0, startY + dist * ease);
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }));
   };
 
   const getInlinePlayerUrl = () => {
     switch (inlinePlayerSource) {
+      case 'videasy':  return `https://player.videasy.net/movie/${id}`;
+      case 'vidlink':  return `https://vidlink.pro/movie/${id}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
       case 'vidmoly':  return vidmolyEmbedUrl || '';
-      case 'videasy':  return `https://vidlink.pro/movie/${id}`;
       case 'frembed':  return `https://frembed.click/embed/movie/${id}`;
       default:         return `https://frembed.click/embed/movie/${id}`;
     }
@@ -4444,6 +4493,34 @@ const MovieDetails = (): JSX.Element => {
                       </button>
                     </div>
                   );
+                })() : inlinePlayerSource === 'animesama' ? (() => {
+                  if (animeSamaMovieLoading) return (
+                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                      <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    </div>
+                  );
+                  if (!animeSamaMovieEpisode) return (
+                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                      <span>Film indisponible sur Anime-Sama</span>
+                      <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
+                        Essayer Frembed
+                      </button>
+                    </div>
+                  );
+                  const animeLink = animeSamaMovieEpisode.streaming_links?.find((l: any) => l.language === animeSamaMovieLang)
+                    ?? animeSamaMovieEpisode.streaming_links?.[0];
+                  const playerUrl: string = animeLink?.players?.[parseInt(animeSamaMoviePlayer)] ?? '';
+                  return playerUrl ? (
+                    <iframe key={`as-${animeSamaMovieLang}-${animeSamaMoviePlayer}`} src={playerUrl}
+                      className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                      allowFullScreen allow="autoplay; fullscreen; encrypted-media" style={{ border: 'none', display: 'block' }}
+                      title={movie?.title || 'Anime-Sama'} />
+                  ) : (
+                    <div className="w-full h-[360px] flex items-center justify-center bg-black text-gray-400 text-sm">Sélectionne une langue et un lecteur</div>
+                  );
                 })() : (
                   <iframe
                     key={inlinePlayerSource}
@@ -4463,12 +4540,15 @@ const MovieDetails = (): JSX.Element => {
                   <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
                     <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Source :</span>
                     {([
-                      { id: 'nakios',      label: 'Nakios' },
-                      { id: 'purstream',   label: 'Purstream' },
-                      { id: 'vidmoly',     label: 'Vidmoly' },
-                      { id: 'videasy',     label: 'Videasy' },
-                      { id: 'frembed',     label: 'Frembed' },
-                    ] as { id: InlineSource; label: string }[]).map(src => (
+                      { id: 'vidlink',   label: 'Vidlink' },
+                      { id: 'animesama', label: 'Anime-Sama' },
+                      { id: 'nakios',    label: 'Nakios' },
+                      { id: 'purstream', label: 'Purestream' },
+                      { id: 'videasy',   label: 'Videasy' },
+                      { id: 'frembed',   label: 'Frembed' },
+                    ] as { id: InlineSource; label: string }[])
+                      .filter(src => src.id !== 'animesama' || movie?.genres?.some((g: any) => g.id === 16 || g.name === 'Animation'))
+                      .map(src => (
                       <button
                         key={src.id}
                         onClick={() => setInlinePlayerSource(src.id)}
@@ -4483,6 +4563,41 @@ const MovieDetails = (): JSX.Element => {
                     ))}
                   </div>
                 </div>
+                {/* Langue + Lecteurs — uniquement pour Anime-Sama */}
+                {inlinePlayerSource === 'animesama' && !animeSamaMovieLoading && animeSamaMovieEpisode && (() => {
+                  const animeLink = animeSamaMovieEpisode.streaming_links?.find((l: any) => l.language === animeSamaMovieLang)
+                    ?? animeSamaMovieEpisode.streaming_links?.[0];
+                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
+                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
+                  return (
+                    <>
+                      <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
+                        <div className="flex gap-1.5 flex-wrap items-center">
+                          <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Langue :</span>
+                          {animeSamaMovieEpisode.streaming_links?.map((link: any, i: number) => (
+                            <button key={i} onClick={() => { setAnimeSamaMovieLang(link.language); setAnimeSamaMoviePlayer('0'); }}
+                              className={animeSamaMovieLang === link.language ? btnOn : btnOff}>
+                              {link.language.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {animeLink?.players?.length > 0 && (
+                        <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
+                          <div className="flex gap-1.5 flex-wrap items-center">
+                            <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Lecteur :</span>
+                            {animeLink.players.map((_p: string, idx: number) => (
+                              <button key={idx} onClick={() => setAnimeSamaMoviePlayer(idx.toString())}
+                                className={animeSamaMoviePlayer === idx.toString() ? btnOn : btnOff}>
+                                <Play className="w-3 h-3" /> Lecteur {idx + 1}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </motion.div>
             ) : (
               // Bouton Lecture — cinéma style (sans source picker)

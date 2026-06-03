@@ -42,7 +42,8 @@ import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed 
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
-const NAKIOS_PROXY = (import.meta.env.VITE_NAKIOS_PROXY as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
+const NAKIOS_PROXY    = (import.meta.env.VITE_NAKIOS_PROXY    as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
+const PURSTREAM_PROXY = (import.meta.env.VITE_PURSTREAM_PROXY as string || 'https://purstream-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
 
 interface TVShow {
   id?: string | number;
@@ -2399,11 +2400,13 @@ const TVDetails: React.FC = () => {
 
   const cinemaMode = true;
 
-  type InlineSource = 'nakios' | 'vidmoly' | 'videasy' | 'frembed';
+  type InlineSource = 'nakios' | 'animesama' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'frembed';
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
   const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
+  const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
+  const [purstreamStreamLoading, setPurstreamStreamLoading] = useState(false);
   const [vidmolyEmbedUrl, setVidmolyEmbedUrl] = useState<string | null>(null);
   const [panelSeason, setPanelSeason] = useState<number | null>(null);
   const episodeListRef = useRef<HTMLDivElement | null>(null);
@@ -2522,6 +2525,13 @@ const TVDetails: React.FC = () => {
   useEffect(() => {
     if (selectedSeason !== null) setPanelSeason(selectedSeason);
   }, [selectedSeason]);
+
+  // Scroll automatique vers le lecteur dès qu'il s'ouvre
+  useEffect(() => {
+    if (!showInlinePlayer) return;
+    scrollToInlinePlayer();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showInlinePlayer]);
 
   // Auto-scroll active episode into view in the panel
   useEffect(() => {
@@ -2970,7 +2980,7 @@ const TVDetails: React.FC = () => {
     });
 
     setShowInlinePlayer(true);
-    setTimeout(() => scrollToInlinePlayer(), 100);
+    scrollToInlinePlayer();
   };
 
   const _scrollLeft = (elementId: string) => {
@@ -3350,55 +3360,41 @@ const TVDetails: React.FC = () => {
     setSelectedSeason(seasonToWatch);
     setSelectedEpisode(episodeToWatch);
 
-    // Show inline player for TV shows
-    if (!animeMode) {
-      setShowInlinePlayer(true);
-      setTimeout(() => scrollToInlinePlayer(), 100);
-      return;
-    }
+    // Toujours ouvrir le lecteur inline (anime ou non)
+    const isAnime = animeMode || (tvShow?.genres ?? []).some((g: any) => g.id === 16);
+    setInlinePlayerSource(isAnime ? 'animesama' : 'vidlink');
+    setShowInlinePlayer(true);
+    scrollToInlinePlayer();
 
-    // Normal mode: proceed with existing logic (anime)
-    // Gérer le mode anime spécifiquement
-    if (animeMode && animeData?.seasons) {
-      const animeSeason = animeData.seasons[seasonToWatch - 1];
+    if (!animeMode) return;
+
+    // Mode anime : pré-charger l'épisode et la langue si les données sont déjà là
+    if (animeData?.seasons) {
+      const animeSeason = (animeData.seasons as any[]).find(
+        (s: any, idx: number) => (s.number ?? (idx + 1)) === seasonToWatch
+      );
       const animeEpisode = animeSeason?.episodes?.find((ep: any) => ep.index === episodeToWatch);
       if (animeEpisode) {
         setSelectedAnimeEpisode(animeEpisode);
-        // Sélectionner langue/lecteur par défaut si nécessaire
         const hasVf = animeEpisode.streaming_links.some((link: any) => link.language === 'vf');
         const hasVostfr = animeEpisode.streaming_links.some((link: any) => link.language === 'vostfr');
         if (hasVf) setSelectedLanguage('vf');
         else if (hasVostfr) setSelectedLanguage('vostfr');
         setSelectedPlayer('0');
+        setInlinePlayerSource('animesama');
       }
-    } else {
-      // Pour le mode standard, s'assurer que le lecteur est activé
-      setShowVideo(true);
     }
-
-    // Tenter de scroller immédiatement
-    setTimeout(() => {
-      const playerSection = videoPlayerRef.current?.getSection() || animeVideoPlayerSectionRef.current;
-      if (playerSection) {
-        playerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else {
-        // Retenter immédiatement si l'élément n'est pas encore rendu
-        setTimeout(() => {
-          const playerSection = videoPlayerRef.current?.getSection() || animeVideoPlayerSectionRef.current;
-          if (playerSection) {
-            playerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 0); // Délai de secours mis à 0ms
-      }
-    }, 0); // Délai principal mis à 0ms
+    // Si animeData n'est pas encore là, le useEffect de chargement à la demande
+    // se chargera de tout dès que l'utilisateur clique sur le bouton Anime-Sama
   };
 
   const handlePanelEpisodeClick = useCallback((season: number, epNumber: number) => {
     setSelectedSeason(season);
     setSelectedEpisode(epNumber);
     setLastWatched({ season, episode: epNumber });
+    setInlinePlayerSource('vidlink');
     setShowInlinePlayer(true);
-    setTimeout(() => scrollToInlinePlayer(), 100);
+    scrollToInlinePlayer();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3412,11 +3408,9 @@ const TVDetails: React.FC = () => {
     else if (hasVostfr) setSelectedLanguage('vostfr');
     else if (episode.streaming_links.length > 0) setSelectedLanguage(episode.streaming_links[0].language);
     setSelectedPlayer('0');
-    setTimeout(() => {
-      if (animeVideoPlayerSectionRef.current) {
-        animeVideoPlayerSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 80);
+    setShowInlinePlayer(true);
+    setInlinePlayerSource('animesama');
+    scrollToInlinePlayer();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3534,12 +3528,10 @@ const TVDetails: React.FC = () => {
   const handleEpisodeSelect = async (seasonNumber: number, episodeNumber: number) => {
     setSelectedSeason(seasonNumber);
     setSelectedEpisode(episodeNumber);
-    if (!animeMode) {
-      setShowInlinePlayer(true);
-      setTimeout(() => scrollToInlinePlayer(), 100);
-    } else {
-      setShowVideo(true);
-    }
+    const isAnime = animeMode || (tvShow?.genres ?? []).some((g: any) => g.id === 16);
+    setInlinePlayerSource(isAnime ? 'animesama' : 'nakios');
+    setShowInlinePlayer(true);
+    scrollToInlinePlayer();
   };
 
   useEffect(() => {
@@ -3767,26 +3759,61 @@ const TVDetails: React.FC = () => {
   };
 
   const scrollToInlinePlayer = () => {
-    const el = document.getElementById('inline-player-section');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Double rAF : attend que React ait rendu le DOM avant de chercher l'élément
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.getElementById('inline-player-section');
+      if (!el) return;
+      const targetY = el.getBoundingClientRect().top + window.scrollY - 72;
+      const startY = window.scrollY;
+      const dist = targetY - startY;
+      if (Math.abs(dist) < 2) return;
+      const duration = Math.min(350, 120 + Math.abs(dist) * 0.15); // rapide, proportionnel
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const p = Math.min((now - t0) / duration, 1);
+        const ease = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p; // ease-in-out
+        window.scrollTo(0, startY + dist * ease);
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }));
   };
 
-  /** Extrait l'URL vidéo depuis la réponse JSON de Nakios (plusieurs structures possibles) */
+  /** Extrait l'URL vidéo depuis la réponse JSON de Nakios — préfère les flux M3U8 aux MP4 */
   const extractNakiosUrl = (data: any): string | null => {
     if (!data) return null;
-    // Format direct
+    // Format sources tableau : préférer M3U8 pour compatibilité HLSPlayer
+    if (Array.isArray(data.sources) && data.sources.length > 0) {
+      const getUrl = (s: any) => s?.url || s?.file || s?.src || null;
+      const m3u8 = data.sources.find((s: any) => s.isM3U8 && getUrl(s));
+      const best = m3u8 || data.sources.find((s: any) => getUrl(s));
+      if (best) return getUrl(best);
+    }
+    // Format direct (réponse plate)
     if (typeof data.url === 'string' && data.url) return data.url;
     if (typeof data.stream === 'string' && data.stream) return data.stream;
     if (typeof data.link === 'string' && data.link) return data.link;
-    // Format sources tableau
-    if (Array.isArray(data.sources) && data.sources.length > 0) {
-      const src = data.sources[0];
-      return src.file || src.url || src.src || null;
-    }
     // Format data imbriqué
     if (data.data) return extractNakiosUrl(data.data);
     return null;
   };
+
+  // Résolution du flux Purstream (HLSPlayer natif, pas d'iframe)
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'purstream' || !id || !selectedSeason || !selectedEpisode) {
+      setPurstreamStreamUrl(null);
+      return;
+    }
+    let cancelled = false;
+    setPurstreamStreamLoading(true);
+    setPurstreamStreamUrl(null);
+    fetch(`${PURSTREAM_PROXY}/stream?type=tv&tmdb=${id}&season=${selectedSeason}&episode=${selectedEpisode}`)
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setPurstreamStreamUrl(data?.sources?.[0]?.url || null); })
+      .catch(() => { if (!cancelled) setPurstreamStreamUrl(null); })
+      .finally(() => { if (!cancelled) setPurstreamStreamLoading(false); });
+    return () => { cancelled = true; };
+  }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode]);
 
   // Résolution du flux Nakios via le Worker
   useEffect(() => {
@@ -3802,8 +3829,14 @@ const TVDetails: React.FC = () => {
       .then(data => {
         if (cancelled) return;
         const rawUrl = extractNakiosUrl(data);
-        // Toujours passer par le proxy Worker pour CORS + réécriture M3U8
-        setNakiosStreamUrl(rawUrl ? `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}` : null);
+        if (!rawUrl) { setNakiosStreamUrl(null); return; }
+        // Le worker convertit désormais toutes les URLs relatives en URLs absolues proxifiées.
+        // Si l'URL est déjà absolue et proxifiée par le worker → utiliser directement.
+        // Sinon → passer par le proxy worker pour CORS + réécriture M3U8.
+        const finalUrl = rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
+          ? rawUrl
+          : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
+        setNakiosStreamUrl(finalUrl);
       })
       .catch(() => { if (!cancelled) setNakiosStreamUrl(null); })
       .finally(() => { if (!cancelled) setNakiosStreamLoading(false); });
@@ -3829,12 +3862,42 @@ const TVDetails: React.FC = () => {
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode, animeMode]);
 
+  // Quand Anime-Sama est sélectionné et l'épisode n'est pas encore chargé → le charger à la demande
+  useEffect(() => {
+    if (inlinePlayerSource !== 'animesama') return;
+    if (selectedAnimeEpisode) return;       // déjà chargé
+    if (loadingAnimeData) return;           // chargement en cours
+    if (selectedSeason === null || !selectedEpisode) return;
+    let cancelled = false;
+    const load = async () => {
+      const data = animeData ?? await loadAnimeData();
+      if (!cancelled && data) syncSelectedAnimeEpisode(data);
+    };
+    load();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlinePlayerSource, selectedAnimeEpisode, loadingAnimeData, selectedSeason, selectedEpisode, animeData]);
+
+  // Auto-sélectionne la première langue dispo dès que l'épisode devient disponible
+  useEffect(() => {
+    if (inlinePlayerSource !== 'animesama') return;
+    if (!selectedAnimeEpisode) return;
+    if (selectedLanguage) return;
+    const links: any[] = selectedAnimeEpisode.streaming_links ?? [];
+    if (!links.length) return;
+    const hasVf = links.some((l: any) => l.language === 'vf');
+    const hasVostfr = links.some((l: any) => l.language === 'vostfr');
+    setSelectedLanguage(hasVf ? 'vf' : hasVostfr ? 'vostfr' : links[0].language);
+    setSelectedPlayer('0');
+  }, [inlinePlayerSource, selectedAnimeEpisode, selectedLanguage]);
+
   const getInlinePlayerUrl = () => {
     const s = selectedSeason ?? 1;
     const e = selectedEpisode ?? 1;
     switch (inlinePlayerSource) {
+      case 'videasy':  return `https://player.videasy.net/tv/${id}/${s}/${e}`;
+      case 'vidlink':  return `https://vidlink.pro/tv/${id}?s=${s}&e=${e}&primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
       case 'vidmoly':  return vidmolyEmbedUrl || '';
-      case 'videasy':  return `https://vidlink.pro/tv/${id}/${s}/${e}`;
       case 'frembed':  return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
       default:         return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
     }
@@ -6740,8 +6803,8 @@ const TVDetails: React.FC = () => {
         </AnimatePresence>
       )}
 
-      {/* Lecteur inline (séries — non-anime) */}
-      {showInlinePlayer && !animeMode && selectedSeason !== null && selectedEpisode && (
+      {/* Lecteur inline (séries) */}
+      {showInlinePlayer && selectedSeason !== null && selectedEpisode && (
         <motion.div
           id="inline-player-section"
           initial={{ opacity: 0, y: 16 }}
@@ -6756,10 +6819,10 @@ const TVDetails: React.FC = () => {
                 {tvShow?.name} — S{selectedSeason} E{selectedEpisode}
               </span>
             </div>
-            {inlinePlayerSource === 'nakios' ? (() => {
-              const loading   = nakiosStreamLoading;
-              const streamUrl = nakiosStreamUrl;
-              const label     = 'Épisode indisponible sur Nakios';
+            {(inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
+              const loading   = inlinePlayerSource === 'nakios' ? nakiosStreamLoading : purstreamStreamLoading;
+              const streamUrl = inlinePlayerSource === 'nakios' ? nakiosStreamUrl    : purstreamStreamUrl;
+              const label     = inlinePlayerSource === 'nakios' ? 'Épisode indisponible sur Nakios' : 'Flux Purstream indisponible';
               return loading ? (
                 <div className="w-full h-[360px] flex items-center justify-center bg-black">
                   <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -6782,6 +6845,44 @@ const TVDetails: React.FC = () => {
                   <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
                     Essayer Frembed
                   </button>
+                </div>
+              );
+            })() : inlinePlayerSource === 'animesama' ? (() => {
+              if (loadingAnimeData) return (
+                <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                  <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                </div>
+              );
+              if (!selectedAnimeEpisode) return (
+                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                  <span>Épisode indisponible sur Anime-Sama</span>
+                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
+                    Essayer Frembed
+                  </button>
+                </div>
+              );
+              const animeLink = selectedAnimeEpisode.streaming_links?.find((l: any) => l.language === selectedLanguage)
+                ?? selectedAnimeEpisode.streaming_links?.[0];
+              const validPlayers: string[] = (animeLink?.players ?? []).filter(
+                (p: string) => !p.includes('vidmoly')
+              );
+              const animePlayerUrl: string = validPlayers[parseInt(selectedPlayer ?? '0')] ?? '';
+              return animePlayerUrl ? (
+                <iframe
+                  key={`animesama-${selectedLanguage}-${selectedPlayer}`}
+                  src={animePlayerUrl}
+                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                  allowFullScreen
+                  allow="autoplay; fullscreen; encrypted-media"
+                  style={{ border: 'none', display: 'block' }}
+                  title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
+                />
+              ) : (
+                <div className="w-full h-[360px] flex items-center justify-center bg-black text-gray-400 text-sm">
+                  Sélectionne une langue et un lecteur
                 </div>
               );
             })() : (
@@ -6808,14 +6909,37 @@ const TVDetails: React.FC = () => {
               <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
                 {([
-                  { id: 'nakios',      label: 'Nakios' },
-                  { id: 'vidmoly',     label: 'Vidmoly' },
-                  { id: 'videasy',     label: 'Videasy' },
-                  { id: 'frembed',     label: 'Frembed' },
-                ] as { id: InlineSource; label: string }[]).map(src => (
+                  { id: 'vidlink',   label: 'Vidlink' },
+                  { id: 'animesama', label: 'Anime-Sama' },
+                  { id: 'nakios',    label: 'Nakios' },
+                  { id: 'purstream', label: 'Purestream' },
+                  { id: 'videasy',   label: 'Videasy' },
+                  { id: 'frembed',   label: 'Frembed' },
+                ] as { id: InlineSource; label: string }[])
+                  .filter(src => src.id !== 'animesama' || animeMode || (tvShow?.genres ?? []).some((g: any) => g.id === 16))
+                  .map(src => (
                   <button
                     key={src.id}
-                    onClick={() => setInlinePlayerSource(src.id)}
+                    onClick={() => {
+                      setInlinePlayerSource(src.id);
+                      if (src.id === 'animesama') {
+                        if (selectedAnimeEpisode) {
+                          // Épisode déjà dispo : auto-select langue si besoin
+                          const links: any[] = selectedAnimeEpisode.streaming_links ?? [];
+                          if (!selectedLanguage && links.length > 0) {
+                            const hasVf = links.some((l: any) => l.language === 'vf');
+                            const hasVostfr = links.some((l: any) => l.language === 'vostfr');
+                            setSelectedLanguage(hasVf ? 'vf' : hasVostfr ? 'vostfr' : links[0].language);
+                            setSelectedPlayer('0');
+                          }
+                        } else {
+                          // Épisode pas encore chargé : déclencher le chargement via l'effet
+                          // (le useEffect sur [inlinePlayerSource, selectedAnimeEpisode] va s'exécuter)
+                          setSelectedLanguage(null);
+                          setSelectedPlayer(null);
+                        }
+                      }
+                    }}
                     className="flex-shrink-0 px-2.5 py-1.5 sm:px-3 2xl:px-4 2xl:py-2 text-xs 2xl:text-sm font-medium transition-all duration-200"
                     style={inlinePlayerSource === src.id
                       ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' }
@@ -6827,13 +6951,76 @@ const TVDetails: React.FC = () => {
                 ))}
               </div>
             </div>
+            {/* Langue + Lecteurs — uniquement pour Anime-Sama */}
+            {inlinePlayerSource === 'animesama' && !loadingAnimeData && selectedAnimeEpisode && (() => {
+              const animeLink = selectedAnimeEpisode.streaming_links?.find((l: any) => l.language === selectedLanguage)
+                ?? selectedAnimeEpisode.streaming_links?.[0];
+              // Exclure les hébergeurs hors-service
+              const validPlayers: string[] = (animeLink?.players ?? []).filter(
+                (p: string) => !p.includes('vidmoly')
+              );
+              const getHostLabel = (url: string, idx: number): string => {
+                try {
+                  const h = new URL(url).hostname.replace('www.', '');
+                  const n = h.split('.')[0];
+                  return n.charAt(0).toUpperCase() + n.slice(1);
+                } catch { return `Lecteur ${idx + 1}`; }
+              };
+              const glassStyle = {
+                background: 'rgba(255,255,255,0.03)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                borderColor: 'rgba(255,255,255,0.08)',
+              };
+              const btnOn  = { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' } as const;
+              const btnOff = { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' } as const;
+              return (
+                <>
+                  <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                    <div className="flex gap-1.5 flex-wrap items-center">
+                      <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Langue :</span>
+                      {selectedAnimeEpisode.streaming_links?.map((link: any, i: number) => (
+                        <button
+                          key={`lang-${link.language}-${i}`}
+                          onClick={() => { setSelectedLanguage(link.language); setSelectedPlayer('0'); }}
+                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
+                          style={selectedLanguage === link.language ? btnOn : btnOff}
+                        >
+                          {getAnimeLanguageLabel(link.language, t)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {validPlayers.length > 0 && (
+                    <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                      <div className="flex gap-1.5 flex-wrap items-center">
+                        <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Lecteur :</span>
+                        {validPlayers.map((playerUrl: string, idx: number) => (
+                          <button
+                            key={`player-${idx}`}
+                            onClick={() => setSelectedPlayer(idx.toString())}
+                            className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
+                            style={selectedPlayer === idx.toString() ? btnOn : btnOff}
+                          >
+                            <Play className="w-3 h-3" />
+                            {getHostLabel(playerUrl, idx)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* ── Episode panel (25%) ── */}
-          <div className="w-full lg:w-1/4 min-w-0">
+          <div className="w-full lg:w-1/4 min-w-0" style={{ maxHeight: 'calc(100vh - 250px)' }}>
             <div
-              className="h-full rounded-lg overflow-hidden flex flex-col lg:min-h-[300px]"
+              className="rounded-lg flex flex-col lg:min-h-[300px]"
               style={{
+                overflow: 'hidden',
+                maxHeight: 'calc(100vh - 250px)',
                 background: 'rgba(255,255,255,0.04)',
                 backdropFilter: 'blur(20px) saturate(180%)',
                 WebkitBackdropFilter: 'blur(20px) saturate(180%)',
@@ -6864,8 +7051,16 @@ const TVDetails: React.FC = () => {
               {/* Episode list */}
               <div
                 ref={episodeListRef}
-                className="flex-1 overflow-y-auto lg:max-h-[540px] 2xl:max-h-[680px] ep-panel-scroll p-1.5"
-                style={{ scrollbarWidth: 'thin', scrollbarColor: '#7c3aed transparent' }}
+                className="ep-panel-scroll p-1.5"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  pointerEvents: 'auto',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#7c3aed transparent',
+                }}
               >
                 {panelEpisodes.map(ep => {
                   const epNum = Number(ep.epi);
@@ -6907,8 +7102,8 @@ const TVDetails: React.FC = () => {
         </motion.div>
       )}
 
-      {/* Lecteur d'anime */}
-      {animeMode && selectedSeason !== null && selectedEpisode && selectedAnimeEpisode && (() => {
+      {/* Lecteur d'anime — masqué si l'inline player Anime-Sama est déjà actif */}
+      {animeMode && !showInlinePlayer && selectedSeason !== null && selectedEpisode && selectedAnimeEpisode && (() => {
         const animeSeasons = animeData?.seasons as any[] | undefined ?? [];
         const activePanelSeason = panelSeason ?? selectedSeason;
         const animePanelSeasonObj = animeSeasons.find((s: any, idx: number) =>
@@ -6952,13 +7147,19 @@ const TVDetails: React.FC = () => {
                 </div>
               </div>
 
-              {/* Lecteurs */}
-              {selectedLanguage && selectedAnimeEpisode.streaming_links?.find((link: any) => link.language === selectedLanguage)?.players?.length > 0 && (
-                <div className="px-3 py-2 bg-gray-800/50 border-b border-gray-700 flex-shrink-0">
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedAnimeEpisode.streaming_links
-                      .find((link: any) => link.language === selectedLanguage)
-                      .players.map((_player: string, index: number) => (
+              {/* Lecteurs (Vidmoly filtré) */}
+              {selectedLanguage && (() => {
+                const link = selectedAnimeEpisode.streaming_links?.find((l: any) => l.language === selectedLanguage);
+                const vPlayers: string[] = (link?.players ?? []).filter((p: string) => !p.includes('vidmoly'));
+                if (!vPlayers.length) return null;
+                const getLabel = (url: string, i: number) => {
+                  try { const h = new URL(url).hostname.replace('www.','').split('.')[0]; return h.charAt(0).toUpperCase()+h.slice(1); }
+                  catch { return `Lecteur ${i+1}`; }
+                };
+                return (
+                  <div className="px-3 py-2 bg-gray-800/50 border-b border-gray-700 flex-shrink-0">
+                    <div className="flex flex-wrap gap-1.5">
+                      {vPlayers.map((pUrl: string, index: number) => (
                         <button
                           key={`player-${index}`}
                           className={`px-2.5 py-1 rounded-md flex items-center gap-1 text-xs transition-all ${selectedPlayer === index.toString()
@@ -6967,19 +7168,20 @@ const TVDetails: React.FC = () => {
                           onClick={() => setSelectedPlayer(index.toString())}
                         >
                           <Play className="w-3 h-3" />
-                          {t('details.playerLabel', { number: index + 1 })}
+                          {getLabel(pUrl, index)}
                         </button>
-                      ))
-                    }
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
-              {/* Lecteur anime — HLSPlayer si Vidmoly, iframe sinon */}
+              {/* Lecteur anime — iframe */}
               {selectedLanguage && selectedPlayer !== null && (() => {
                 const link = (selectedAnimeEpisode.streaming_links as any[])?.find((l: any) => l.language === selectedLanguage);
-                const playerUrl: string = link?.players?.[parseInt(selectedPlayer ?? '0')] ?? '';
-                const isVidmoly = playerUrl.toLowerCase().includes('vidmoly');
+                const vPlayers: string[] = (link?.players ?? []).filter((p: string) => !p.includes('vidmoly'));
+                const playerUrl: string = vPlayers[parseInt(selectedPlayer ?? '0')] ?? '';
+                const isVidmoly = false; // Vidmoly filtré en amont
 
                 if (isVidmoly) {
                   return (
@@ -7015,10 +7217,12 @@ const TVDetails: React.FC = () => {
             </div>
 
             {/* ── Anime episode panel (25%) ── */}
-            <div className="w-full lg:w-1/4 min-w-0">
+            <div className="w-full lg:w-1/4 min-w-0" style={{ maxHeight: 'calc(100vh - 250px)' }}>
               <div
-                className="h-full rounded-lg overflow-hidden flex flex-col lg:min-h-[300px]"
+                className="rounded-lg flex flex-col lg:min-h-[300px]"
                 style={{
+                  overflow: 'hidden',
+                  maxHeight: 'calc(100vh - 250px)',
                   background: 'rgba(255,255,255,0.04)',
                   backdropFilter: 'blur(20px) saturate(180%)',
                   WebkitBackdropFilter: 'blur(20px) saturate(180%)',
@@ -7051,8 +7255,16 @@ const TVDetails: React.FC = () => {
                 {/* Anime episode list */}
                 <div
                   ref={episodeListRef}
-                  className="flex-1 overflow-y-auto lg:max-h-[540px] 2xl:max-h-[680px] ep-panel-scroll p-1.5"
-                  style={{ scrollbarWidth: 'thin', scrollbarColor: '#7c3aed transparent' }}
+                  className="ep-panel-scroll p-1.5"
+                  style={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    pointerEvents: 'auto',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: '#7c3aed transparent',
+                  }}
                 >
                   {animePanelEpisodes.map((ep: any) => {
                     const isActive = selectedEpisode === ep.index && selectedSeason === activePanelSeason;
@@ -7256,7 +7468,7 @@ const TVDetails: React.FC = () => {
                       }, 80);
                     } else {
                       setShowInlinePlayer(true);
-                      setTimeout(() => scrollToInlinePlayer(), 100);
+                      scrollToInlinePlayer();
                     }
                   }
                   setPendingEpisode(null);

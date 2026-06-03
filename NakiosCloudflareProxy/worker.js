@@ -122,7 +122,7 @@ function extractVidmolyFromNakios(data) {
 
 // ─── Route /series ────────────────────────────────────────────────────────────
 
-async function handleSeries(url) {
+async function handleSeries(request, url) {
   const id      = url.searchParams.get('id');
   const season  = url.searchParams.get('s');
   const episode = url.searchParams.get('e');
@@ -137,6 +137,7 @@ async function handleSeries(url) {
   try {
     upstream = await fetch(targetUrl, {
       headers: { ...nakiosHeaders(), Accept: 'application/json, text/plain, */*' },
+      signal: AbortSignal.timeout(10000),
     });
   } catch (err) {
     return json({ error: `Erreur réseau Nakios: ${err.message}` }, 502);
@@ -150,7 +151,29 @@ async function handleSeries(url) {
     return json({ error: `Nakios a répondu ${upstream.status}`, details: data }, upstream.status);
   }
 
-  // Enrichir la réponse avec le hash Vidmoly si trouvé dans les sources Nakios
+  // Convertir les URLs relatives en URLs proxifiées via ce worker
+  const workerOrigin = new URL(request.url).origin;
+  if (Array.isArray(data.sources)) {
+    data = {
+      ...data,
+      sources: data.sources.map(src => {
+        if (typeof src.url === 'string' && src.url.startsWith('/')) {
+          try {
+            // Extraire l'URL interne depuis /api/sources/proxy?url=INNER&s=TOKEN
+            const fakeBase = 'http://x';
+            const u = new URL(src.url, fakeBase);
+            const inner = u.searchParams.get('url');
+            if (inner) {
+              // Proxifier l'URL interne via ce worker (headers neutres → pas de 403)
+              return { ...src, url: `${workerOrigin}/proxy?url=${encodeURIComponent(inner)}` };
+            }
+          } catch (_) {}
+        }
+        return src;
+      }),
+    };
+  }
+
   const vidmolyUrl = extractVidmolyFromNakios(data);
   return json({ ...data, _vidmolyUrl: vidmolyUrl || null });
 }
@@ -196,6 +219,7 @@ async function handleMovie(url) {
   try {
     upstream = await fetch(apiUrl, {
       headers: { ...nakiosHeaders(), Accept: 'application/json, text/plain, */*' },
+      signal: AbortSignal.timeout(10000),
     });
   } catch (err) {
     return json({ error: `Erreur réseau Nakios: ${err.message}` }, 502);
@@ -377,9 +401,14 @@ async function handleProxy(request, url) {
 
   const targetUrl = decodeURIComponent(rawUrl);
 
-  // Transmettre Range et If-Range pour que le CDN renvoie du 206 Partial Content
-  // (sans ça le CDN retourne 200 + tout le fichier → le player ne peut pas seeker)
-  const proxyHeaders = { ...nakiosHeaders() };
+  // Headers neutres pour les CDN tiers (nakios.ink bloque senpai-stream etc.)
+  // Headers Nakios uniquement pour les domaines Nakios eux-mêmes
+  const isNakiosDomain = /nakios\.(ink|com|me|net)/i.test(targetUrl);
+  const proxyHeaders = isNakiosDomain ? { ...nakiosHeaders() } : {
+    'User-Agent': UA,
+    'Accept': '*/*',
+    'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+  };
   const rangeHeader = request.headers.get('range');
   if (rangeHeader) proxyHeaders['Range'] = rangeHeader;
   const ifRangeHeader = request.headers.get('if-range');
@@ -438,7 +467,7 @@ export default {
 
     if (url.pathname === '/health')  return json({ status: 'ok', worker: 'nakios-vidmoly-franime-proxy' });
     if (url.pathname === '/movie')   return handleMovie(url);
-    if (url.pathname === '/series')  return handleSeries(url);
+    if (url.pathname === '/series')  return handleSeries(request, url);
     if (url.pathname === '/vidmoly') return handleVidmoly(url);
     if (url.pathname === '/franime') return handleFranime(url);
     if (url.pathname === '/proxy')   return handleProxy(request, url);

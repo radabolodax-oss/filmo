@@ -40,6 +40,8 @@ function domainRestriction(req, res, next) {
 
   const allowedDomains = [
     'localhost:3000',
+    'localhost:3001',
+    '10.37.183.197',
     'movix.tax',
     'movix.cash',
     'movix.blog',

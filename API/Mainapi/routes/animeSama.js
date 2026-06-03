@@ -525,7 +525,7 @@ class AnimeSama {
       const cacheKey = generateCacheKey(query);
       if (!forceNoCache) {
         const cachedResults = await deps.getFromCacheNoExpiration(ANIME_SAMA_CACHE_DIR, cacheKey);
-        if (cachedResults) {
+        if (cachedResults && Array.isArray(cachedResults) && cachedResults.length > 0) {
           return cachedResults.map(result =>
             new Catalogue(result.url, result.name, this.client, result)
           );

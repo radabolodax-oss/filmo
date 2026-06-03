@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+  mysql:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_movix_2024
+      MYSQL_DATABASE: movix
+      MYSQL_USER: movix
+      MYSQL_PASSWORD: movix_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./API/Mainapi/wrapped_tables.sql:/docker-entrypoint-initdb.d/01_wrapped.sql
+    ports:
+      - "3306:3306"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass redis_pass
+    ports:
+      - "6379:6379"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ./API/Mainapi
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    ports:
+      - "25565:25565"
+    env_file:
+      - ./API/Mainapi/.env
+    depends_on:
+      - mysql
+      - redis
+
+  watchparty:
+    build:
+      context: ./API/watchpartyAPI
+      dockerfile: Dockerfile.watchparty
+    restart: unless-stopped
+    ports:
+      - "25566:25566"
+
+  proxiesembed:
+    build:
+      context: ./API/proxiesembed
+      dockerfile: Dockerfile.proxiesembed
+    restart: unless-stopped
+    ports:
+      - "25569:25569"
+    env_file:
+      - ./API/proxiesembed/.env
+
+  bypass403:
+    build:
+      context: ./API/miscs
+      dockerfile: Dockerfile.bypass
+    restart: unless-stopped
+    ports:
+      - "25568:25568"
+
+volumes:
+  mysql_data:
