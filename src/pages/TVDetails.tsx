@@ -3529,7 +3529,7 @@ const TVDetails: React.FC = () => {
     setSelectedSeason(seasonNumber);
     setSelectedEpisode(episodeNumber);
     const isAnime = animeMode || (tvShow?.genres ?? []).some((g: any) => g.id === 16);
-    setInlinePlayerSource(isAnime ? 'animesama' : 'nakios');
+    setInlinePlayerSource(isAnime ? 'animesama' : 'vidlink');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
