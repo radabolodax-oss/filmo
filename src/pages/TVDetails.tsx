@@ -2358,8 +2358,18 @@ const TVDetails: React.FC = () => {
   const [availableEpisodes, setAvailableEpisodes] = useState<Episode[]>([]);
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
   const [selectedEpisode, setSelectedEpisode] = useState<number | null>(null);
+  const [tvShowSkipIntro, setTvShowSkipIntro] = useState(false);
+  const [tvAutoNextActive, setTvAutoNextActive] = useState(false);
+  const [tvAutoNextProgress, setTvAutoNextProgress] = useState(0);
+  const [tvAutoNextCountdown, setTvAutoNextCountdown] = useState(5);
+  const [tvPendingNextSeason, setTvPendingNextSeason] = useState<number | null>(null);
+  const [tvPendingNextEpisode, setTvPendingNextEpisode] = useState<number | null>(null);
   const [, setShowVideo] = useState(false);
   // const [_trailerVideoId, _setTrailerVideoId] = useState<string | null>(null);
+
+  // Ref pour le temps vidéo en cours (Skip Intro)
+  const tvPlayerCurrentTimeRef = useRef<number>(0);
+  const tvIntroTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Refs replacing document.getElementById/querySelector lookups for season/episode UI
   const seasonsSectionRef = useRef<HTMLDivElement | null>(null);
@@ -3395,8 +3405,43 @@ const TVDetails: React.FC = () => {
     setInlinePlayerSource('vidlink');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
+    // Démarrer le timer Skip Intro (pour sources iframe qui n'exposent pas le temps vidéo)
+    tvPlayerCurrentTimeRef.current = 0;
+    setTvShowSkipIntro(false);
+    if (tvIntroTimerRef.current) clearInterval(tvIntroTimerRef.current);
+    tvIntroTimerRef.current = setInterval(() => {
+      tvPlayerCurrentTimeRef.current += 1;
+      const t = tvPlayerCurrentTimeRef.current;
+      setTvShowSkipIntro(t >= 90 && t <= 150);
+    }, 1000);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleAutoNextTV = useCallback((season: number, episode: number) => {
+    setTvPendingNextSeason(season);
+    setTvPendingNextEpisode(episode);
+    setTvAutoNextActive(true);
+    setTvAutoNextProgress(0);
+    setTvAutoNextCountdown(5);
+  }, []);
+
+  useEffect(() => {
+    if (!tvAutoNextActive) return;
+    if (tvAutoNextCountdown <= 0) {
+      setTvAutoNextActive(false);
+      setTvAutoNextProgress(0);
+      if (tvPendingNextSeason !== null && tvPendingNextEpisode !== null) {
+        handlePanelEpisodeClick(tvPendingNextSeason, tvPendingNextEpisode);
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      setTvAutoNextCountdown(c => c - 1);
+      setTvAutoNextProgress(p => Math.min(100, p + 20));
+    }, 1000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tvAutoNextActive, tvAutoNextCountdown]);
 
   const handleAnimePanelEpisodeClick = useCallback((episode: any, animeSeason: number) => {
     setSelectedSeason(animeSeason);
@@ -4573,7 +4618,7 @@ const TVDetails: React.FC = () => {
           backgroundPosition: 'center',
         } : undefined}
       />
-      <div className="relative z-10 min-h-screen">
+      <div className="relative z-10 min-h-screen overflow-x-hidden">
         <style>{`
         /* Netflix-style poster hover effects - COPIED FROM MovieDetails.tsx */
         .content-row-container {
@@ -6810,15 +6855,114 @@ const TVDetails: React.FC = () => {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="mt-10 flex flex-col lg:flex-row lg:items-stretch gap-3"
+          className="mt-10 flex flex-col gap-2"
         >
-          {/* ── Player column (75%) ── */}
-          <div className="w-full lg:w-3/4 min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
-            <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex-shrink-0">
-              <span className="text-sm text-gray-300 font-medium">
-                {tvShow?.name} — S{selectedSeason} E{selectedEpisode}
-              </span>
+          {/* ── Barre navigation épisodes ── */}
+          {selectedSeason !== null && selectedEpisode !== null && (
+            <div
+              className="flex items-center justify-between px-3 py-2 flex-shrink-0 gap-2"
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                backdropFilter: 'blur(24px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '14px',
+                boxShadow: '0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)',
+              } as React.CSSProperties}
+            >
+              {/* Précédent */}
+              {!(selectedSeason === 1 && selectedEpisode === 1) ? (
+                <button
+                  onClick={() => {
+                    if (selectedEpisode > 1) handlePanelEpisodeClick(selectedSeason, selectedEpisode - 1);
+                    else if (selectedSeason > 1) handlePanelEpisodeClick(selectedSeason - 1, 1);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7M18 19l-7-7 7-7" /></svg>
+                  <span className="hidden sm:inline">S{selectedSeason}:E{String(selectedEpisode - 1 > 0 ? selectedEpisode - 1 : 1).padStart(2,'0')}</span>
+                </button>
+              ) : <div className="w-8 flex-shrink-0" />}
+
+              {/* Épisode actuel */}
+              <div
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold flex-1 justify-center"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(34,197,94,0.22) 0%, rgba(124,58,237,0.22) 100%)',
+                  border: '1px solid rgba(124,58,237,0.35)',
+                  borderRadius: '10px',
+                  color: '#fff',
+                  boxShadow: '0 0 18px rgba(124,58,237,0.18)',
+                }}
+              >
+                <svg className="w-4 h-4 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+                <span className="truncate">{tvShow?.name ? `${tvShow.name} — ` : ''}S{selectedSeason}:E{String(selectedEpisode).padStart(2,'0')}</span>
+              </div>
+
+              {/* Suivant */}
+              <button
+                onClick={() => handlePanelEpisodeClick(selectedSeason, selectedEpisode + 1)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+              >
+                <span className="hidden sm:inline">S{selectedSeason}:E{String(selectedEpisode + 1).padStart(2,'0')}</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+              </button>
             </div>
+          )}
+
+          {/* ── Player column ── */}
+          <div className="relative w-full min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
+
+            {/* Skip Intro */}
+            {tvShowSkipIntro && (
+              <button
+                onClick={() => setTvShowSkipIntro(false)}
+                className="flex items-center gap-2 text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+                style={{
+                  position: 'absolute', bottom: '72px', left: '16px', zIndex: 300,
+                  background: 'rgba(255,255,255,0.08)',
+                  backdropFilter: 'blur(20px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '10px', padding: '8px 16px', color: '#fff',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+                  cursor: 'pointer',
+                } as React.CSSProperties}
+              >
+                Skip Intro
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+              </button>
+            )}
+
+            {/* Auto-Next */}
+            {tvAutoNextActive && (
+              <div
+                style={{
+                  position: 'absolute', bottom: '72px', right: '16px', zIndex: 300,
+                  background: 'rgba(10,10,15,0.75)',
+                  backdropFilter: 'blur(20px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                  border: '1px solid rgba(124,58,237,0.3)',
+                  borderRadius: '14px', padding: '12px 16px', minWidth: '176px',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 16px rgba(124,58,237,0.15)',
+                } as React.CSSProperties}
+              >
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '12px', marginBottom: '8px' }}>
+                  Épisode suivant dans <span style={{ color: '#22c55e', fontWeight: 700 }}>{tvAutoNextCountdown}s</span>
+                </p>
+                <div style={{ height: '5px', background: 'rgba(255,255,255,0.12)', borderRadius: '99px', overflow: 'hidden', marginBottom: '10px' }}>
+                  <div style={{ height: '100%', width: `${tvAutoNextProgress}%`, background: 'linear-gradient(90deg, #22c55e 0%, #7c3aed 100%)', borderRadius: '99px', transition: 'width 0.9s linear' }} />
+                </div>
+                <button
+                  onClick={() => { setTvAutoNextActive(false); setTvAutoNextProgress(0); setTvAutoNextCountdown(5); }}
+                  style={{ width: '100%', padding: '5px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'rgba(255,255,255,0.6)', fontSize: '11px', cursor: 'pointer' }}
+                >
+                  Annuler
+                </button>
+              </div>
+            )}
             {(inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
               const loading   = inlinePlayerSource === 'nakios' ? nakiosStreamLoading : purstreamStreamLoading;
               const streamUrl = inlinePlayerSource === 'nakios' ? nakiosStreamUrl    : purstreamStreamUrl;
@@ -6838,6 +6982,10 @@ const TVDetails: React.FC = () => {
                   autoPlay={true}
                   controls={true}
                   poster={tvShow?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${tvShow.backdrop_path}` : undefined}
+                  onPlayerTimeUpdate={(t) => {
+                    tvPlayerCurrentTimeRef.current = t;
+                    setTvShowSkipIntro(t >= 90 && t <= 150);
+                  }}
                 />
               ) : (
                 <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
@@ -6940,10 +7088,10 @@ const TVDetails: React.FC = () => {
                         }
                       }
                     }}
-                    className="flex-shrink-0 px-2.5 py-1.5 sm:px-3 2xl:px-4 2xl:py-2 text-xs 2xl:text-sm font-medium transition-all duration-200"
+                    className="flex-shrink-0 px-2.5 py-1.5 sm:px-3 text-xs sm:text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
                     style={inlinePlayerSource === src.id
-                      ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' }
-                      : { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }
+                      ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none', boxShadow: '0 0 14px rgba(124,58,237,0.3)' }
+                      : { background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)', color: 'rgba(255,255,255,0.75)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }
                     }
                   >
                     {src.label}
@@ -7014,8 +7162,8 @@ const TVDetails: React.FC = () => {
             })()}
           </div>
 
-          {/* ── Episode panel (25%) ── */}
-          <div className="w-full lg:w-1/4 min-w-0" style={{ maxHeight: 'calc(100vh - 250px)' }}>
+          {/* ── Episode panel supprimé — navigation via la barre au-dessus ── */}
+          {false && <div className="w-full lg:w-1/4 min-w-0" style={{ maxHeight: 'calc(100vh - 250px)' }}>
             <div
               className="rounded-lg flex flex-col lg:min-h-[300px]"
               style={{
@@ -7098,7 +7246,7 @@ const TVDetails: React.FC = () => {
                 })}
               </div>
             </div>
-          </div>
+          </div>}
         </motion.div>
       )}
 

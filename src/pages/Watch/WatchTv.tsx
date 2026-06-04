@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom'; // Added useNavigate
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
-import HLSPlayer from '../../components/HLSPlayer';
+import HLSPlayer, { HLSPlayerRef } from '../../components/HLSPlayer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAdFreePopup } from '../../context/AdFreePopupContext';
 import AdFreePlayerAds from '../../components/AdFreePlayerAds';
@@ -754,6 +754,12 @@ const WatchTv: React.FC = () => {
 
   // état pour le menu des épisodes
   const [showEpisodesMenu, setShowEpisodesMenu] = useState(false);
+  const [showSkipIntro, setShowSkipIntro] = useState(false);
+  const [autoNextActive, setAutoNextActive] = useState(false);
+  const [autoNextProgress, setAutoNextProgress] = useState(0);
+  const [autoNextCountdown, setAutoNextCountdown] = useState(5);
+  const [pendingNextSeason, setPendingNextSeason] = useState<number | null>(null);
+  const [pendingNextEpisode, setPendingNextEpisode] = useState<number | null>(null);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [episodes, setEpisodes] = useState<EpisodeInfo[]>([]);
   const [currentEpisodeInfo, setCurrentEpisodeInfo] = useState<EpisodeInfo | null>(null);
@@ -763,6 +769,8 @@ const WatchTv: React.FC = () => {
   // Ref to prevent fetching episodes on initial mount (already fetched in initialFetch)
   const isInitialEpisodeFetch = useRef(true);
   const activeEpisodePanelRef = useRef<HTMLButtonElement>(null);
+  const hlsPlayerRef = useRef<HLSPlayerRef>(null);
+  const currentPlayerTimeRef = useRef<number>(0);
 
   // Ne pas afficher le bouton Sources en mode HLS
   const [showSourceButton, setShowSourceButton] = useState(true);
@@ -804,9 +812,44 @@ const WatchTv: React.FC = () => {
   const handleNextEpisodeNav = (targetSeason: number, targetEpisode: number) => {
     if (!id) return;
     console.log(`[Debug] Navigating to next episode: S${targetSeason}E${targetEpisode}`);
-    // Replace navigate with full page reload
     window.location.href = `/tv/${encodeId(id)}/s/${targetSeason}/e/${targetEpisode}`;
   };
+
+  const handleAutoNextTrigger = useCallback((targetSeason: number, targetEpisode: number) => {
+    setPendingNextSeason(targetSeason);
+    setPendingNextEpisode(targetEpisode);
+    setAutoNextActive(true);
+    setAutoNextProgress(0);
+    setAutoNextCountdown(5);
+  }, []);
+
+  const handleSkipIntro = useCallback(() => {
+    hlsPlayerRef.current?.seekTo(currentPlayerTimeRef.current + 90);
+    setShowSkipIntro(false);
+  }, []);
+
+  // Skip Intro : affiche entre 1:30 et 2:30 selon le temps vidéo réel (onPlayerTimeUpdate)
+  useEffect(() => {
+    setShowSkipIntro(false);
+    currentPlayerTimeRef.current = 0;
+  }, [seasonNumber, episodeNumber]);
+
+  useEffect(() => {
+    if (!autoNextActive) return;
+    if (autoNextCountdown <= 0) {
+      setAutoNextActive(false);
+      setAutoNextProgress(0);
+      if (pendingNextSeason !== null && pendingNextEpisode !== null) {
+        handleNextEpisodeNav(pendingNextSeason, pendingNextEpisode);
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      setAutoNextCountdown(c => c - 1);
+      setAutoNextProgress(p => Math.min(100, p + 20));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [autoNextActive, autoNextCountdown, pendingNextSeason, pendingNextEpisode]);
 
   // Helper function to extract sibnet ID from URL or other source
   const extractSibnetIdFromUrl = (): string | null => {
@@ -4154,7 +4197,7 @@ const WatchTv: React.FC = () => {
   })();
 
   return (
-    <div style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }} className="w-full bg-black text-white lg:fixed lg:inset-0 lg:overflow-hidden">
+    <div style={{ minHeight: 'calc(var(--vh, 1vh) * 100)' }} className="w-full bg-black text-white overflow-x-hidden lg:fixed lg:inset-0 lg:overflow-hidden">
       <AnimatePresence>
         {showInterstitial && (
           <WatchInterstitial
@@ -4338,8 +4381,125 @@ const WatchTv: React.FC = () => {
           </AnimatePresence>
         </div>
       ) : (
-        <div className="flex flex-col lg:flex-row w-full lg:h-full">
+        <div className="flex flex-col w-full lg:h-full">
+
+        {/* ── Barre navigation épisodes ──────────────────────────────── */}
+        {(seasonNumber > 0 && episodeNumber > 0) && (
+          <div
+            className="flex items-center justify-between px-3 py-2 mb-2 flex-shrink-0 gap-2"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              backdropFilter: 'blur(24px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '14px',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)',
+            } as React.CSSProperties}
+          >
+            {/* Précédent */}
+            {!(seasonNumber === 1 && episodeNumber === 1) ? (
+              <button
+                onClick={() => {
+                  let ts = seasonNumber, te = episodeNumber;
+                  if (te > 1) { te -= 1; }
+                  else if (ts > 1) { ts -= 1; const ps = seasons.find(s => s.season_number === ts); te = ps ? ps.episode_count : 1; }
+                  if (ts !== seasonNumber || te !== episodeNumber) handleNextEpisodeNav(ts, te);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7M18 19l-7-7 7-7" /></svg>
+                <span className="hidden sm:inline">{episodeNumber > 1 ? `S${seasonNumber}:E${String(episodeNumber-1).padStart(2,'0')}` : `S${seasonNumber-1}:E01`}</span>
+              </button>
+            ) : <div className="w-8 flex-shrink-0" />}
+
+            {/* Épisode actuel → ouvre menu */}
+            <button
+              onClick={() => setShowEpisodesMenu(!showEpisodesMenu)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95 min-w-0 flex-1 justify-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(34,197,94,0.22) 0%, rgba(124,58,237,0.22) 100%)',
+                border: '1px solid rgba(124,58,237,0.35)',
+                borderRadius: '10px',
+                color: '#fff',
+                boxShadow: '0 0 18px rgba(124,58,237,0.18)',
+                cursor: 'pointer',
+              }}
+            >
+              <svg className="w-4 h-4 opacity-60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
+              <span className="truncate">S{seasonNumber}:E{String(episodeNumber).padStart(2,'0')}{episodeTitle ? ` — ${episodeTitle.length > 22 ? episodeTitle.slice(0,22)+'…' : episodeTitle}` : ''}</span>
+              <svg className="w-3.5 h-3.5 opacity-50 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </button>
+
+            {/* Suivant */}
+            {(() => {
+              const nextS = nextEpisodeData ? nextEpisodeData.season_number : seasonNumber;
+              const nextE = nextEpisodeData ? nextEpisodeData.episode_number : episodeNumber + 1;
+              return (
+                <button
+                  onClick={() => handleNextEpisodeNav(nextS, nextE)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+                >
+                  <span className="hidden sm:inline">S{nextS}:E{String(nextE).padStart(2,'0')}</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+                </button>
+              );
+            })()}
+          </div>
+        )}
+
         <div className="relative w-full aspect-video lg:aspect-auto lg:flex-1">
+
+        {/* ── Skip Intro (overlay sur le player, toutes sources confondues) ── */}
+        {showSkipIntro && (
+          <button
+            onClick={handleSkipIntro}
+            className="flex items-center gap-2 text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+            style={{
+              position: 'absolute', bottom: '72px', left: '16px', zIndex: 300,
+              background: 'rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '10px', padding: '8px 16px', color: '#fff',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+              cursor: 'pointer',
+            } as React.CSSProperties}
+          >
+            Skip Intro
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+          </button>
+        )}
+
+        {/* ── Auto-Next (overlay bas-droite) ──────────────────────────── */}
+        {autoNextActive && (
+          <div
+            style={{
+              position: 'absolute', bottom: '72px', right: '16px', zIndex: 300,
+              background: 'rgba(10,10,15,0.75)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(124,58,237,0.3)',
+              borderRadius: '14px', padding: '12px 16px', minWidth: '176px',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 16px rgba(124,58,237,0.15)',
+            } as React.CSSProperties}
+          >
+            <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '12px', marginBottom: '8px' }}>
+              Épisode suivant dans <span style={{ color: '#22c55e', fontWeight: 700 }}>{autoNextCountdown}s</span>
+            </p>
+            <div style={{ height: '5px', background: 'rgba(255,255,255,0.12)', borderRadius: '99px', overflow: 'hidden', marginBottom: '10px' }}>
+              <div style={{ height: '100%', width: `${autoNextProgress}%`, background: 'linear-gradient(90deg, #22c55e 0%, #7c3aed 100%)', borderRadius: '99px', transition: 'width 0.9s linear' }} />
+            </div>
+            <button
+              onClick={() => { setAutoNextActive(false); setAutoNextProgress(0); setAutoNextCountdown(5); }}
+              style={{ width: '100%', padding: '5px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'rgba(255,255,255,0.6)', fontSize: '11px', cursor: 'pointer' }}
+            >
+              Annuler
+            </button>
+          </div>
+        )}
+
         {embedUrl ? ( // Render Embed Iframe
         <div className="w-full h-full flex flex-col items-center justify-center relative">
           {/* Back to Info Button */}
@@ -4722,11 +4882,16 @@ const WatchTv: React.FC = () => {
           </AnimatePresence>
         </div>
       ) : (hlsSrc && hlsSrc.trim() !== '' || loadingRivestream) && (!adPopupTriggered || shouldLoadIframe || hasClickedAd) ? ( // Only render HLS Player if hlsSrc is valid OR if loading Rivestream sources
-        <div className="w-full h-full flex items-center justify-center">
+        <div className="w-full h-full flex items-center justify-center relative">
           <HLSPlayer
+            ref={hlsPlayerRef}
             priorityCategory="moviesTv"
-            key={`${selectedSource}-${selectedMp4Source}-${hlsSrc}-${videoSource}`} // Updated key to include videoSource
+            key={`${selectedSource}-${selectedMp4Source}-${hlsSrc}-${videoSource}`}
             src={hlsSrc}
+            onPlayerTimeUpdate={(t) => {
+              currentPlayerTimeRef.current = t;
+              setShowSkipIntro(t >= 90 && t <= 150);
+            }}
             poster={showPosterPath ? `https://image.tmdb.org/t/p/w500${showPosterPath}` : undefined}
             backdrop={backdropPath ? `https://image.tmdb.org/t/p/w1280${backdropPath}` : undefined}
             className="w-full h-full"
@@ -4735,7 +4900,7 @@ const WatchTv: React.FC = () => {
             onError={handleHlsError}
             // Map properties for the nextEpisode prop
             nextEpisode={hlsNextEpisodeProp}
-            onNextEpisode={handleNextEpisodeNav}
+            onNextEpisode={handleAutoNextTrigger}
             onPreviousEpisode={handlePreviousEpisodeNavCallback}
             tvShowId={id ?? undefined}
             seasonNumber={seasonNumber}
@@ -4783,8 +4948,6 @@ const WatchTv: React.FC = () => {
               }
             }}
           />
-
-
 
           {/* Source Selection Menu */}
           <AnimatePresence>
@@ -4917,77 +5080,6 @@ const WatchTv: React.FC = () => {
 
         </div>
 
-        {/* ── Panneau Épisodes ─────────────────────────────────────────── */}
-        {seasons.length > 0 && (
-          <div
-            className="w-full lg:w-72 xl:w-80 flex-shrink-0 flex flex-col lg:h-full mt-2 lg:mt-0 overflow-hidden"
-            style={{
-              background: 'rgba(255,255,255,0.04)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-              borderRadius: '16px',
-            } as React.CSSProperties}
-          >
-            <div className="px-4 pt-4 pb-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-              <h2 className="uppercase font-semibold" style={{ fontSize: '11px', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.4)' }}>Épisodes</h2>
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {seasons.map((s) => (
-                  <button
-                    key={s.season_number}
-                    onClick={() => setSelectedSeasonNumber(s.season_number)}
-                    className="px-2.5 py-1 text-xs font-semibold transition-all duration-200"
-                    style={selectedSeasonNumber === s.season_number
-                      ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '20px', border: 'none' }
-                      : { background: 'rgba(255,255,255,0.06)', color: '#9ca3af', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)' }
-                    }
-                  >
-                    S{s.season_number} ({s.episode_count})
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div
-              className="flex-1 overflow-y-auto p-2 max-h-[50vh] lg:max-h-full ep-panel-scroll"
-              style={{ scrollbarWidth: 'thin', scrollbarColor: '#7c3aed transparent' } as React.CSSProperties}
-            >
-              {episodes.map((ep) => {
-                const isActive = ep.episode_number === episodeNumber && selectedSeasonNumber === seasonNumber;
-                return (
-                  <button
-                    key={ep.id}
-                    ref={isActive ? activeEpisodePanelRef : null}
-                    onClick={() => handleNextEpisodeNav(selectedSeasonNumber, ep.episode_number)}
-                    className="ep-card w-full flex items-center gap-2.5 px-3 py-3 mb-1.5 text-left relative overflow-hidden"
-                    style={isActive ? { background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.2)' } : {}}
-                  >
-                    {isActive && (
-                      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: 'linear-gradient(to bottom, #22c55e, #7c3aed)' }} />
-                    )}
-                    <div
-                      className="flex-shrink-0 w-9 h-9 flex items-center justify-center text-white text-xs font-bold"
-                      style={isActive
-                        ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', borderRadius: '8px' }
-                        : { background: 'rgba(255,255,255,0.08)', borderRadius: '8px' }
-                      }
-                    >
-                      E{String(ep.episode_number).padStart(2, '0')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white font-medium truncate">
-                        {shouldHide('episodeNames')
-                          ? getMaskedContent(ep.name, 'episodeNames', undefined, ep.episode_number)
-                          : `Épisode ${ep.episode_number}`}
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: '#22c55e' }}>Disponible</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         </div>
       )}
