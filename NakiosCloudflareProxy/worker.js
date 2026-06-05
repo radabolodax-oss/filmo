@@ -403,7 +403,7 @@ async function handleProxy(request, url) {
 
   // Headers neutres pour les CDN tiers (nakios.ink bloque senpai-stream etc.)
   // Headers Nakios uniquement pour les domaines Nakios eux-mêmes
-  const isNakiosDomain = /nakios\.(ink|com|me|net)/i.test(targetUrl);
+  const isNakiosDomain = /nakios\.(ink|com|me|net)|fastflux\.xyz/i.test(targetUrl);
   const proxyHeaders = isNakiosDomain ? { ...nakiosHeaders() } : {
     'User-Agent': UA,
     'Accept': '*/*',

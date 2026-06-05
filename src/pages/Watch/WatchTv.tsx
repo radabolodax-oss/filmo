@@ -828,11 +828,22 @@ const WatchTv: React.FC = () => {
     setShowSkipIntro(false);
   }, []);
 
-  // Skip Intro : affiche entre 1:30 et 2:30 selon le temps vidéo réel (onPlayerTimeUpdate)
+  // Skip Intro : affiche entre 1:30 et 2:30 (temps réel HLS via onPlayerTimeUpdate,
+  //              ou timer page pour les sources iframe/embed)
   useEffect(() => {
     setShowSkipIntro(false);
     currentPlayerTimeRef.current = 0;
   }, [seasonNumber, episodeNumber]);
+
+  useEffect(() => {
+    if (!embedUrl) return; // HLS géré par onPlayerTimeUpdate
+    let t = 0;
+    const interval = setInterval(() => {
+      t += 1;
+      setShowSkipIntro(t >= 90 && t <= 150);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [embedUrl]);
 
   useEffect(() => {
     if (!autoNextActive) return;
@@ -4381,7 +4392,7 @@ const WatchTv: React.FC = () => {
           </AnimatePresence>
         </div>
       ) : (
-        <div className="flex flex-col w-full lg:h-full">
+        <div className="flex flex-col w-full lg:h-full px-2 sm:px-4 lg:px-6">
 
         {/* ── Barre navigation épisodes ──────────────────────────────── */}
         {(seasonNumber > 0 && episodeNumber > 0) && (
@@ -4431,44 +4442,76 @@ const WatchTv: React.FC = () => {
               <svg className="w-3.5 h-3.5 opacity-50 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
             </button>
 
-            {/* Suivant */}
+            {/* Suivant — vérifie les limites de saison */}
             {(() => {
-              const nextS = nextEpisodeData ? nextEpisodeData.season_number : seasonNumber;
-              const nextE = nextEpisodeData ? nextEpisodeData.episode_number : episodeNumber + 1;
-              return (
-                <button
-                  onClick={() => handleNextEpisodeNav(nextS, nextE)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
-                >
-                  <span className="hidden sm:inline">S{nextS}:E{String(nextE).padStart(2,'0')}</span>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
-                </button>
-              );
+              if (nextEpisodeData) {
+                // API a confirmé qu'il y a un épisode suivant
+                return (
+                  <button
+                    onClick={() => handleNextEpisodeNav(nextEpisodeData.season_number, nextEpisodeData.episode_number)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                    style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+                  >
+                    <span className="hidden sm:inline">S{nextEpisodeData.season_number}:E{String(nextEpisodeData.episode_number).padStart(2,'0')}</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+                  </button>
+                );
+              }
+              // Pas de données API — vérifier via seasons[] si on a le compte d'épisodes
+              if (seasons.length > 0) {
+                const curSeason = seasons.find(s => s.season_number === seasonNumber);
+                if (curSeason && episodeNumber < curSeason.episode_count) {
+                  return (
+                    <button
+                      onClick={() => handleNextEpisodeNav(seasonNumber, episodeNumber + 1)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+                    >
+                      <span className="hidden sm:inline">S{seasonNumber}:E{String(episodeNumber + 1).padStart(2,'0')}</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+                    </button>
+                  );
+                }
+                const nextSeason = seasons.find(s => s.season_number === seasonNumber + 1);
+                if (nextSeason) {
+                  return (
+                    <button
+                      onClick={() => handleNextEpisodeNav(nextSeason.season_number, 1)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+                    >
+                      <span className="hidden sm:inline">S{nextSeason.season_number}:E01</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+                    </button>
+                  );
+                }
+              }
+              // Dernier épisode de la dernière saison
+              return <div className="w-8 flex-shrink-0" />;
             })()}
           </div>
         )}
 
         <div className="relative w-full aspect-video lg:aspect-auto lg:flex-1">
 
-        {/* ── Skip Intro (overlay sur le player, toutes sources confondues) ── */}
+        {/* ── Skip Intro (overlay bas-droite, toutes sources) ── */}
         {showSkipIntro && (
           <button
             onClick={handleSkipIntro}
-            className="flex items-center gap-2 text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+            className="flex items-center gap-2 text-xs sm:text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
             style={{
-              position: 'absolute', bottom: '72px', left: '16px', zIndex: 300,
-              background: 'rgba(255,255,255,0.08)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              borderRadius: '10px', padding: '8px 16px', color: '#fff',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+              position: 'absolute', bottom: '16px', right: '16px', zIndex: 300,
+              background: 'rgba(255,255,255,0.06)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: '10px', padding: '8px 14px', color: 'rgba(255,255,255,0.9)',
+              boxShadow: '0 0 14px rgba(124,58,237,0.2)',
               cursor: 'pointer',
             } as React.CSSProperties}
           >
             Skip Intro
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+            <svg className="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
           </button>
         )}
 

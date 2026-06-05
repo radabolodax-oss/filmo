@@ -2411,8 +2411,8 @@ const TVDetails: React.FC = () => {
   const cinemaMode = true;
 
   type InlineSource = 'nakios' | 'animesama' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'frembed';
-  const [showInlinePlayer, setShowInlinePlayer] = useState(false);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
+  const [showInlinePlayer, setShowInlinePlayer] = useState(true);
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('videasy');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
@@ -2988,7 +2988,7 @@ const TVDetails: React.FC = () => {
       season: selectedSeason!,
       episode: epNumber
     });
-
+    setInlinePlayerSource('videasy');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
@@ -3371,8 +3371,7 @@ const TVDetails: React.FC = () => {
     setSelectedEpisode(episodeToWatch);
 
     // Toujours ouvrir le lecteur inline (anime ou non)
-    const isAnime = animeMode || (tvShow?.genres ?? []).some((g: any) => g.id === 16);
-    setInlinePlayerSource(isAnime ? 'animesama' : 'vidlink');
+    setInlinePlayerSource('videasy');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
 
@@ -3391,7 +3390,6 @@ const TVDetails: React.FC = () => {
         if (hasVf) setSelectedLanguage('vf');
         else if (hasVostfr) setSelectedLanguage('vostfr');
         setSelectedPlayer('0');
-        setInlinePlayerSource('animesama');
       }
     }
     // Si animeData n'est pas encore là, le useEffect de chargement à la demande
@@ -3402,7 +3400,7 @@ const TVDetails: React.FC = () => {
     setSelectedSeason(season);
     setSelectedEpisode(epNumber);
     setLastWatched({ season, episode: epNumber });
-    setInlinePlayerSource('vidlink');
+    setInlinePlayerSource('videasy');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
     // Démarrer le timer Skip Intro (pour sources iframe qui n'exposent pas le temps vidéo)
@@ -3454,7 +3452,7 @@ const TVDetails: React.FC = () => {
     else if (episode.streaming_links.length > 0) setSelectedLanguage(episode.streaming_links[0].language);
     setSelectedPlayer('0');
     setShowInlinePlayer(true);
-    setInlinePlayerSource('animesama');
+    setInlinePlayerSource('videasy');
     scrollToInlinePlayer();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3573,8 +3571,7 @@ const TVDetails: React.FC = () => {
   const handleEpisodeSelect = async (seasonNumber: number, episodeNumber: number) => {
     setSelectedSeason(seasonNumber);
     setSelectedEpisode(episodeNumber);
-    const isAnime = animeMode || (tvShow?.genres ?? []).some((g: any) => g.id === 16);
-    setInlinePlayerSource(isAnime ? 'animesama' : 'vidlink');
+    setInlinePlayerSource('videasy');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
@@ -3940,7 +3937,7 @@ const TVDetails: React.FC = () => {
     const s = selectedSeason ?? 1;
     const e = selectedEpisode ?? 1;
     switch (inlinePlayerSource) {
-      case 'videasy':  return `https://player.videasy.net/tv/${id}/${s}/${e}`;
+      case 'videasy':  return `https://player.videasy.net/tv/${id}/${s}/${e}?autoplay=1`;
       case 'vidlink':  return `https://vidlink.pro/tv/${id}?s=${s}&e=${e}&primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
       case 'vidmoly':  return vidmolyEmbedUrl || '';
       case 'frembed':  return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
@@ -6855,7 +6852,7 @@ const TVDetails: React.FC = () => {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="mt-10 flex flex-col gap-2"
+          className="mt-10 flex flex-col gap-2 max-w-5xl mx-auto w-full"
         >
           {/* ── Barre navigation épisodes ── */}
           {selectedSeason !== null && selectedEpisode !== null && (
@@ -6900,15 +6897,42 @@ const TVDetails: React.FC = () => {
                 <span className="truncate">{tvShow?.name ? `${tvShow.name} — ` : ''}S{selectedSeason}:E{String(selectedEpisode).padStart(2,'0')}</span>
               </div>
 
-              {/* Suivant */}
-              <button
-                onClick={() => handlePanelEpisodeClick(selectedSeason, selectedEpisode + 1)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
-                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
-              >
-                <span className="hidden sm:inline">S{selectedSeason}:E{String(selectedEpisode + 1).padStart(2,'0')}</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
-              </button>
+              {/* Suivant — vérifie les limites de saison */}
+              {(() => {
+                if (!selectedSeason || !selectedEpisode) return <div className="w-8 flex-shrink-0" />;
+                const allSeasons: { season_number: number; episode_count: number }[] = tvShow?.seasons ?? [];
+                const curSeasonData = allSeasons.find(s => s.season_number === selectedSeason);
+                const maxEp = curSeasonData?.episode_count ?? (seasonsDetails[selectedSeason]?.episodes?.length ?? 0);
+                if (selectedEpisode < maxEp) {
+                  // Épisode suivant dans la même saison
+                  return (
+                    <button
+                      onClick={() => handlePanelEpisodeClick(selectedSeason, selectedEpisode + 1)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+                    >
+                      <span className="hidden sm:inline">S{selectedSeason}:E{String(selectedEpisode + 1).padStart(2,'0')}</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+                    </button>
+                  );
+                }
+                // Fin de saison — cherche la saison suivante
+                const nextSeasonData = allSeasons.find(s => s.season_number === selectedSeason + 1);
+                if (nextSeasonData) {
+                  return (
+                    <button
+                      onClick={() => handlePanelEpisodeClick(nextSeasonData.season_number, 1)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95 flex-shrink-0"
+                      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', cursor: 'pointer' }}
+                    >
+                      <span className="hidden sm:inline">S{nextSeasonData.season_number}:E01</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+                    </button>
+                  );
+                }
+                // Dernière saison, dernier épisode → pas de bouton suivant
+                return <div className="w-8 flex-shrink-0" />;
+              })()}
             </div>
           )}
 
@@ -6919,20 +6943,20 @@ const TVDetails: React.FC = () => {
             {tvShowSkipIntro && (
               <button
                 onClick={() => setTvShowSkipIntro(false)}
-                className="flex items-center gap-2 text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95"
+                className="flex items-center gap-2 text-xs sm:text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
                 style={{
-                  position: 'absolute', bottom: '72px', left: '16px', zIndex: 300,
-                  background: 'rgba(255,255,255,0.08)',
-                  backdropFilter: 'blur(20px) saturate(180%)',
-                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: '10px', padding: '8px 16px', color: '#fff',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+                  position: 'absolute', bottom: '16px', right: '16px', zIndex: 300,
+                  background: 'rgba(255,255,255,0.06)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '10px', padding: '8px 14px', color: 'rgba(255,255,255,0.9)',
+                  boxShadow: '0 0 14px rgba(124,58,237,0.2)',
                   cursor: 'pointer',
                 } as React.CSSProperties}
               >
                 Skip Intro
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
+                <svg className="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7-7 7M6 5l7 7-7 7" /></svg>
               </button>
             )}
 
@@ -7056,15 +7080,18 @@ const TVDetails: React.FC = () => {
             >
               <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
-                {([
-                  { id: 'vidlink',   label: 'Vidlink' },
-                  { id: 'animesama', label: 'Anime-Sama' },
-                  { id: 'nakios',    label: 'Nakios' },
-                  { id: 'purstream', label: 'Purestream' },
-                  { id: 'videasy',   label: 'Videasy' },
-                  { id: 'frembed',   label: 'Frembed' },
-                ] as { id: InlineSource; label: string }[])
-                  .filter(src => src.id !== 'animesama' || animeMode || (tvShow?.genres ?? []).some((g: any) => g.id === 16))
+                {((() => {
+                  const isAnimeShow = animeMode || (tvShow?.genres ?? []).some((g: any) => g.id === 16);
+                  return [
+                    { id: 'videasy',   label: 'Videasy' },
+                    ...(isAnimeShow ? [{ id: 'animesama', label: 'Anime-Sama' }] : []),
+                    { id: 'purstream', label: 'Purestream' },
+                    { id: 'nakios',    label: 'Nakios' },
+                    { id: 'vidlink',   label: 'Vidlink' },
+                    { id: 'frembed',   label: 'Frembed' },
+                  ];
+                })() as { id: InlineSource; label: string }[])
+                  .filter(() => true)
                   .map(src => (
                   <button
                     key={src.id}
@@ -7265,7 +7292,7 @@ const TVDetails: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="my-10 flex flex-col lg:flex-row lg:items-stretch gap-3"
+            className="my-10 flex flex-col gap-2 max-w-5xl mx-auto w-full"
           >
             {/* ── Player column (75%) ── */}
             <div className="w-full lg:w-3/4 min-w-0 bg-gray-900 rounded-lg overflow-hidden flex flex-col shadow-xl border border-gray-800">

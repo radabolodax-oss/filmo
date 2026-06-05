@@ -2221,8 +2221,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     if (showVostfrMenu) {
       const vostfrSources = [
         { id: 'vostfr',    label: 'Videasy',   url: '' },
+        { id: 'purstream', label: 'Purstream', url: '' },
         { id: 'vidlink',   label: 'Vidlink',   url: '' },
-        ...(movieId ? [{ id: 'purstream', label: 'Purstream', url: '' }] : []),
       ];
 
       vostfrSources.forEach(source => {
@@ -2234,13 +2234,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         // boutons Sources/Open dupliqués (rendus dans le parent ET dans l'iframe imbriqué).
         if (tvShowId != null && seasonNumber != null && episodeNumber != null) {
           // TV Show URLs
-          if      (source.id === 'vostfr')  finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
-          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          if      (source.id === 'vostfr')    finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          else if (source.id === 'purstream') finalUrl = `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'tv', id: tvShowId, season: seasonNumber, episode: episodeNumber }))}`;
+          else if (source.id === 'vidlink')   finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
         } else if (movieId) {
           // Movie URLs
           if      (source.id === 'vostfr')    finalUrl = `https://player.videasy.net/movie/${movieId}`;
-          else if (source.id === 'vidlink')   finalUrl = `https://vidlink.pro/movie/${movieId}`;
           else if (source.id === 'purstream') finalUrl = `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}`;
+          else if (source.id === 'vidlink')   finalUrl = `https://vidlink.pro/movie/${movieId}`;
         }
 
         embedSources.push({
@@ -8064,19 +8065,20 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                 >
                                   {[
                                     { id: 'vostfr',    label: 'Videasy' },
+                                    { id: 'purstream', label: 'Purstream' },
                                     { id: 'vidlink',   label: 'Vidlink' },
-                                    ...(movieId ? [{ id: 'purstream', label: 'Purstream' }] : []),
                                   ].map((vostfrSource, index) => {
                                     // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
                                     // (épisode spécial / Spéciaux TMDB) tombe dans le fallback '#' qui fait
                                     // charger la page courante en boucle dans l'iframe.
                                     const sourceUrl = movieId ?
                                       vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                                        vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
-                                          `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}` :
+                                        vostfrSource.id === 'purstream' ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}` :
+                                          `https://vidlink.pro/movie/${movieId}` :
                                       (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
                                         vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                          `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                          vostfrSource.id === 'purstream' ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'tv', id: tvShowId, season: seasonNumber, episode: episodeNumber }))}` :
+                                            `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                         '#'; // Fallback if neither movie nor TV info is present
 
                                     // Active state check for VOSTFR sources in main menu

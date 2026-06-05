@@ -2017,8 +2017,8 @@ const MovieDetails = (): JSX.Element => {
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
 
   type InlineSource = 'nakios' | 'purstream' | 'animesama' | 'videasy' | 'vidlink' | 'vidmoly' | 'frembed';
-  const [showInlinePlayer, setShowInlinePlayer] = useState(false);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
+  const [showInlinePlayer, setShowInlinePlayer] = useState(true);
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('videasy');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
@@ -2635,8 +2635,7 @@ const MovieDetails = (): JSX.Element => {
   }, [showInlinePlayer, inlinePlayerSource, movie, animeSamaMovieEpisode, MAIN_API]);
 
   const handleWatchClick = () => {
-    const isAnimeFilm = movie?.genres?.some((g: any) => g.id === 16 || g.name === 'Animation');
-    setInlinePlayerSource(isAnimeFilm ? 'animesama' : 'vidlink');
+    setInlinePlayerSource('videasy');
     setShowInlinePlayer(true);
     scrollToPlayer();
   };
@@ -2720,7 +2719,7 @@ const MovieDetails = (): JSX.Element => {
 
   const getInlinePlayerUrl = () => {
     switch (inlinePlayerSource) {
-      case 'videasy':  return `https://player.videasy.net/movie/${id}`;
+      case 'videasy':  return `https://player.videasy.net/movie/${id}?autoplay=1`;
       case 'vidlink':  return `https://vidlink.pro/movie/${id}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
       case 'vidmoly':  return vidmolyEmbedUrl || '';
       case 'frembed':  return `https://frembed.click/embed/movie/${id}`;
@@ -3084,7 +3083,7 @@ const MovieDetails = (): JSX.Element => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="relative z-10 min-h-screen text-white px-4 md:px-8 lg:px-16 py-6"
+        className="relative z-10 min-h-screen text-white px-4 md:px-8 lg:px-16 py-6 overflow-x-hidden"
       >
         {/* Header avec titre et année */}
         <motion.div
@@ -4460,11 +4459,12 @@ const MovieDetails = (): JSX.Element => {
             ) : showInlinePlayer ? (
               // Lecteur + barre de sources en dessous
               <motion.div
-                className="bg-black rounded-lg overflow-hidden"
+                className="mt-6 flex flex-col gap-2 max-w-5xl mx-auto w-full"
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3 }}
               >
+              <div className="relative w-full min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
                 {(inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
                   const loading       = inlinePlayerSource === 'nakios' ? nakiosStreamLoading : purstreamStreamLoading;
                   const streamUrl     = inlinePlayerSource === 'nakios' ? nakiosStreamUrl    : purstreamStreamUrl;
@@ -4536,27 +4536,38 @@ const MovieDetails = (): JSX.Element => {
                   />
                 )}
                 {/* Sources sous la vidéo */}
-                <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
+                <div
+                  className="border-t px-3 py-2.5 flex-shrink-0"
+                  style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    backdropFilter: 'blur(20px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                    borderColor: 'rgba(255,255,255,0.08)',
+                  }}
+                >
                   <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Source :</span>
-                    {([
-                      { id: 'vidlink',   label: 'Vidlink' },
-                      { id: 'animesama', label: 'Anime-Sama' },
-                      { id: 'nakios',    label: 'Nakios' },
-                      { id: 'purstream', label: 'Purestream' },
-                      { id: 'videasy',   label: 'Videasy' },
-                      { id: 'frembed',   label: 'Frembed' },
-                    ] as { id: InlineSource; label: string }[])
-                      .filter(src => src.id !== 'animesama' || movie?.genres?.some((g: any) => g.id === 16 || g.name === 'Animation'))
+                    <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
+                    {((() => {
+                      const isAnimeFilm = movie?.genres?.some((g: any) => g.id === 16 || g.name === 'Animation');
+                      return [
+                        { id: 'videasy',   label: 'Videasy' },
+                        ...(isAnimeFilm ? [{ id: 'animesama', label: 'Anime-Sama' }] : []),
+                        { id: 'purstream', label: 'Purestream' },
+                        { id: 'nakios',    label: 'Nakios' },
+                        { id: 'vidlink',   label: 'Vidlink' },
+                        { id: 'frembed',   label: 'Frembed' },
+                      ];
+                    })() as { id: InlineSource; label: string }[])
+                      .filter(() => true)
                       .map(src => (
                       <button
                         key={src.id}
                         onClick={() => setInlinePlayerSource(src.id)}
-                        className={`flex-shrink-0 px-2.5 py-1.5 sm:px-3 2xl:px-4 2xl:py-2 rounded text-xs 2xl:text-sm font-medium transition-colors ${
-                          inlinePlayerSource === src.id
-                            ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-                            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-                        }`}
+                        className="flex-shrink-0 px-2.5 py-1.5 sm:px-3 text-xs sm:text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
+                        style={inlinePlayerSource === src.id
+                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none', boxShadow: '0 0 14px rgba(124,58,237,0.3)' }
+                          : { background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)', color: 'rgba(255,255,255,0.75)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }
+                        }
                       >
                         {src.label}
                       </button>
@@ -4598,6 +4609,7 @@ const MovieDetails = (): JSX.Element => {
                     </>
                   );
                 })()}
+              </div>
               </motion.div>
             ) : (
               // Bouton Lecture — cinéma style (sans source picker)
