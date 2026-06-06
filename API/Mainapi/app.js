@@ -676,8 +676,8 @@ const appReady = (async () => {
       console.log("Wrapped routes initialized successfully");
     });
   } catch (error) {
-    console.error("MySQL connection error:", error.message);
-    throw error;
+    console.warn("⚠️  MySQL indisponible — le serveur démarre sans les fonctionnalités base de données:", error.message);
+    // Ne pas throw — les routes sans MySQL (anime-sama, wiflix, fstream, etc.) restent fonctionnelles
   }
 })();
 

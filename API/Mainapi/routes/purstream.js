@@ -15,13 +15,13 @@ const { generateCacheKey, CACHE_DIR } = require('../utils/cacheManager');
 const { fetchTmdbDetails, fetchTmdbImages } = require('../utils/tmdbCache');
 const { pickRandomProxy, getProxyAgent } = require('../utils/proxyManager');
 
-const PURSTREAM_BASE = 'https://api.purstream.ac/api/v1';
+const PURSTREAM_BASE = 'https://api.purstream.ch/api/v1';
 const PURSTREAM_CACHE_DIR = CACHE_DIR.PURSTREAM;
 
 // ---------------------------------------------------------------------------
 // Session Purstream — renouvellement automatique toutes les 90 minutes
 // ---------------------------------------------------------------------------
-let currentSession = process.env.PURSTREAM_SESSION || 'eyJpdiI6IlljUy9DVTgyODlhekN3VDhsZkIybGc9PSIsInZhbHVlIjoibTRPWDBWZitub0JPcW5DaVRvQ2kydUJ5T3haUW82dlI5WFo4ck1nVUVRc2NKN2Z0UWMrK1MzRHcyNHR6aGFMTnZ3UW5Ka0Q2SHN3VUg2RE9WeENxS3ZPb1d1b3BRVFU0OVpOUStaVlYraWh1QWIzYTN0Z1E1VHZWT1A1ZWhuR3YiLCJtYWMiOiJhMDgwZTVkYzI3NjA2OWI2MjAxZTkzOTdmOGI1ZTM4NzliYzE0OWQzZTRkM2RlMTY4ZDgxYzZhNWE2OWViZDIyIiwidGFnIjoiIn0%3D';
+let currentSession = process.env.PURSTREAM_SESSION || '';
 let _renewalInterval = null;
 
 const PURSTREAM_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
@@ -38,7 +38,7 @@ async function loginPurstream() {
 
   try {
     // 1. GET /login pour récupérer le token CSRF Laravel + cookies initiaux
-    const pageRes = await axios.get('https://purstream.ac/login', {
+    const pageRes = await axios.get('https://purstream.ch/login', {
       timeout: 15000,
       headers: {
         'User-Agent': PURSTREAM_UA,
@@ -56,14 +56,14 @@ async function loginPurstream() {
 
     // 2. POST /login avec les credentials
     const body = new URLSearchParams({ _token: csrfToken, email, password }).toString();
-    const loginRes = await axios.post('https://purstream.ac/login', body, {
+    const loginRes = await axios.post('https://purstream.ch/login', body, {
       timeout: 15000,
       maxRedirects: 0,
       validateStatus: s => s < 500,
       headers: {
         'User-Agent': PURSTREAM_UA,
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Referer': 'https://purstream.ac/login',
+        'Referer': 'https://purstream.ch/login',
         'Cookie': initialCookies,
       },
     });
@@ -71,7 +71,7 @@ async function loginPurstream() {
     // 3. Extraire purstream_session depuis Set-Cookie
     const setCookies = loginRes.headers['set-cookie'] || [];
     const sessionCookie = setCookies
-      .map(c => c.match(/purstream_session=([^;]+)/))
+      .map(c => c.match(/(?:purstream_session|session)=([^;]+)/))
       .find(Boolean)?.[1];
 
     if (!sessionCookie) throw new Error('Cookie purstream_session absent de la réponse login');
@@ -125,7 +125,7 @@ function wrapSourceUrl(url, isVip) {
   return url;
 }
 
-/** Fait une requête vers PurStream avec un proxy SOCKS5 aléatoire */
+/** Fait une requête vers PurStream */
 async function purstreamRequest(urlPath) {
   const proxy = pickRandomProxy();
   const agent = proxy ? getProxyAgent(proxy) : null;
@@ -133,8 +133,10 @@ async function purstreamRequest(urlPath) {
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
     'Accept': 'application/json',
-    'Cookie': `purstream_session=${currentSession}`,
+    'Origin': 'https://purstream.ch',
+    'Referer': 'https://purstream.ch/',
   };
+  if (currentSession) headers['Cookie'] = `session=${currentSession}`;
 
   return axios({
     url: `${PURSTREAM_BASE}${urlPath}`,
@@ -220,7 +222,14 @@ async function fetchAndCacheMapping(tmdbId, type, cacheKey) {
     try {
       const response = await purstreamRequest(`/search-bar/search/${encodeURIComponent(query)}`);
       if (response.data?.type === 'success') {
-        const items = response.data.data?.items?.movies?.items || [];
+        const searchData = response.data.data?.items || {};
+        // Pour films : movies.items ; pour séries : series.items (plusieurs noms possibles)
+        let items = [];
+        if (type === 'movie') {
+          items = searchData.movies?.items || [];
+        } else {
+          items = searchData.series?.items || searchData.shows?.items || searchData.tv?.items || searchData.tvShows?.items || [];
+        }
         for (const item of items) {
           if (!allItems.some(existing => existing.id === item.id)) {
             allItems.push(item);
@@ -271,7 +280,17 @@ async function fetchAndCacheMapping(tmdbId, type, cacheKey) {
     return false;
   };
 
-  const best = allItems.find(item => item.type === type && posterMatch(item));
+  // Poster match en priorité, puis fallback titre exact si pas de match poster
+  let best = allItems.find(item => posterMatch(item));
+  if (!best) {
+    const normalizeTitle = s => s?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+    const tmdbNorm = normalizeTitle(tmdbTitle);
+    const tmdbOrigNorm = normalizeTitle(tmdbOriginalTitle);
+    best = allItems.find(item => {
+      const itemNorm = normalizeTitle(item.title);
+      return itemNorm === tmdbNorm || (tmdbOrigNorm && itemNorm === tmdbOrigNorm);
+    });
+  }
 
   if (!best) {
     console.warn(`[PURSTREAM] Aucun match pour ${type}:${tmdbId} "${tmdbTitle}"`);

@@ -22,10 +22,11 @@ import { getTmdbLanguage } from '../i18n';
 import i18n from '../i18n';
 import { useProfile } from '../context/ProfileContext';
 import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed } from '../utils/certificationUtils';
+import { getVipHeaders } from '../utils/authUtils';
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
-const PURSTREAM_PROXY = (import.meta.env.VITE_PURSTREAM_PROXY as string || 'https://purstream-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
+const PURSTREAM_EMBED_BASE = 'https://purstream.ch/watch';
 const NAKIOS_PROXY    = (import.meta.env.VITE_NAKIOS_PROXY as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
 
 interface Movie {
@@ -1002,7 +1003,7 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
   const [videoSource, setVideoSource] = useState<string | null>(null);
   const [customSources, setCustomSources] = useState<string[]>([]);
   // Change l'état initial pour ne pas sélectionner de lecteur par défaut et corrige le type
-  type PlayerSourceType = 'primary' | 'vostfr' | 'videasy' | 'purstream' | 'adfree' | 'multi' | 'omega' | 'darkino' | 'mp4' | number;
+  type PlayerSourceType = 'primary' | 'vostfr' | 'purstream' | 'adfree' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'wiflix' | 'fstream' | number;
   const [selectedSource, setSelectedSource] = useState<PlayerSourceType | null>(null);
   const [frembedAvailable, setFrembedAvailable] = useState(true);
   const [adFreeSource, setAdFreeSource] = useState<string | null>(null);
@@ -1012,6 +1013,12 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
   const [selectedPlayerLink, setSelectedPlayerLink] = useState<number>(0);
   const [loadingCoflix, setLoadingCoflix] = useState(true);
   const [showVostfrOptions, setShowVostfrOptions] = useState(false);
+  const [wiflixSources, setWiflixSources] = useState<{ url: string; label: string; category: string }[]>([]);
+  const [loadingWiflix, setLoadingWiflix] = useState(true);
+  const [selectedWiflixSource, setSelectedWiflixSource] = useState(0);
+  const [fstreamSources, setFstreamSources] = useState<{ url: string; label: string; category: string }[]>([]);
+  const [loadingFstream, setLoadingFstream] = useState(true);
+  const [selectedFstreamSource, setSelectedFstreamSource] = useState(0);
 
   // Store scroll position for fullscreen handling
   const [savedScrollPosition, setSavedScrollPosition] = useState<number>(0);
@@ -1034,6 +1041,10 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
   // MP4 sources states
   const [mp4Sources, setMp4Sources] = useState<{ url: string; label?: string; language?: string; isVip?: boolean }[]>([]);
   const [selectedMp4Source, setSelectedMp4Source] = useState<number>(0);
+
+  // Purstream embed ID (résolu via le backend)
+  const [purstreamEmbedId, setPurstreamEmbedId] = useState<number | null>(null);
+  const [purstreamEmbedLoading, setPurstreamEmbedLoading] = useState(false);
 
   // State for iframe poster logic
   const [showIframe, setShowIframe] = useState(true);
@@ -1269,6 +1280,8 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
       setLoadingCoflix(true);
       setLoadingOmega(true);
       setLoadingAdFree(true);
+      setLoadingWiflix(true);
+      setLoadingFstream(true);
 
       // =========== INITIATE ALL ASYNCHRONOUS SOURCE CHECKS IN PARALLEL ===========
       const darkinoPromise = checkDarkinoAvailability(
@@ -1333,21 +1346,55 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
         }
       })().finally(() => setLoadingOmega(false));
 
+      const wiflixPromise = axios.get(`${MAIN_API}/api/wiflix/movie/${movieId}`, { timeout: 30000 })
+        .then(response => {
+          const data = response.data;
+          if (data?.players) {
+            const vf = (data.players.vf || []).map((p: any) => ({ url: p.url, label: p.name || 'VF', category: 'VF' }));
+            const vostfr = (data.players.vostfr || []).map((p: any) => ({ url: p.url, label: p.name || 'VOSTFR', category: 'VOSTFR' }));
+            return [...vf, ...vostfr];
+          }
+          return [];
+        })
+        .catch(() => [])
+        .finally(() => setLoadingWiflix(false));
+
+      const fstreamPromise = axios.get(`${MAIN_API}/api/fstream/movie/${movieId}`, { headers: { ...getVipHeaders() }, timeout: 30000 })
+        .then(response => {
+          const data = response.data;
+          if (data?.players) {
+            const sources: { url: string; label: string; category: string }[] = [];
+            ['VFQ', 'VFF', 'VOSTFR', 'Default'].forEach(lang => {
+              (data.players[lang] || []).forEach((p: any) => {
+                sources.push({ url: p.url, label: p.player || lang, category: lang });
+              });
+            });
+            return sources;
+          }
+          return [];
+        })
+        .catch(() => [])
+        .finally(() => setLoadingFstream(false));
+
       // =========== AWAIT ALL SOURCE CHECKS TO COMPLETE ===========
       const [
         darkinoResult,
         availabilityResult,
         frembedResult,
-        adFreeResult, // This is primarily to ensure it completes, state is set in fetchAdFreeSource
+        adFreeResult,
         coflixResult,
-        omegaResult
+        omegaResult,
+        wiflixResult,
+        fstreamResult
       ] = await Promise.all([
         darkinoPromise,
         availabilityPromise,
         frembedPromise,
         adFreePromise,
         coflixPromise,
-        omegaPromise
+        omegaPromise,
+        wiflixPromise,
+        fstreamPromise
       ]);
 
       // =========== PROCESS DARKINO RESULTS ===========
@@ -1382,7 +1429,9 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
         setOmegaData(omegaResult);
       }
 
-      // Note: adFreeSource state is set within fetchAdFreeSource function
+      setWiflixSources(Array.isArray(wiflixResult) ? wiflixResult : []);
+      setFstreamSources(Array.isArray(fstreamResult) ? fstreamResult : []);
+      void adFreeResult;
 
     } catch (error) {
       console.error('Error fetching video sources:', error);
@@ -1392,6 +1441,8 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
       setLoadingCoflix(false);
       setLoadingOmega(false);
       setLoadingDarkino(false);
+      setLoadingWiflix(false);
+      setLoadingFstream(false);
     }
   };
 
@@ -1467,6 +1518,22 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
     };
   }, [savedScrollPosition]);
 
+  // Résolution Purstream ID pour l'embed principal
+  useEffect(() => {
+    if (selectedSource !== 'purstream' || !movieId) {
+      setPurstreamEmbedId(null);
+      return;
+    }
+    let cancelled = false;
+    setPurstreamEmbedLoading(true);
+    fetch(`${MAIN_API}/api/purstream/movie/${movieId}/stream`)
+      .then(r => r.json())
+      .then(data => { if (!cancelled && data.purstream_id) setPurstreamEmbedId(data.purstream_id); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setPurstreamEmbedLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedSource, movieId]);
+
   if (!videoSource && customSources.length === 0 && !adFreeSource && !coflixData && !loadingAdFree && !loadingCoflix && !loadingOmega) {
     return (
       <div className="flex items-center justify-center h-[500px] bg-gray-800 rounded-lg">
@@ -1495,8 +1562,10 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
         !(darkinoAvailable) &&
         !(coflixData && coflixData.player_links && coflixData.player_links.length > 0) &&
         !(omegaData && omegaData.player_links && omegaData.player_links.length > 0) &&
+        !(wiflixSources.length > 0) &&
+        !(fstreamSources.length > 0) &&
         !adFreeSource &&
-        !loadingDarkino && !loadingCoflix && !loadingOmega && !loadingAdFree && (
+        !loadingDarkino && !loadingCoflix && !loadingOmega && !loadingAdFree && !loadingWiflix && !loadingFstream && (
           <div className="bg-yellow-800/30 border border-yellow-600 p-4 rounded-lg mb-6">
             <p className="text-yellow-200 text-sm">
               {t('details.episodeNotOnMainSource')}
@@ -1505,205 +1574,262 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
           </div>
         )}
 
-      <div className="flex justify-center gap-4 mb-4 flex-wrap">
-        <button
-          onClick={() => handleSelectSource('darkino')}
-          disabled={loadingDarkino || !darkinoAvailable}
-          className={`px-4 py-2 rounded flex items-center gap-2 ${selectedSource === 'darkino'
-            ? 'bg-orange-600 text-white'
-            : loadingDarkino
-              ? 'bg-orange-700/50 text-white cursor-not-allowed'
-              : darkinoAvailable
-                ? 'bg-orange-700/70 hover:bg-orange-600/90 text-white'
-                : 'bg-gray-700/50 text-gray-400 cursor-not-allowed'
-            }`}
-        >
-          {loadingDarkino ? (
-            <>
-              <svg className="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {vipRetryMessage || t('details.searchingNightflix')}
-            </>
-          ) : darkinoAvailable ? (
-            <>
-              <span className="inline-block w-2 h-2 bg-orange-400 rounded-full"></span>
-              {t('details.playerNightflix')}
-            </>
-          ) : !loadingDarkino && movieTitle ? (
-            <>
-              <span className="inline-block w-2 h-2 bg-gray-400 rounded-full"></span>
-              {t('details.nightflixNotAvailable')}
-            </>
-          ) : null}
-        </button>
-
-        {frembedAvailable && (
-          <button
-            onClick={() => handleSelectSource('primary')}
-            className={`px-4 py-2 rounded ${selectedSource === 'primary'
-              ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-              : 'bg-gray-700 hover:bg-gray-600'
-              }`}
-          >
-            {t('details.playerVF')}
-          </button>
-        )}
-
-        <div className="relative">
-          <button
-            onClick={() => setShowVostfrOptions(!showVostfrOptions)}
-            className={`px-4 py-2 rounded flex items-center gap-2 ${(selectedSource === 'vostfr' || selectedSource === 'videasy' || selectedSource === 'purstream')
-              ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-              : 'bg-gray-700 hover:bg-gray-600'
-              }`}
-          >
-            {t('details.playersVOSTFR')}
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              className={`w-4 h-4 transition-transform ${showVostfrOptions ? 'rotate-180' : ''}`}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {showVostfrOptions && (
-            <div className="absolute z-50 top-full left-0 mt-1 bg-gray-800 rounded-lg shadow-lg overflow-hidden min-w-[200px]">
-              <button onClick={() => handleSelectSource('vostfr')} className={`w-full px-4 py-2 text-left ${selectedSource === 'vostfr' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Videasy</button>
-              <button onClick={() => handleSelectSource('videasy')} className={`w-full px-4 py-2 text-left ${selectedSource === 'videasy' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Vidlink</button>
-              <button onClick={() => handleSelectSource('purstream')} className={`w-full px-4 py-2 text-left ${selectedSource === 'purstream' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'hover:bg-gray-700'}`}>Purstream</button>
-            </div>
-          )}
+      {/* ===== SOURCE PANEL — Liquid Glass ===== */}
+      <div className="my-5 rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+        <div className="flex items-center gap-2.5 px-5 py-3 border-b border-white/[0.06]">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
         </div>
-
-        <button
-          onClick={() => handleSelectSource('multi')}
-          disabled={loadingCoflix || !(coflixData && coflixData.player_links && coflixData.player_links.length > 0)}
-          className={`px-4 py-2 rounded flex items-center gap-2 ${selectedSource === 'multi'
-            ? 'bg-blue-600 text-white'
-            : loadingCoflix
-              ? 'bg-blue-700/50 text-white cursor-not-allowed'
-              : (coflixData && coflixData.player_links && coflixData.player_links.length > 0)
-                ? 'bg-blue-700/70 hover:bg-blue-600/90 text-white'
-                : 'bg-gray-700/50 text-gray-400 cursor-not-allowed'
-            }`}
-        >
-          {loadingCoflix ? (
-            <>
-              <svg className="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {t('details.playerMulti')}
-            </>
-          ) : (
-            <>{t('details.playerMulti')}</>
-          )}
-        </button>
-
-        <button
-          onClick={() => handleSelectSource('omega')}
-          disabled={loadingOmega || !(omegaData && omegaData.player_links && omegaData.player_links.length > 0)}
-          className={`px-4 py-2 rounded flex items-center gap-2 ${selectedSource === 'omega'
-            ? 'bg-white/10 text-white'
-            : loadingOmega
-              ? 'bg-white/10 text-white cursor-not-allowed'
-              : (omegaData && omegaData.player_links && omegaData.player_links.length > 0)
-                ? 'bg-white/10 hover:bg-white/10 text-white'
-                : 'bg-gray-700/50 text-gray-400 cursor-not-allowed'
-            }`}
-        >
-          {loadingOmega ? (
-            <>
-              <svg className="animate-spin h-4 w-4 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              {t('details.playerOmega')}
-            </>
-          ) : (
-            <>
-              {t('details.playerOmega')}
-              <span className="text-xs bg-green-600 text-white px-1 py-0.5 rounded">{t('details.noAds')}</span>
-            </>
-          )}
-        </button>
-
-
-        {customSources.map((src, index) => {
-          const srcLower = src.toLowerCase();
-          const isSeek = srcLower.includes('embedseek.') || srcLower.includes('seekplayer.') || srcLower.includes('seeks.cloud') || srcLower.includes('seekplays.');
-          return (
-          <button
-            key={index}
-            onClick={() => handleSelectSource(index)}
-            className={`px-4 py-2 rounded ${selectedSource === index
-              ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
-              : 'bg-gray-700 hover:bg-gray-600'
-              }`}
-          >
-            {isSeek ? `SeekStreaming ${index + 1}` : t('details.playerNumber', { number:
-              (frembedAvailable ? 1 : 0) +
-              (adFreeSource ? 1 : 0) +
-              2 + index
-            })}
-          </button>
-          );
-        })}
+        <div className="p-4 space-y-5">
+          {/* ——— VF ——— */}
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-white/25 mb-3 px-0.5">Français (VF)</p>
+            <div className="flex flex-wrap gap-2">
+              {(loadingDarkino || darkinoAvailable) && (
+                <button
+                  onClick={() => handleSelectSource('darkino')}
+                  disabled={loadingDarkino}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                    selectedSource === 'darkino'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                      : loadingDarkino
+                        ? 'bg-white/[0.03] border-white/8 text-white/35 cursor-default'
+                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                  }`}
+                >
+                  {loadingDarkino
+                    ? <span className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin flex-shrink-0" />
+                    : <span className="w-2 h-2 rounded-full bg-orange-400 shadow-[0_0_6px_rgba(251,146,60,0.9)] flex-shrink-0" />
+                  }
+                  <span>{loadingDarkino ? (vipRetryMessage || 'Nightflix…') : 'Nightflix'}</span>
+                </button>
+              )}
+              {(loadingCoflix || (coflixData?.player_links && coflixData.player_links.length > 0)) && (
+                <button
+                  onClick={() => handleSelectSource('multi')}
+                  disabled={loadingCoflix || !(coflixData?.player_links?.length)}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                    selectedSource === 'multi'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                      : loadingCoflix
+                        ? 'bg-white/[0.03] border-white/8 text-white/35 cursor-default'
+                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                  }`}
+                >
+                  {loadingCoflix && <span className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin flex-shrink-0" />}
+                  <span>Multi</span>
+                </button>
+              )}
+              {(loadingOmega || (omegaData?.player_links && omegaData.player_links.length > 0)) && (
+                <button
+                  onClick={() => handleSelectSource('omega')}
+                  disabled={loadingOmega || !(omegaData?.player_links?.length)}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                    selectedSource === 'omega'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                      : loadingOmega
+                        ? 'bg-white/[0.03] border-white/8 text-white/35 cursor-default'
+                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                  }`}
+                >
+                  {loadingOmega && <span className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin flex-shrink-0" />}
+                  <span>Omega</span>
+                  {!loadingOmega && omegaData?.player_links && omegaData.player_links.length > 0 && (
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/20">0 pub</span>
+                  )}
+                </button>
+              )}
+              {(loadingWiflix || wiflixSources.length > 0) && (
+                <button
+                  onClick={() => handleSelectSource('wiflix')}
+                  disabled={loadingWiflix || wiflixSources.length === 0}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                    selectedSource === 'wiflix'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                      : loadingWiflix
+                        ? 'bg-white/[0.03] border-white/8 text-white/35 cursor-default'
+                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                  }`}
+                >
+                  {loadingWiflix && <span className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin flex-shrink-0" />}
+                  <span>Wiflix</span>
+                </button>
+              )}
+              {(loadingFstream || fstreamSources.length > 0) && (
+                <button
+                  onClick={() => handleSelectSource('fstream')}
+                  disabled={loadingFstream || fstreamSources.length === 0}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                    selectedSource === 'fstream'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                      : loadingFstream
+                        ? 'bg-white/[0.03] border-white/8 text-white/35 cursor-default'
+                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                  }`}
+                >
+                  {loadingFstream && <span className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin flex-shrink-0" />}
+                  <span>FStream</span>
+                </button>
+              )}
+              {frembedAvailable && (
+                <button
+                  onClick={() => handleSelectSource('primary')}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                    selectedSource === 'primary'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                      : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                  }`}
+                >
+                  {t('details.playerVF')}
+                </button>
+              )}
+              {adFreeSource && (
+                <button
+                  onClick={() => handleSelectSource('adfree')}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                    selectedSource === 'adfree'
+                      ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                      : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-yellow-400 flex-shrink-0" />
+                  <span>Sans pub</span>
+                </button>
+              )}
+              {customSources.map((src, index) => {
+                const srcLower = src.toLowerCase();
+                const isSeek = srcLower.includes('embedseek.') || srcLower.includes('seekplayer.') || srcLower.includes('seeks.cloud') || srcLower.includes('seekplays.');
+                return (
+                  <button
+                    key={`custom_${index}`}
+                    onClick={() => handleSelectSource(index)}
+                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                      selectedSource === index
+                        ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                    }`}
+                  >
+                    {isSeek ? `SeekStreaming ${index + 1}` : `Prowler ${index + 1}`}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* ——— VOSTFR ——— */}
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-white/25 mb-3 px-0.5">VOSTFR / VO</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleSelectSource('vostfr')}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                  selectedSource === 'vostfr'
+                    ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                    : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                }`}
+              >
+                Videasy
+              </button>
+              <button
+                onClick={() => handleSelectSource('purstream')}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                  selectedSource === 'purstream'
+                    ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                    : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                }`}
+              >
+                Purstream
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Removed the duplicate VIP source section here */}
-
-      {selectedSource === 'multi' && coflixData && coflixData.player_links && coflixData.player_links.length > 0 && (
-        <div className="mb-4 bg-gray-900 p-4 rounded-lg">
-          <h3 className="text-lg font-medium mb-3">{t('details.sourcesAvailable')}</h3>
+      {selectedSource === 'multi' && coflixData?.player_links && coflixData.player_links.length > 0 && (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm p-4">
+          <p className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3">{t('details.sourcesAvailable')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {coflixData.player_links.map((link, index) => (
               <button
                 key={index}
-                onClick={() => {
-                  setSelectedPlayerLink(index);
-                  scrollToPlayer();
-                }}
-                className={`px-4 py-2 rounded text-left ${selectedPlayerLink === index
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 hover:bg-gray-700'
-                  }`}
+                onClick={() => { setSelectedPlayerLink(index); scrollToPlayer(); }}
+                className={`px-3 py-2 rounded-lg text-left text-sm border transition-all duration-200 ${
+                  selectedPlayerLink === index
+                    ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                    : 'bg-white/[0.04] border-white/8 text-white/80 hover:bg-white/8 hover:border-white/15'
+                }`}
               >
                 <div className="font-medium">{getDisplayName(link.quality)}</div>
-                <div className="text-xs opacity-75">{link.language}</div>
+                <div className="text-xs opacity-60 mt-0.5">{link.language}</div>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {selectedSource === 'omega' && omegaData && omegaData.player_links && omegaData.player_links.length > 0 && (
-        <div className="mb-4 bg-gray-900 p-4 rounded-lg">
-          <h3 className="text-lg font-medium mb-3">{t('details.sourcesOmega')} - {omegaData.version}</h3>
+      {selectedSource === 'omega' && omegaData?.player_links && omegaData.player_links.length > 0 && (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm p-4">
+          <p className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3">{t('details.sourcesOmega')} — {omegaData.version}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {omegaData.player_links.map((playerInfo, index) => (
               <button
                 key={index}
-                onClick={() => {
-                  setSelectedOmegaPlayer(index);
-                  scrollToPlayer();
-                }}
-                className={`px-4 py-2 rounded text-left ${selectedOmegaPlayer === index
-                  ? 'bg-white/10 text-white'
-                  : 'bg-gray-800 hover:bg-gray-700'
-                  }`}
+                onClick={() => { setSelectedOmegaPlayer(index); scrollToPlayer(); }}
+                className={`px-3 py-2 rounded-lg text-left text-sm border transition-all duration-200 ${
+                  selectedOmegaPlayer === index
+                    ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                    : 'bg-white/[0.04] border-white/8 text-white/80 hover:bg-white/8 hover:border-white/15'
+                }`}
               >
-                <div className="font-medium">
+                <div className="font-medium flex items-center gap-2">
                   {playerInfo.player}
-                  {(playerInfo.player.toLowerCase() === "supervideo" || playerInfo.player.toLowerCase() === "dropload") &&
-                    <span className="ml-2 text-xs bg-green-600 text-white px-1 py-0.5 rounded">{t('details.noAds')}</span>
-                  }
+                  {(playerInfo.player.toLowerCase() === 'supervideo' || playerInfo.player.toLowerCase() === 'dropload') && (
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded-full border border-emerald-500/20">{t('details.noAds')}</span>
+                  )}
                 </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedSource === 'wiflix' && wiflixSources.length > 0 && (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm p-4">
+          <p className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3">Wiflix — Lecteurs</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {wiflixSources.map((src, index) => (
+              <button
+                key={index}
+                onClick={() => { setSelectedWiflixSource(index); scrollToPlayer(); }}
+                className={`px-3 py-2 rounded-lg text-left text-sm border transition-all duration-200 ${
+                  selectedWiflixSource === index
+                    ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                    : 'bg-white/[0.04] border-white/8 text-white/80 hover:bg-white/8 hover:border-white/15'
+                }`}
+              >
+                <div className="font-medium">{src.label}</div>
+                <div className="text-xs opacity-60 mt-0.5">{src.category}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedSource === 'fstream' && fstreamSources.length > 0 && (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm p-4">
+          <p className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3">FStream — Lecteurs</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {fstreamSources.map((src, index) => (
+              <button
+                key={index}
+                onClick={() => { setSelectedFstreamSource(index); scrollToPlayer(); }}
+                className={`px-3 py-2 rounded-lg text-left text-sm border transition-all duration-200 ${
+                  selectedFstreamSource === index
+                    ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                    : 'bg-white/[0.04] border-white/8 text-white/80 hover:bg-white/8 hover:border-white/15'
+                }`}
+              >
+                <div className="font-medium">{src.label}</div>
+                <div className="text-xs opacity-60 mt-0.5">{src.category}</div>
               </button>
             ))}
           </div>
@@ -1711,59 +1837,47 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
       )}
 
       {(selectedSource === 'darkino' || selectedSource === 'mp4') && (darkinoAvailable || mp4Sources.length > 0) && (
-        <div className="mb-4 bg-gray-900 p-4 rounded-lg">
-          <h3 className="text-lg font-medium mb-3">{t('details.sourcesNightflix')}</h3>
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-sm p-4">
+          <p className="text-xs font-medium text-white/40 uppercase tracking-wider mb-3">{t('details.sourcesNightflix')}</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {/* MP4 Sources */}
             {mp4Sources.map((source, index) => (
               <button
                 key={`mp4-source-${index}`}
-                onClick={() => {
-                  setSelectedSource('mp4');
-                  setSelectedMp4Source(index);
-                  setLoadingError(false);
-                  scrollToPlayer();
-                }}
-                className={`px-4 py-2 rounded text-left ${selectedSource === 'mp4' && selectedMp4Source === index
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-800 hover:bg-gray-700'
-                  }`}
+                onClick={() => { setSelectedSource('mp4'); setSelectedMp4Source(index); setLoadingError(false); scrollToPlayer(); }}
+                className={`px-3 py-2 rounded-lg text-left text-sm border transition-all duration-200 ${
+                  selectedSource === 'mp4' && selectedMp4Source === index
+                    ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                    : 'bg-white/[0.04] border-white/8 text-white/80 hover:bg-white/8 hover:border-white/15'
+                }`}
               >
-                <div className="font-medium flex items-center justify-between">
-                  <span>{t('details.sourceMp4', { number: index + 1 })}</span>
+                <div className="font-medium flex items-center gap-1.5">
+                  {source.isVip && <span className="text-yellow-400 text-xs">⭐</span>}
+                  {t('details.sourceMp4', { number: index + 1 })}
                 </div>
-                <div className="text-xs opacity-75 flex items-center">
-                  <span className="text-green-400 font-semibold">{source.label}</span>
-                  <span className="mx-1">•</span>
+                <div className="text-xs opacity-60 mt-0.5">
+                  <span className="text-emerald-400 font-semibold">{source.label}</span>
+                  <span className="mx-1">·</span>
                   <span>{source.language || t('details.langFrench')}</span>
                 </div>
               </button>
             ))}
-
-            {/* Darkino Sources */}
             {darkinoSources.map((source, index) => (
               <button
                 key={`vip-source-${index}`}
-                onClick={() => {
-                  setSelectedSource('darkino');
-                  setSelectedDarkinoSource(index);
-                  setLoadingError(false);
-                  scrollToPlayer();
-                }}
-                className={`px-4 py-2 rounded text-left ${selectedSource === 'darkino' && selectedDarkinoSource === index
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-800 hover:bg-gray-700'
-                  }`}
+                onClick={() => { setSelectedSource('darkino'); setSelectedDarkinoSource(index); setLoadingError(false); scrollToPlayer(); }}
+                className={`px-3 py-2 rounded-lg text-left text-sm border transition-all duration-200 ${
+                  selectedSource === 'darkino' && selectedDarkinoSource === index
+                    ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                    : 'bg-white/[0.04] border-white/8 text-white/80 hover:bg-white/8 hover:border-white/15'
+                }`}
               >
                 <div className="font-medium">{source.label || source.quality || t('details.sourceLabel', { number: index + 1 })}</div>
-                <div className="text-xs opacity-75">{source.language || t('details.langFrench')} - {t('details.m3u8Label')}</div>
+                <div className="text-xs opacity-60 mt-0.5">{source.language || t('details.langFrench')} · M3U8</div>
               </button>
             ))}
           </div>
-
-          {/* Add M3U8 Timeout Control Section Here */}
-          <div className="mt-4 pt-4 border-t border-gray-700">
-            <label htmlFor="m3u8TimeoutInput" className="block text-sm font-medium text-gray-300 mb-2">
+          <div className="mt-4 pt-4 border-t border-white/[0.06]">
+            <label htmlFor="m3u8TimeoutInput" className="block text-xs font-medium text-white/40 mb-2">
               {t('details.timeoutNightflix')}
             </label>
             <div className="flex items-center gap-2">
@@ -1775,21 +1889,19 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
                 step="500"
                 value={m3u8Timeout}
                 onChange={(e) => setM3u8Timeout(parseInt(e.target.value, 10))}
-                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500"
               />
-              <span className="text-sm text-gray-400 font-mono bg-gray-800 px-2 py-1 rounded">
+              <span className="text-xs text-white/40 font-mono bg-white/5 px-2 py-1 rounded-lg border border-white/8">
                 {m3u8Timeout}ms
               </span>
               <button
-                onClick={() => setM3u8Timeout(3000)} // Reset to default
-                className="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded"
+                onClick={() => setM3u8Timeout(3000)}
+                className="px-2 py-1 text-xs bg-white/5 hover:bg-white/10 border border-white/8 rounded-lg text-white/50 transition-colors"
               >
                 {t('common.reset')}
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {t('details.timeoutDescription')}
-            </p>
+            <p className="text-xs text-white/25 mt-1">{t('details.timeoutDescription')}</p>
           </div>
         </div>
       )}
@@ -1910,12 +2022,13 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
             src={
               selectedSource === 'primary' ? `https://frembed.click/embed/movie/${movieId}` :
                 selectedSource === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                  selectedSource === 'videasy' ? `https://vidlink.pro/movie/${movieId}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false` :
-                    selectedSource === 'purstream' ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}` :
+                  selectedSource === 'purstream' ? (purstreamEmbedId ? `${PURSTREAM_EMBED_BASE}/${btoa(JSON.stringify({ type: 'movie', id: purstreamEmbedId }))}` : '') :
                     selectedSource === 'adfree' ? adFreeSource || "" :
                       selectedSource === 'multi' ? coflixData?.player_links?.[selectedPlayerLink]?.decoded_url || "" :
                         selectedSource === 'omega' ? omegaData?.player_links?.[selectedOmegaPlayer]?.link || "" :
-                          typeof selectedSource === 'number' ? customSources[selectedSource] : ""
+                          selectedSource === 'wiflix' ? wiflixSources[selectedWiflixSource]?.url || "" :
+                            selectedSource === 'fstream' ? fstreamSources[selectedFstreamSource]?.url || "" :
+                              typeof selectedSource === 'number' ? customSources[selectedSource] : ""
             }
             className="w-full h-full"
             allowFullScreen
@@ -2572,7 +2685,7 @@ const MovieDetails = (): JSX.Element => {
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id]);
 
-  // Résolution du flux Purstream via le Worker (pas d'iframe — lecteur natif)
+  // Résolution Purstream : récupère purstream_id + flux HLS via le backend
   useEffect(() => {
     if (!showInlinePlayer || inlinePlayerSource !== 'purstream' || !id) {
       setPurstreamStreamUrl(null);
@@ -2581,9 +2694,12 @@ const MovieDetails = (): JSX.Element => {
     let cancelled = false;
     setPurstreamStreamLoading(true);
     setPurstreamStreamUrl(null);
-    fetch(`${PURSTREAM_PROXY}/stream?type=movie&tmdb=${id}`)
+    fetch(`${MAIN_API}/api/purstream/movie/${id}/stream`)
       .then(r => r.json())
-      .then(data => { if (!cancelled) setPurstreamStreamUrl(data.sources?.[0]?.url || null); })
+      .then(data => {
+        if (cancelled) return;
+        setPurstreamStreamUrl(data.sources?.[0]?.url || null);
+      })
       .catch(() => { if (!cancelled) setPurstreamStreamUrl(null); })
       .finally(() => { if (!cancelled) setPurstreamStreamLoading(false); });
     return () => { cancelled = true; };
@@ -2614,18 +2730,20 @@ const MovieDetails = (): JSX.Element => {
     if (animeSamaMovieEpisode) return;
     let cancelled = false;
     setAnimeSamaMovieLoading(true);
-    fetch(`${MAIN_API}/api/animesama/search?q=${encodeURIComponent(movie.title)}`)
-      .then(r => r.json())
-      .then(async (results: any[]) => {
-        if (cancelled || !results?.length) return;
-        const best = results[0];
-        const epRes = await fetch(`${MAIN_API}/api/animesama/episodes?id=${best.id}&episode=1`);
-        const epData = await epRes.json();
+    axios.get(`${MAIN_API}/anime/search/${encodeURIComponent(movie.title)}`)
+      .then(res => {
         if (cancelled) return;
-        setAnimeSamaMovieEpisode(epData);
-        const links: any[] = epData?.streaming_links ?? [];
-        const hasVf = links.some(l => l.language === 'vf');
-        const hasVostfr = links.some(l => l.language === 'vostfr');
+        const results: any[] = res.data || [];
+        if (!results.length) return;
+        const best = results[0];
+        // The response contains seasons[].episodes[] directly
+        const firstSeason = best.seasons?.[0];
+        const firstEp = firstSeason?.episodes?.[0];
+        if (!firstEp) return;
+        setAnimeSamaMovieEpisode(firstEp);
+        const links: any[] = firstEp.streaming_links ?? [];
+        const hasVf = links.some((l: any) => l.language === 'vf');
+        const hasVostfr = links.some((l: any) => l.language === 'vostfr');
         setAnimeSamaMovieLang(hasVf ? 'vf' : hasVostfr ? 'vostfr' : links[0]?.language ?? null);
         setAnimeSamaMoviePlayer('0');
       })
@@ -4535,45 +4653,6 @@ const MovieDetails = (): JSX.Element => {
                     title={movie?.title || 'Player'}
                   />
                 )}
-                {/* Sources sous la vidéo */}
-                <div
-                  className="border-t px-3 py-2.5 flex-shrink-0"
-                  style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    backdropFilter: 'blur(20px) saturate(180%)',
-                    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                    borderColor: 'rgba(255,255,255,0.08)',
-                  }}
-                >
-                  <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:overflow-x-visible pb-1 sm:pb-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
-                    {((() => {
-                      const isAnimeFilm = movie?.genres?.some((g: any) => g.id === 16 || g.name === 'Animation');
-                      return [
-                        { id: 'videasy',   label: 'Videasy' },
-                        ...(isAnimeFilm ? [{ id: 'animesama', label: 'Anime-Sama' }] : []),
-                        { id: 'purstream', label: 'Purestream' },
-                        { id: 'nakios',    label: 'Nakios' },
-                        { id: 'vidlink',   label: 'Vidlink' },
-                        { id: 'frembed',   label: 'Frembed' },
-                      ];
-                    })() as { id: InlineSource; label: string }[])
-                      .filter(() => true)
-                      .map(src => (
-                      <button
-                        key={src.id}
-                        onClick={() => setInlinePlayerSource(src.id)}
-                        className="flex-shrink-0 px-2.5 py-1.5 sm:px-3 text-xs sm:text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
-                        style={inlinePlayerSource === src.id
-                          ? { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none', boxShadow: '0 0 14px rgba(124,58,237,0.3)' }
-                          : { background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)', color: 'rgba(255,255,255,0.75)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)' }
-                        }
-                      >
-                        {src.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
                 {/* Langue + Lecteurs — uniquement pour Anime-Sama */}
                 {inlinePlayerSource === 'animesama' && !animeSamaMovieLoading && animeSamaMovieEpisode && (() => {
                   const animeLink = animeSamaMovieEpisode.streaming_links?.find((l: any) => l.language === animeSamaMovieLang)
@@ -4610,6 +4689,90 @@ const MovieDetails = (): JSX.Element => {
                   );
                 })()}
               </div>
+
+              {/* ===== SOURCE PANEL — Liquid Glass ===== */}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                <div className="flex items-center gap-2.5 px-5 py-3 border-b border-white/[0.06]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
+                </div>
+                <div className="p-4 space-y-4">
+                  {/* VF / Multilingue */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-white/25 mb-2.5 px-0.5">Français (VF)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {/* Frembed */}
+                      <button
+                        onClick={() => setInlinePlayerSource('frembed')}
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                          inlinePlayerSource === 'frembed'
+                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                            : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
+                        }`}
+                      >
+                        Frembed VF
+                      </button>
+                      {/* Purstream */}
+                      <button
+                        onClick={() => setInlinePlayerSource('purstream')}
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                          inlinePlayerSource === 'purstream'
+                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                            : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
+                        }`}
+                      >
+                        Purestream
+                      </button>
+                      {/* Nakios */}
+                      <button
+                        onClick={() => setInlinePlayerSource('nakios')}
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                          inlinePlayerSource === 'nakios'
+                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                            : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
+                        }`}
+                      >
+                        Nakios
+                      </button>
+                      {/* Anime-Sama */}
+                      <button
+                        onClick={() => setInlinePlayerSource('animesama')}
+                        disabled={animeSamaMovieLoading}
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                          inlinePlayerSource === 'animesama'
+                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                            : animeSamaMovieLoading
+                              ? 'bg-white/[0.03] border-white/[0.08] text-white/35 cursor-default'
+                              : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
+                        }`}
+                      >
+                        {animeSamaMovieLoading && inlinePlayerSource === 'animesama'
+                          ? <span className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin flex-shrink-0" />
+                          : null
+                        }
+                        Anime-Sama
+                      </button>
+                    </div>
+                  </div>
+                  {/* VOSTFR */}
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-white/25 mb-2.5 px-0.5">VOSTFR</p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setInlinePlayerSource('videasy')}
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                          inlinePlayerSource === 'videasy'
+                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                            : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
+                        }`}
+                      >
+                        Videasy
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               </motion.div>
             ) : (
               // Bouton Lecture — cinéma style (sans source picker)
