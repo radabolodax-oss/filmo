@@ -13,8 +13,8 @@
  *   GET /health
  */
 
-const NAKIOS_API    = 'https://api.nakios.ink/api/sources';
-const NAKIOS_ORIGIN = 'https://nakios.ink';
+const NAKIOS_API    = 'https://api.nakios.click/api/sources';
+const NAKIOS_ORIGIN = 'https://nakios.click';
 const FRANIME_API   = 'https://api.franime.fr';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
 
@@ -403,7 +403,7 @@ async function handleProxy(request, url) {
 
   // Headers neutres pour les CDN tiers (nakios.ink bloque senpai-stream etc.)
   // Headers Nakios uniquement pour les domaines Nakios eux-mêmes
-  const isNakiosDomain = /nakios\.(ink|com|me|net)|fastflux\.xyz/i.test(targetUrl);
+  const isNakiosDomain = /nakios\.(ink|click|com|me|net)|fastflux\.xyz/i.test(targetUrl);
   const proxyHeaders = isNakiosDomain ? { ...nakiosHeaders() } : {
     'User-Agent': UA,
     'Accept': '*/*',

@@ -341,29 +341,21 @@ router.get('/movie/:tmdbId/stream', async (req, res) => {
     const { tmdbId } = req.params;
     if (!tmdbId || isNaN(tmdbId)) return res.status(400).json({ error: 'TMDB ID invalide' });
 
-    // Vérifier VIP pour proxifier les URLs
     const accessKey = req.headers['x-access-key'] || null;
     const vipStatus = verifyAccessKey ? await verifyAccessKey(accessKey) : { vip: false };
     const isVip = vipStatus.vip;
 
-    const cacheKey = generateCacheKey(`purstream_stream_movie_${tmdbId}`);
-    const cached = await getFromCacheNoExpiration(PURSTREAM_CACHE_DIR, cacheKey);
-
-    if (cached) {
-      if (cached.__not_found) {
-        const stale = await shouldUpdateCache(PURSTREAM_CACHE_DIR, cacheKey);
-        if (stale) backgroundUpdateStreamMovie(tmdbId, cacheKey).catch(() => {});
-        return res.status(404).json({ error: 'Film non trouvé sur PurStream' });
-      }
-      const stale = await shouldUpdateCache(PURSTREAM_CACHE_DIR, cacheKey);
-      if (stale) backgroundUpdateStreamMovie(tmdbId, cacheKey).catch(() => {});
-      // Appliquer le proxy VIP au moment de la réponse (le cache stocke les URLs brutes)
-      const response = { ...cached, sources: cached.sources.map(s => ({ ...s, url: wrapSourceUrl(s.url, isVip) })) };
-      return res.json(response);
+    // Vérifier uniquement le marqueur not_found (pas les stream URLs — elles expirent)
+    const notFoundKey = generateCacheKey(`purstream_nf_movie_${tmdbId}`);
+    const nf = await getFromCacheNoExpiration(PURSTREAM_CACHE_DIR, notFoundKey);
+    if (nf?.__not_found) {
+      const stale = await shouldUpdateCache(PURSTREAM_CACHE_DIR, notFoundKey);
+      if (!stale) return res.status(404).json({ error: 'Film non trouvé sur PurStream' });
     }
 
     const mapping = await resolvePurstreamId(tmdbId, 'movie');
     if (!mapping) {
+      await saveToCache(PURSTREAM_CACHE_DIR, notFoundKey, NOT_FOUND_MARKER);
       return res.status(404).json({ error: 'Film non trouvé sur PurStream' });
     }
 
@@ -371,31 +363,25 @@ router.get('/movie/:tmdbId/stream', async (req, res) => {
 
     if (streamData?.__error) {
       if (streamData.status === 404) {
-        await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
+        await saveToCache(PURSTREAM_CACHE_DIR, notFoundKey, NOT_FOUND_MARKER);
         return res.status(404).json({ error: 'Film non trouvé sur PurStream' });
       }
       return res.status(502).json({ error: 'Erreur temporaire PurStream' });
     }
 
-    if (!streamData) {
-      return res.status(502).json({ error: 'Réponse invalide de PurStream' });
-    }
+    if (!streamData) return res.status(502).json({ error: 'Réponse invalide de PurStream' });
 
     const sources = streamData.sources || [];
-    const result = {
-      purstream_id: mapping.purstream_id,
-      sources: sources.map(s => ({ url: s.stream_url, name: s.source_name, format: s.format }))
-    };
-
     if (sources.length === 0) {
-      await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
+      await saveToCache(PURSTREAM_CACHE_DIR, notFoundKey, NOT_FOUND_MARKER);
       return res.status(404).json({ error: 'Aucun stream disponible pour ce film' });
     }
 
-    await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, result);
-    // Retourner avec URLs proxifiées si VIP
-    const response = { ...result, sources: result.sources.map(s => ({ ...s, url: wrapSourceUrl(s.url, isVip) })) };
-    res.json(response);
+    const result = {
+      purstream_id: mapping.purstream_id,
+      sources: sources.map(s => ({ url: wrapSourceUrl(s.stream_url, isVip), name: s.source_name, format: s.format }))
+    };
+    res.json(result);
   } catch (error) {
     console.error('[PURSTREAM] Erreur stream film:', error.message);
     res.status(502).json({ error: 'Erreur lors de la récupération du stream' });
@@ -414,28 +400,21 @@ router.get('/tv/:tmdbId/stream', async (req, res) => {
     if (!season || isNaN(season)) return res.status(400).json({ error: 'Le paramètre season est requis' });
     if (!episode || isNaN(episode)) return res.status(400).json({ error: 'Le paramètre episode est requis' });
 
-    // Vérifier VIP pour proxifier les URLs
     const accessKey = req.headers['x-access-key'] || null;
     const vipStatus = verifyAccessKey ? await verifyAccessKey(accessKey) : { vip: false };
     const isVip = vipStatus.vip;
 
-    const cacheKey = generateCacheKey(`purstream_stream_tv_${tmdbId}_s${season}e${episode}`);
-    const cached = await getFromCacheNoExpiration(PURSTREAM_CACHE_DIR, cacheKey);
-
-    if (cached) {
-      if (cached.__not_found) {
-        const stale = await shouldUpdateCache(PURSTREAM_CACHE_DIR, cacheKey);
-        if (stale) backgroundUpdateStreamTv(tmdbId, season, episode, cacheKey).catch(() => {});
-        return res.status(404).json({ error: 'Épisode non trouvé sur PurStream' });
-      }
-      const stale = await shouldUpdateCache(PURSTREAM_CACHE_DIR, cacheKey);
-      if (stale) backgroundUpdateStreamTv(tmdbId, season, episode, cacheKey).catch(() => {});
-      const response = { ...cached, sources: cached.sources.map(s => ({ ...s, url: wrapSourceUrl(s.url, isVip) })) };
-      return res.json(response);
+    // Vérifier uniquement le marqueur not_found (pas les stream URLs — elles expirent)
+    const notFoundKey = generateCacheKey(`purstream_nf_tv_${tmdbId}`);
+    const nf = await getFromCacheNoExpiration(PURSTREAM_CACHE_DIR, notFoundKey);
+    if (nf?.__not_found) {
+      const stale = await shouldUpdateCache(PURSTREAM_CACHE_DIR, notFoundKey);
+      if (!stale) return res.status(404).json({ error: 'Série non trouvée sur PurStream' });
     }
 
     const mapping = await resolvePurstreamId(tmdbId, 'tv');
     if (!mapping) {
+      await saveToCache(PURSTREAM_CACHE_DIR, notFoundKey, NOT_FOUND_MARKER);
       return res.status(404).json({ error: 'Série non trouvée sur PurStream' });
     }
 
@@ -443,32 +422,26 @@ router.get('/tv/:tmdbId/stream', async (req, res) => {
 
     if (streamData?.__error) {
       if (streamData.status === 404) {
-        await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
+        await saveToCache(PURSTREAM_CACHE_DIR, notFoundKey, NOT_FOUND_MARKER);
         return res.status(404).json({ error: 'Épisode non trouvé sur PurStream' });
       }
       return res.status(502).json({ error: 'Erreur temporaire PurStream' });
     }
 
-    if (!streamData) {
-      return res.status(502).json({ error: 'Réponse invalide de PurStream' });
-    }
+    if (!streamData) return res.status(502).json({ error: 'Réponse invalide de PurStream' });
 
     const sources = streamData.sources || [];
+    if (sources.length === 0) {
+      return res.status(404).json({ error: 'Aucun stream disponible pour cet épisode' });
+    }
+
     const result = {
       purstream_id: mapping.purstream_id,
       season: streamData.season || Number(season),
       episode: streamData.episode || Number(episode),
-      sources: sources.map(s => ({ url: s.stream_url, name: s.source_name, format: s.format }))
+      sources: sources.map(s => ({ url: wrapSourceUrl(s.stream_url, isVip), name: s.source_name, format: s.format }))
     };
-
-    if (sources.length === 0) {
-      await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
-      return res.status(404).json({ error: 'Aucun stream disponible pour cet épisode' });
-    }
-
-    await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, result);
-    const response = { ...result, sources: result.sources.map(s => ({ ...s, url: wrapSourceUrl(s.url, isVip) })) };
-    res.json(response);
+    res.json(result);
   } catch (error) {
     console.error('[PURSTREAM] Erreur stream série:', error.message);
     res.status(502).json({ error: 'Erreur lors de la récupération du stream' });

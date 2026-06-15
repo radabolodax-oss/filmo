@@ -2545,9 +2545,13 @@ const TVDetails: React.FC = () => {
   const [inlineLang, setInlineLang] = useState<'VF' | 'VOSTFR'>('VF');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
+  const [nakiosSources, setNakiosSources] = useState<Array<{url: string; name?: string}>>([]);
+  const [nakiosSourceIdx, setNakiosSourceIdx] = useState(0);
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
   const [purstreamStreamLoading, setPurstreamStreamLoading] = useState(false);
   const [purstreamEmbedId, setPurstreamEmbedId] = useState<number | null>(null);
+  const [purstreamSources, setPurstreamSources] = useState<Array<{url: string; name?: string}>>([]);
+  const [purstreamSourceIdx, setPurstreamSourceIdx] = useState(0);
   const [vidmolyEmbedUrl, setVidmolyEmbedUrl] = useState<string | null>(null);
   const [panelSeason, setPanelSeason] = useState<number | null>(null);
   const episodeListRef = useRef<HTMLDivElement | null>(null);
@@ -4065,19 +4069,31 @@ const TVDetails: React.FC = () => {
   useEffect(() => {
     if (!showInlinePlayer || inlinePlayerSource !== 'purstream' || !id || !selectedSeason || !selectedEpisode) {
       setPurstreamStreamUrl(null);
+      setPurstreamSources([]);
       return;
     }
     let cancelled = false;
     setPurstreamStreamLoading(true);
     setPurstreamStreamUrl(null);
+    setPurstreamSources([]);
+    setPurstreamSourceIdx(0);
     fetch(`${MAIN_API}/api/purstream/tv/${id}/stream?season=${selectedSeason}&episode=${selectedEpisode}`)
       .then(r => r.json())
       .then(data => {
         if (cancelled) return;
         if (data?.purstream_id) setPurstreamEmbedId(data.purstream_id);
-        setPurstreamStreamUrl(data?.sources?.[0]?.url || null);
+        const sources: {url: string; name?: string}[] = data?.sources || [];
+        if (sources.length > 0) {
+          setPurstreamSources(sources);
+          const best = sources.find((s) => s.url?.includes('premium')) || sources[0];
+          const bestIdx = sources.indexOf(best);
+          setPurstreamSourceIdx(bestIdx >= 0 ? bestIdx : 0);
+          setPurstreamStreamUrl(best?.url || null);
+        } else {
+          setPurstreamStreamUrl(null);
+        }
       })
-      .catch(() => { if (!cancelled) setPurstreamStreamUrl(null); })
+      .catch(() => { if (!cancelled) { setPurstreamSources([]); setPurstreamStreamUrl(null); } })
       .finally(() => { if (!cancelled) setPurstreamStreamLoading(false); });
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode]);
@@ -4086,26 +4102,55 @@ const TVDetails: React.FC = () => {
   useEffect(() => {
     if (!showInlinePlayer || inlinePlayerSource !== 'nakios' || !id || !selectedSeason || !selectedEpisode) {
       setNakiosStreamUrl(null);
+      setNakiosSources([]);
       return;
     }
     let cancelled = false;
     setNakiosStreamLoading(true);
     setNakiosStreamUrl(null);
+    setNakiosSources([]);
+    setNakiosSourceIdx(0);
     fetch(`${NAKIOS_PROXY}/series?id=${id}&s=${selectedSeason}&e=${selectedEpisode}`)
       .then(r => r.json())
-      .then(data => {
+      .then(async (data) => {
         if (cancelled) return;
-        const rawUrl = extractNakiosUrl(data);
-        if (!rawUrl) { setNakiosStreamUrl(null); return; }
-        // Le worker convertit désormais toutes les URLs relatives en URLs absolues proxifiées.
-        // Si l'URL est déjà absolue et proxifiée par le worker → utiliser directement.
-        // Sinon → passer par le proxy worker pour CORS + réécriture M3U8.
-        const finalUrl = rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
-          ? rawUrl
-          : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
-        setNakiosStreamUrl(finalUrl);
+        const toProxied = (rawUrl: string) =>
+          rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
+            ? rawUrl
+            : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
+
+        const allSources: Array<{url: string; name?: string}> = [];
+
+        if (Array.isArray(data.sources) && data.sources.length > 0) {
+          for (const src of data.sources) {
+            const raw = src?.url || src?.file || src?.src;
+            if (raw && typeof raw === 'string') {
+              allSources.push({ url: toProxied(raw), name: src?.name || src?.label || src?.source_name || undefined });
+            }
+          }
+        } else {
+          const rawUrl = extractNakiosUrl(data);
+          if (rawUrl) allSources.push({ url: toProxied(rawUrl) });
+        }
+
+        // Vidmoly comme source supplémentaire si pas encore inclus
+        if (data._vidmolyUrl && !allSources.some(s => s.url.includes('vidmoly'))) {
+          try {
+            const vRes = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(data._vidmolyUrl)}`);
+            const vData = await vRes.json();
+            const vUrl: string | null = vData?.url || null;
+            if (vUrl && !cancelled) {
+              allSources.push({ url: toProxied(vUrl), name: 'Vidmoly' });
+            }
+          } catch {}
+        }
+
+        if (!cancelled) {
+          setNakiosSources(allSources);
+          setNakiosStreamUrl(allSources[0]?.url || null);
+        }
       })
-      .catch(() => { if (!cancelled) setNakiosStreamUrl(null); })
+      .catch(() => { if (!cancelled) { setNakiosSources([]); setNakiosStreamUrl(null); } })
       .finally(() => { if (!cancelled) setNakiosStreamLoading(false); });
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode]);
@@ -7439,6 +7484,60 @@ const TVDetails: React.FC = () => {
                 />
               ) : null;
             })()}
+            {/* Source — Purstream */}
+            {inlinePlayerSource === 'purstream' && !purstreamStreamLoading && purstreamSources.length > 1 && (() => {
+              const glassStyle = {
+                background: 'rgba(255,255,255,0.03)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                borderColor: 'rgba(255,255,255,0.08)',
+              };
+              const btnOn  = { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' } as const;
+              const btnOff = { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' } as const;
+              return (
+                <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                  <div className="flex gap-1.5 flex-wrap items-center">
+                    <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
+                    {purstreamSources.map((src, idx) => (
+                      <button key={idx}
+                        onClick={() => { setPurstreamSourceIdx(idx); setPurstreamStreamUrl(src.url); }}
+                        className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
+                        style={purstreamSourceIdx === idx ? btnOn : btnOff}>
+                        <Play className="w-3 h-3" />
+                        {src.name || `Source ${idx + 1}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Source — Nakios */}
+            {inlinePlayerSource === 'nakios' && !nakiosStreamLoading && nakiosSources.length > 1 && (() => {
+              const glassStyle = {
+                background: 'rgba(255,255,255,0.03)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                borderColor: 'rgba(255,255,255,0.08)',
+              };
+              const btnOn  = { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' } as const;
+              const btnOff = { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' } as const;
+              return (
+                <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                  <div className="flex gap-1.5 flex-wrap items-center">
+                    <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
+                    {nakiosSources.map((src, idx) => (
+                      <button key={idx}
+                        onClick={() => { setNakiosSourceIdx(idx); setNakiosStreamUrl(src.url); }}
+                        className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
+                        style={nakiosSourceIdx === idx ? btnOn : btnOff}>
+                        <Play className="w-3 h-3" />
+                        {src.name || `Source ${idx + 1}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             {/* Langue + Lecteurs — Anime-Sama direct */}
             {inlinePlayerSource === 'animesama' && !animeSamaDirectLoading && animeSamaDirectPlayers.length > 0 && (() => {
               const getHostLabel = (url: string, idx: number): string => {
@@ -7584,6 +7683,8 @@ const TVDetails: React.FC = () => {
             <div className="p-3 relative">
               {(() => {
                 const sources: { src: InlineSource; label: string }[] = [
+                  { src: 'nakios',     label: 'Nakios' },
+                  { src: 'purstream',  label: 'Purstream' },
                   { src: 'anicloud',   label: 'AniCloud' },
                   { src: 'animesama',  label: 'Anime-Sama' },
                   { src: 'franime',    label: 'FRAnime' },

@@ -2155,15 +2155,19 @@ const MovieDetails = (): JSX.Element => {
   // Ajout d'un état pour suivre si le film est sorti
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
 
-  type InlineSource = 'webflix' | 'frembed' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
+  type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
   const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
   const [movieLang, setMovieLang] = useState<'VF' | 'VOSTFR'>('VF');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
+  const [nakiosSources, setNakiosSources] = useState<Array<{url: string; name?: string}>>([]);
+  const [nakiosSourceIdx, setNakiosSourceIdx] = useState(0);
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
   const [purstreamStreamLoading, setPurstreamStreamLoading] = useState(false);
+  const [purstreamSources, setPurstreamSources] = useState<Array<{url: string; name?: string}>>([]);
+  const [purstreamSourceIdx, setPurstreamSourceIdx] = useState(0);
   const [vidmolyEmbedUrl, setVidmolyEmbedUrl] = useState<string | null>(null);
   const [animeSamaMovieEpisode, setAnimeSamaMovieEpisode] = useState<any>(null);
   const [animeSamaMovieLoading, setAnimeSamaMovieLoading] = useState(false);
@@ -2677,38 +2681,53 @@ const MovieDetails = (): JSX.Element => {
   useEffect(() => {
     if (!showInlinePlayer || inlinePlayerSource !== 'nakios' || !id) {
       setNakiosStreamUrl(null);
+      setNakiosSources([]);
       return;
     }
     let cancelled = false;
     setNakiosStreamLoading(true);
     setNakiosStreamUrl(null);
+    setNakiosSources([]);
+    setNakiosSourceIdx(0);
     fetch(`${NAKIOS_PROXY}/movie?id=${id}`)
       .then(r => r.json())
       .then(async (data) => {
         if (cancelled) return;
+        const toProxied = (rawUrl: string) =>
+          rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
+            ? rawUrl
+            : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
+
+        const allSources: Array<{url: string; name?: string}> = [];
+
         const rawUrl =
           data?.url || data?.stream || data?.link ||
           data?.sources?.[0]?.url || data?.sources?.[0]?.file ||
           data?.data?.url || data?.data?.stream || null;
+
         if (rawUrl) {
-          const finalUrl = rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
-            ? rawUrl
-            : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
-          setNakiosStreamUrl(finalUrl);
-          return;
+          allSources.push({ url: toProxied(rawUrl) });
         }
-        // Fallback : Nakios fournit un embed Vidmoly plutôt qu'un flux direct
+
+        // Vidmoly comme source supplémentaire
         const vidmolyEmbedUrl: string | null = data?._vidmolyUrl || null;
         if (vidmolyEmbedUrl) {
-          const vRes = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(vidmolyEmbedUrl)}`);
-          const vData = await vRes.json();
-          const vUrl: string | null = vData?.url || null;
-          if (!cancelled) setNakiosStreamUrl(vUrl ? `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(vUrl)}` : null);
-          return;
+          try {
+            const vRes = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(vidmolyEmbedUrl)}`);
+            const vData = await vRes.json();
+            const vUrl: string | null = vData?.url || null;
+            if (vUrl && !cancelled) {
+              allSources.push({ url: toProxied(vUrl), name: 'Vidmoly' });
+            }
+          } catch {}
         }
-        if (!cancelled) setNakiosStreamUrl(null);
+
+        if (!cancelled) {
+          setNakiosSources(allSources);
+          setNakiosStreamUrl(allSources[0]?.url || null);
+        }
       })
-      .catch(() => { if (!cancelled) setNakiosStreamUrl(null); })
+      .catch(() => { if (!cancelled) { setNakiosSources([]); setNakiosStreamUrl(null); } })
       .finally(() => { if (!cancelled) setNakiosStreamLoading(false); });
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id]);
@@ -2717,18 +2736,30 @@ const MovieDetails = (): JSX.Element => {
   useEffect(() => {
     if (!showInlinePlayer || inlinePlayerSource !== 'purstream' || !id) {
       setPurstreamStreamUrl(null);
+      setPurstreamSources([]);
       return;
     }
     let cancelled = false;
     setPurstreamStreamLoading(true);
     setPurstreamStreamUrl(null);
+    setPurstreamSources([]);
+    setPurstreamSourceIdx(0);
     fetch(`${MAIN_API}/api/purstream/movie/${id}/stream`)
       .then(r => r.json())
       .then(data => {
         if (cancelled) return;
-        setPurstreamStreamUrl(data.sources?.[0]?.url || null);
+        const sources: {url: string; name?: string}[] = data?.sources || [];
+        if (sources.length > 0) {
+          setPurstreamSources(sources);
+          const best = sources.find((s) => s.url?.includes('premium')) || sources[0];
+          const bestIdx = sources.indexOf(best);
+          setPurstreamSourceIdx(bestIdx >= 0 ? bestIdx : 0);
+          setPurstreamStreamUrl(best?.url || null);
+        } else {
+          setPurstreamStreamUrl(null);
+        }
       })
-      .catch(() => { if (!cancelled) setPurstreamStreamUrl(null); })
+      .catch(() => { if (!cancelled) { setPurstreamSources([]); setPurstreamStreamUrl(null); } })
       .finally(() => { if (!cancelled) setPurstreamStreamLoading(false); });
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id]);
@@ -4704,6 +4735,46 @@ const MovieDetails = (): JSX.Element => {
                     title={movie?.title || 'Player'}
                   />
                 )}
+                {/* Source — Purstream */}
+                {inlinePlayerSource === 'purstream' && !purstreamStreamLoading && purstreamSources.length > 1 && (() => {
+                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
+                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
+                  return (
+                    <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
+                      <div className="flex gap-1.5 flex-wrap items-center">
+                        <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Source :</span>
+                        {purstreamSources.map((src, idx) => (
+                          <button key={idx}
+                            onClick={() => { setPurstreamSourceIdx(idx); setPurstreamStreamUrl(src.url); }}
+                            className={purstreamSourceIdx === idx ? btnOn : btnOff}>
+                            <Play className="w-3 h-3" />
+                            {src.name || `Source ${idx + 1}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Source — Nakios */}
+                {inlinePlayerSource === 'nakios' && !nakiosStreamLoading && nakiosSources.length > 1 && (() => {
+                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
+                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
+                  return (
+                    <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
+                      <div className="flex gap-1.5 flex-wrap items-center">
+                        <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Source :</span>
+                        {nakiosSources.map((src, idx) => (
+                          <button key={idx}
+                            onClick={() => { setNakiosSourceIdx(idx); setNakiosStreamUrl(src.url); }}
+                            className={nakiosSourceIdx === idx ? btnOn : btnOff}>
+                            <Play className="w-3 h-3" />
+                            {src.name || `Source ${idx + 1}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {/* Langue + Lecteurs — uniquement pour Anime-Sama */}
                 {inlinePlayerSource === 'animesama' && !animeSamaMovieLoading && animeSamaMovieEpisode && (() => {
                   const animeLink = animeSamaMovieEpisode.streaming_links?.find((l: any) => l.language === animeSamaMovieLang)
@@ -4750,6 +4821,8 @@ const MovieDetails = (): JSX.Element => {
                 <div className="p-3 relative">
                   {(() => {
                     const sources: { src: InlineSource; label: string }[] = [
+                      { src: 'nakios',     label: 'Nakios' },
+                      { src: 'purstream',  label: 'Purstream' },
                       { src: 'frembed',    label: 'Frembed' },
                       { src: 'peachify',   label: 'Peachify' },
                       { src: 'vidsrc',     label: 'VidSrc' },
