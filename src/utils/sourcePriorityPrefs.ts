@@ -23,9 +23,8 @@ const SCHEMA_VERSION = 2 as const;
 type SchemaVersion = 1 | 2;
 
 /**
- * Ordre par défaut des sources top-level pour Films/Séries, reflétant la priorité
- * historique hardcodée dans WatchMovie/WatchTv.tsx (rétrocompat 100% : prefs vides →
- * comportement identique à avant). La constante `TOP_LEVEL_SOURCE_IDS` elle-même
+ * Ordre par défaut des sources top-level pour Films/Séries.
+ * La constante `TOP_LEVEL_SOURCE_IDS` elle-même
  * n'impose pas d'ordre sémantique — c'est ici (dans le builder des défauts) que
  * l'ordre fonctionnel est défini.
  *

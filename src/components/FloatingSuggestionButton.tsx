@@ -11,12 +11,8 @@ const FloatingSuggestionButton: React.FC = () => {
   const [collapsed, setCollapsed] = useState(true);
 
   useEffect(() => {
-    // Hide button on watch or watchparty pages
-    const isWatchRoute = (location.pathname.startsWith('/tv/') && location.pathname.includes('/s/')) ||
-      (location.pathname.startsWith('/anime/') && location.pathname.includes('/season/'));
     const isWatchPartyRoute = location.pathname.includes('/watchparty/room/');
-    
-    setVisible(!isWatchRoute && !isWatchPartyRoute);
+    setVisible(!isWatchPartyRoute);
   }, [location]);
 
   const handleClick = () => {

@@ -491,7 +491,7 @@ const FranceTVPlayer: React.FC = () => {
     }
   }, [isPlaying]);
 
-  // ─── Lock body scroll (like WatchTv) ────────────────────────────────────
+  // ─── Lock body scroll ────────────────────────────────────────────────────
 
   useEffect(() => {
     const setVh = () => {
@@ -752,7 +752,7 @@ const FranceTVPlayer: React.FC = () => {
     );
   }
 
-  // ─── Render (fullscreen like WatchTv) ───────────────────────────────────
+  // ─── Render (fullscreen) ─────────────────────────────────────────────────
 
   return (
     <div

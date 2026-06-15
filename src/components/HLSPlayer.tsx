@@ -679,6 +679,8 @@ interface HLSPlayerProps {
   nexusHlsSources?: { url: string; label: string }[];
   nexusFileSources?: { url: string; label: string }[];
   purstreamSources?: { url: string; label: string }[];
+  loadingNakios?: boolean;
+  nakiosStreamUrl?: string | null;
   rivestreamSources?: { url: string; label: string; quality: number; service: string; category: string }[];
   rivestreamCaptions?: { label: string; file: string }[];
   loadingRivestream?: boolean;
@@ -733,7 +735,7 @@ interface HLSPlayerProps {
 
   /**
    * Catégorie de priorité utilisateur appliquée au tri des hosters dans le panel
-   * Serveurs. `'moviesTv'` pour WatchMovie/WatchTv, `'anime'` pour WatchAnime.
+   * Serveurs. `'moviesTv'` pour films/séries, `'anime'` pour les animes.
    * Par défaut `'moviesTv'` côté panel si non fourni.
    */
   priorityCategory?: 'moviesTv' | 'anime';
@@ -943,6 +945,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   nexusHlsSources = [],
   nexusFileSources = [],
   purstreamSources = [],
+  loadingNakios = false,
+  nakiosStreamUrl = null,
   rivestreamSources = [],
   rivestreamCaptions = [],
   loadingRivestream = false,
@@ -2207,6 +2211,42 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       }
     }
 
+    // Purstream VF — bouton standalone avant le sous-menu VOSTFR
+    {
+      const purstreamEmbedUrl = (tvShowId != null && seasonNumber != null && episodeNumber != null)
+        ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'tv', id: tvShowId, season: seasonNumber, episode: episodeNumber }))}`
+        : movieId
+          ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}`
+          : '#';
+      if (purstreamEmbedUrl !== '#') {
+        embedSources.push({
+          type: 'vostfr',
+          id: 'purstream',
+          label: '🇫🇷 Purstream VF',
+          url: purstreamEmbedUrl,
+        });
+      }
+    }
+
+    // Nakios VF — bouton standalone (lazy fetch déclenché au clic)
+    if (movieId || (tvShowId != null && seasonNumber != null && episodeNumber != null)) {
+      if (loadingNakios) {
+        embedSources.push({
+          type: 'nakios',
+          id: 'nakios_loading',
+          label: '⏳ Nakios VF...',
+          url: '#',
+        });
+      } else {
+        embedSources.push({
+          type: 'nakios',
+          id: nakiosStreamUrl ? 'nakios_main' : 'nakios_trigger',
+          label: '🇫🇷 Nakios VF',
+          url: nakiosStreamUrl ?? '#',
+        });
+      }
+    }
+
     // Ajouter les sources VOSTFR dans un menu déroulant
     embedSources.push({
       type: 'vostfr_main',
@@ -2221,7 +2261,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     if (showVostfrMenu) {
       const vostfrSources = [
         { id: 'vostfr',    label: 'Videasy',   url: '' },
-        { id: 'purstream', label: 'Purstream', url: '' },
         { id: 'vidlink',   label: 'Vidlink',   url: '' },
       ];
 
@@ -2234,14 +2273,12 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         // boutons Sources/Open dupliqués (rendus dans le parent ET dans l'iframe imbriqué).
         if (tvShowId != null && seasonNumber != null && episodeNumber != null) {
           // TV Show URLs
-          if      (source.id === 'vostfr')    finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
-          else if (source.id === 'purstream') finalUrl = `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'tv', id: tvShowId, season: seasonNumber, episode: episodeNumber }))}`;
-          else if (source.id === 'vidlink')   finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          if      (source.id === 'vostfr')  finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
         } else if (movieId) {
           // Movie URLs
-          if      (source.id === 'vostfr')    finalUrl = `https://player.videasy.net/movie/${movieId}`;
-          else if (source.id === 'purstream') finalUrl = `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}`;
-          else if (source.id === 'vidlink')   finalUrl = `https://vidlink.pro/movie/${movieId}`;
+          if      (source.id === 'vostfr')  finalUrl = `https://player.videasy.net/movie/${movieId}`;
+          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/movie/${movieId}`;
         }
 
         embedSources.push({
@@ -2282,6 +2319,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     nexusFileSources?.length,
     rivestreamSources?.length,
     loadingRivestream,
+    loadingNakios,
+    nakiosStreamUrl,
     frembedAvailable,
     customSources?.length,
     omegaSources?.length,
@@ -7513,7 +7552,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       const video = videoRef.current;
       if (!video) return;
 
-      // Le premier caption devrait déjà être français grâce au tri dans WatchTv.tsx
+      // Le premier caption devrait déjà être français grâce au tri des captions.
       const firstCaption = rivestreamCaptions[0];
       const isFrench = firstCaption.label.toLowerCase().includes('français') ||
         firstCaption.label.toLowerCase().includes('french');
@@ -7759,8 +7798,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                   <div key={`group_${groupIndex}`} className="mb-6">
                     <h4 className="text-gray-400 text-xs uppercase tracking-wider mb-2 px-2">{group.title}</h4>
                     {group.sources.map(source => {
-                      // Skip rendering individual VOSTFR sources here, they are handled in the dropdown
-                      if (source.type === 'vostfr') return null;
+                      // Skip individual VOSTFR sources handled in the dropdown (Videasy, Vidlink)
+                      // Exception: Purstream (id='purstream') is VF and rendered as standalone button
+                      if (source.type === 'vostfr' && source.id !== 'purstream') return null;
 
                       let isActive = false;
                       // Updated isActive logic for HLS sources
@@ -8065,7 +8105,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                 >
                                   {[
                                     { id: 'vostfr',    label: 'Videasy' },
-                                    { id: 'purstream', label: 'Purstream' },
                                     { id: 'vidlink',   label: 'Vidlink' },
                                   ].map((vostfrSource, index) => {
                                     // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
@@ -8073,12 +8112,10 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                     // charger la page courante en boucle dans l'iframe.
                                     const sourceUrl = movieId ?
                                       vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                                        vostfrSource.id === 'purstream' ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}` :
-                                          `https://vidlink.pro/movie/${movieId}` :
+                                        `https://vidlink.pro/movie/${movieId}` :
                                       (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
                                         vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                          vostfrSource.id === 'purstream' ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'tv', id: tvShowId, season: seasonNumber, episode: episodeNumber }))}` :
-                                            `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                          `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                         '#'; // Fallback if neither movie nor TV info is present
 
                                     // Active state check for VOSTFR sources in main menu
@@ -10755,6 +10792,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             onlyQualityMenu,
             embedType,
             loadingRivestream,
+            loadingNakios,
+            nakiosStreamUrl,
             handleSourceChange,
             renderSourceQualityMeta,
             renderCopySourceButton,

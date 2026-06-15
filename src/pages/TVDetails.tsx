@@ -40,6 +40,7 @@ import i18n from '../i18n';
 import { useProfile } from '../context/ProfileContext';
 import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed } from '../utils/certificationUtils';
 import { getVipHeaders } from '../utils/authUtils';
+import { buildFastfluxUrl } from '../utils/fastflux';
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
@@ -1187,7 +1188,7 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
   const { t } = useTranslation();
   const [videoSource, setVideoSource] = useState<string | null>(null);
   const [customSources, setCustomSources] = useState<string[]>([]);
-  const [selectedSource, setSelectedSource] = useState<'primary' | 'vostfr' | 'multi' | 'videasy' | 'omega' | 'darkino' | 'mp4' | 'wiflix' | 'fstream' | number | null>(null);
+  const [selectedSource, setSelectedSource] = useState<'primary' | 'vostfr' | 'multi' | 'videasy' | 'omega' | 'darkino' | 'mp4' | 'wiflix' | 'fstream' | 'embed' | number | null>(null);
   const [frembedAvailable, setFrembedAvailable] = useState<boolean>(true);
   const [, setIsLoading] = useState(true);
   const [coflixData, setCoflixData] = useState<CoflixResponse | null>(null);
@@ -1217,6 +1218,17 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
   const [fstreamSources, setFstreamSources] = useState<{ url: string; label: string; category: string }[]>([]);
   const [loadingFstream, setLoadingFstream] = useState(true);
   const [selectedFstreamSource, setSelectedFstreamSource] = useState(0);
+
+  // Embed public providers
+  const TV_EMBED_PROVIDERS = [
+    { name: 'VidSrc',    url: `https://vidsrc.to/embed/tv/${showId}/${seasonNumber}/${episodeNumber}` },
+    { name: 'VidSrc.su', url: `https://vidsrc.su/embed/tv/${showId}?season=${seasonNumber}&episode=${episodeNumber}` },
+    { name: 'VidSrc.io', url: `https://vidsrc.io/embed/tv?tmdb=${showId}&season=${seasonNumber}&episode=${episodeNumber}` },
+    { name: 'Peachify',  url: `https://peachify.top/embed/tv/${showId}?season=${seasonNumber}&episode=${episodeNumber}&sub=French&accent=dc2626` },
+    { name: '2Embed',    url: `https://www.2embed.cc/embedtv/${showId}&s=${seasonNumber}&e=${episodeNumber}` },
+    { name: 'AutoEmbed', url: `https://autoembed.co/tv/tmdb/${showId}-${seasonNumber}-${episodeNumber}` },
+  ];
+  const [selectedEmbedProvider, setSelectedEmbedProvider] = useState(0);
 
   // State for iframe poster logic
   const [, setShowIframe] = useState(false);
@@ -1604,6 +1616,9 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
       case 'fstream':
         newSrc = fstreamSources[selectedFstreamSource]?.url || "";
         break;
+      case 'embed':
+        newSrc = TV_EMBED_PROVIDERS[selectedEmbedProvider]?.url || "";
+        break;
       default:
         if (typeof selectedSource === 'number' && customSources[selectedSource]) {
           newSrc = customSources[selectedSource];
@@ -1614,7 +1629,7 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
       setVideoSource(newSrc);
       scrollToPlayerRef();
     }
-  }, [selectedSource, selectedPlayerLink, selectedOmegaPlayer, selectedOmegaVersion, showId, seasonNumber, episodeNumber, coflixData, omegaData, customSources, tvShowName, releaseYear, mp4Sources, selectedMp4Source, wiflixSources, selectedWiflixSource, fstreamSources, selectedFstreamSource]);
+  }, [selectedSource, selectedPlayerLink, selectedOmegaPlayer, selectedOmegaVersion, showId, seasonNumber, episodeNumber, coflixData, omegaData, customSources, tvShowName, releaseYear, mp4Sources, selectedMp4Source, wiflixSources, selectedWiflixSource, fstreamSources, selectedFstreamSource, selectedEmbedProvider]);
 
   // Helper to scroll to the player from anywhere in the component
   const scrollToPlayerRef = () => {
@@ -1949,6 +1964,19 @@ const VideoPlayer = forwardRef<VideoPlayerRefHandle, VideoPlayerProps>(({ showId
               >
                 Videasy
               </button>
+              {TV_EMBED_PROVIDERS.map((p, i) => (
+                <button
+                  key={p.name}
+                  onClick={() => { setSelectedEmbedProvider(i); handleSelectSource('embed'); }}
+                  className={`relative px-4 py-2 text-sm font-medium rounded-xl border transition-all duration-200 ${
+                    selectedSource === 'embed' && selectedEmbedProvider === i
+                      ? 'bg-blue-500/15 border-blue-400/40 text-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.1)]'
+                      : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -2477,9 +2505,10 @@ const TVDetails: React.FC = () => {
 
   const cinemaMode = true;
 
-  type InlineSource = 'nakios' | 'animesama' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'frembed';
+  type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'animesama' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'embed2' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('videasy');
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
+  const [inlineLang, setInlineLang] = useState<'VF' | 'VOSTFR'>('VF');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
@@ -3056,7 +3085,7 @@ const TVDetails: React.FC = () => {
       season: selectedSeason!,
       episode: epNumber
     });
-    setInlinePlayerSource('videasy');
+    setInlinePlayerSource('frembed');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
@@ -3439,7 +3468,7 @@ const TVDetails: React.FC = () => {
     setSelectedEpisode(episodeToWatch);
 
     // Toujours ouvrir le lecteur inline (anime ou non)
-    setInlinePlayerSource('videasy');
+    setInlinePlayerSource('frembed');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
 
@@ -3468,7 +3497,7 @@ const TVDetails: React.FC = () => {
     setSelectedSeason(season);
     setSelectedEpisode(epNumber);
     setLastWatched({ season, episode: epNumber });
-    setInlinePlayerSource('videasy');
+    setInlinePlayerSource('frembed');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
     // Démarrer le timer Skip Intro (pour sources iframe qui n'exposent pas le temps vidéo)
@@ -3520,7 +3549,7 @@ const TVDetails: React.FC = () => {
     else if (episode.streaming_links.length > 0) setSelectedLanguage(episode.streaming_links[0].language);
     setSelectedPlayer('0');
     setShowInlinePlayer(true);
-    setInlinePlayerSource('videasy');
+    setInlinePlayerSource('frembed');
     scrollToInlinePlayer();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3639,7 +3668,7 @@ const TVDetails: React.FC = () => {
   const handleEpisodeSelect = async (seasonNumber: number, episodeNumber: number) => {
     setSelectedSeason(seasonNumber);
     setSelectedEpisode(episodeNumber);
-    setInlinePlayerSource('videasy');
+    setInlinePlayerSource('frembed');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
@@ -4008,12 +4037,25 @@ const TVDetails: React.FC = () => {
   const getInlinePlayerUrl = () => {
     const s = selectedSeason ?? 1;
     const e = selectedEpisode ?? 1;
+    const title = tvShow?.name || '';
     switch (inlinePlayerSource) {
-      case 'videasy':  return `https://player.videasy.net/tv/${id}/${s}/${e}?autoplay=1`;
-      case 'vidlink':  return `https://vidlink.pro/tv/${id}?s=${s}&e=${e}&primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
-      case 'vidmoly':  return vidmolyEmbedUrl || '';
-      case 'frembed':  return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
-      default:         return `https://frembed.click/embed/serie/${id}?sa=${s}&epi=${e}`;
+      case 'webflix':    return title ? buildFastfluxUrl(title, s, e, inlineLang) : '';
+      case 'frembed':    return `https://frembed.click/api/serie.php?id=${id}&sa=${s}&epi=${e}`;
+      case 'peachify':   return `https://peachify.top/embed/tv/${id}?season=${s}&episode=${e}&sub=French&accent=dc2626`;
+      case 'vidsrc':     return `https://vidsrc.to/embed/tv/${id}/${s}/${e}`;
+      case 'vidsrc_su':  return `https://vidsrc.su/embed/tv/${id}/${s}/${e}`;
+      case 'vidsrc_io':  return `https://vidsrc.io/embed/tv?tmdb=${id}&season=${s}&episode=${e}`;
+      case 'vidsrcwtf1': return `https://vidsrc.wtf/api/1/tv/?id=${id}&s=${s}&e=${e}`;
+      case 'vidsrcwtf3': return `https://vidsrc.wtf/api/3/tv/?id=${id}&s=${s}&e=${e}`;
+      case 'vidsrcwtf5': return `https://vidsrc.wtf/api/5/tv/?id=${id}&s=${s}&e=${e}`;
+      case 'vidlink':    return `https://vidlink.pro/tv/${id}?s=${s}&e=${e}&primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
+      case 'videasy':    return `https://player.videasy.net/tv/${id}/${s}/${e}?autoplay=1`;
+      case 'embed2':     return `https://www.2embed.skin/embedtv/${id}&s=${s}&e=${e}`;
+      case 'autoembed':  return `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`;
+      case 'multiembed': return `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`;
+      case 'vidsrc_nl':  return `https://vidsrc.nl/embed/tv/${id}?s=${s}&e=${e}`;
+      case 'vidmoly':    return vidmolyEmbedUrl || '';
+      default:           return `https://frembed.click/api/serie.php?id=${id}&sa=${s}&epi=${e}`;
     }
   };
 
@@ -7133,17 +7175,36 @@ const TVDetails: React.FC = () => {
                   Sélectionne une langue et un lecteur
                 </div>
               );
-            })() : (
-              <iframe
-                key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}`}
-                src={getInlinePlayerUrl()}
-                className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                allowFullScreen
-                allow="autoplay; fullscreen; encrypted-media"
-                style={{ border: 'none', display: 'block' }}
-                title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
-              />
-            )}
+            })() : inlinePlayerSource === 'webflix' ? (() => {
+              const src = getInlinePlayerUrl();
+              return src ? (
+                <video
+                  key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}-${inlineLang}`}
+                  src={src}
+                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                  controls
+                  autoPlay
+                  title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
+                  style={{ display: 'block', background: '#000' }}
+                />
+              ) : null;
+            })() : (() => {
+              const src = getInlinePlayerUrl();
+              return src ? (
+                <iframe
+                  key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}`}
+                  src={src}
+                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                  width="100%"
+                  height="100%"
+                  frameBorder={0}
+                  allowFullScreen
+                  allow="autoplay; fullscreen; encrypted-media"
+                  style={{ border: 'none', display: 'block' }}
+                  title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
+                />
+              ) : null;
+            })()}
             {/* Langue + Lecteurs — uniquement pour Anime-Sama */}
             {inlinePlayerSource === 'animesama' && !loadingAnimeData && selectedAnimeEpisode && (() => {
               const animeLink = selectedAnimeEpisode.streaming_links?.find((l: any) => l.language === selectedLanguage)
@@ -7213,93 +7274,36 @@ const TVDetails: React.FC = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
               <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
             </div>
-            <div className="p-4 space-y-4">
-              {/* VF / Multilingue */}
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-white/25 mb-2.5 px-0.5">VF / Multilingue</p>
-                <div className="flex flex-wrap gap-2">
-                  {/* Frembed */}
+            <div className="p-4">
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { src: 'frembed',    label: 'Frembed' },
+                  { src: 'peachify',   label: 'Peachify' },
+                  { src: 'vidsrc',     label: 'VidSrc' },
+                  { src: 'vidsrc_su',  label: 'VidSrc.su' },
+                  { src: 'vidsrc_io',  label: 'VidSrc.io' },
+                  { src: 'vidsrcwtf1', label: 'VidSrc.wtf 1' },
+                  { src: 'vidsrcwtf3', label: 'VidSrc.wtf 3' },
+                  { src: 'vidsrcwtf5', label: 'VidSrc.wtf 5' },
+                  { src: 'vidlink',    label: 'VidLink' },
+                  { src: 'videasy',    label: 'Videasy' },
+                  { src: 'embed2',     label: '2Embed' },
+                  { src: 'autoembed',  label: 'AutoEmbed' },
+                  { src: 'multiembed', label: 'MultiEmbed' },
+                  { src: 'vidsrc_nl',  label: 'VidSrc.nl' },
+                ] as { src: InlineSource; label: string }[]).map(({ src, label }) => (
                   <button
-                    onClick={() => setInlinePlayerSource('frembed')}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                      inlinePlayerSource === 'frembed'
+                    key={src}
+                    onClick={() => setInlinePlayerSource(src)}
+                    className={`inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                      inlinePlayerSource === src
                         ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
                         : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
                     }`}
                   >
-                    Frembed VF
+                    {label}
                   </button>
-                  {/* Purstream */}
-                  <button
-                    onClick={() => setInlinePlayerSource('purstream')}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                      inlinePlayerSource === 'purstream'
-                        ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                    }`}
-                  >
-                    Purestream
-                  </button>
-                  {/* Nakios */}
-                  <button
-                    onClick={() => setInlinePlayerSource('nakios')}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                      inlinePlayerSource === 'nakios'
-                        ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                    }`}
-                  >
-                    Nakios
-                  </button>
-                  {/* Anime-Sama */}
-                  <button
-                    onClick={() => {
-                      setInlinePlayerSource('animesama');
-                      if (selectedAnimeEpisode) {
-                        const links: any[] = selectedAnimeEpisode.streaming_links ?? [];
-                        if (!selectedLanguage && links.length > 0) {
-                          const hasVf = links.some((l: any) => l.language === 'vf');
-                          const hasVostfr = links.some((l: any) => l.language === 'vostfr');
-                          setSelectedLanguage(hasVf ? 'vf' : hasVostfr ? 'vostfr' : links[0].language);
-                          setSelectedPlayer('0');
-                        }
-                      } else {
-                        setSelectedLanguage(null);
-                        setSelectedPlayer(null);
-                      }
-                    }}
-                    disabled={loadingAnimeData}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                      inlinePlayerSource === 'animesama'
-                        ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                        : loadingAnimeData
-                          ? 'bg-white/[0.03] border-white/[0.08] text-white/35 cursor-default'
-                          : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                    }`}
-                  >
-                    {loadingAnimeData && inlinePlayerSource === 'animesama'
-                      ? <span className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin flex-shrink-0" />
-                      : null
-                    }
-                    Anime-Sama
-                  </button>
-                </div>
-              </div>
-              {/* VOSTFR */}
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-white/25 mb-2.5 px-0.5">VOSTFR</p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setInlinePlayerSource('videasy')}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                      inlinePlayerSource === 'videasy'
-                        ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                    }`}
-                  >
-                    Videasy
-                  </button>
-                </div>
+                ))}
               </div>
             </div>
           </div>

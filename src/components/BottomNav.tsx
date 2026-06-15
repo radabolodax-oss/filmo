@@ -17,9 +17,7 @@ const HIDDEN_PREFIXES = [
 const BottomNav: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
-  const isHidden = HIDDEN_PREFIXES.some((p) => location.pathname.startsWith(p)) ||
-    (location.pathname.startsWith('/tv/') && location.pathname.includes('/s/')) ||
-    (location.pathname.startsWith('/anime/') && location.pathname.includes('/season/'));
+  const isHidden = HIDDEN_PREFIXES.some((p) => location.pathname.startsWith(p));
   if (isHidden) return null;
 
   const tabs = [

@@ -23,6 +23,7 @@ import i18n from '../i18n';
 import { useProfile } from '../context/ProfileContext';
 import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed } from '../utils/certificationUtils';
 import { getVipHeaders } from '../utils/authUtils';
+import { toAnicloudSlug, buildFastfluxUrl } from '../utils/fastflux';
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
@@ -1003,7 +1004,7 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
   const [videoSource, setVideoSource] = useState<string | null>(null);
   const [customSources, setCustomSources] = useState<string[]>([]);
   // Change l'état initial pour ne pas sélectionner de lecteur par défaut et corrige le type
-  type PlayerSourceType = 'primary' | 'vostfr' | 'purstream' | 'adfree' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'wiflix' | 'fstream' | number;
+  type PlayerSourceType = 'primary' | 'vostfr' | 'purstream' | 'adfree' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'wiflix' | 'fstream' | 'embed' | number;
   const [selectedSource, setSelectedSource] = useState<PlayerSourceType | null>(null);
   const [frembedAvailable, setFrembedAvailable] = useState(true);
   const [adFreeSource, setAdFreeSource] = useState<string | null>(null);
@@ -1041,6 +1042,17 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
   // MP4 sources states
   const [mp4Sources, setMp4Sources] = useState<{ url: string; label?: string; language?: string; isVip?: boolean }[]>([]);
   const [selectedMp4Source, setSelectedMp4Source] = useState<number>(0);
+
+  // Embed public providers
+  const MOVIE_EMBED_PROVIDERS = [
+    { name: 'VidSrc',    url: `https://vidsrc.to/embed/movie/${movieId}` },
+    { name: 'VidSrc.su', url: `https://vidsrc.su/embed/movie/${movieId}` },
+    { name: 'VidSrc.io', url: `https://vidsrc.io/embed/movie?tmdb=${movieId}` },
+    { name: 'Peachify',  url: `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` },
+    { name: '2Embed',    url: `https://www.2embed.cc/embed/${movieId}` },
+    { name: 'AutoEmbed', url: `https://autoembed.co/movie/tmdb/${movieId}` },
+  ];
+  const [selectedEmbedProvider, setSelectedEmbedProvider] = useState(0);
 
   // Purstream embed ID (résolu via le backend)
   const [purstreamEmbedId, setPurstreamEmbedId] = useState<number | null>(null);
@@ -1713,6 +1725,16 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
                   </button>
                 );
               })}
+              <button
+                onClick={() => handleSelectSource('purstream')}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                  selectedSource === 'purstream'
+                    ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+                    : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                }`}
+              >
+                Purstream
+              </button>
             </div>
           </div>
           {/* ——— VOSTFR ——— */}
@@ -1729,16 +1751,19 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
               >
                 Videasy
               </button>
-              <button
-                onClick={() => handleSelectSource('purstream')}
-                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                  selectedSource === 'purstream'
-                    ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                    : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
-                }`}
-              >
-                Purstream
-              </button>
+              {MOVIE_EMBED_PROVIDERS.map((p, i) => (
+                <button
+                  key={p.name}
+                  onClick={() => { setSelectedEmbedProvider(i); handleSelectSource('embed'); }}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                    selectedSource === 'embed' && selectedEmbedProvider === i
+                      ? 'bg-blue-500/15 border-blue-400/40 text-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.1)]'
+                      : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/18 active:scale-95'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -2028,7 +2053,8 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
                         selectedSource === 'omega' ? omegaData?.player_links?.[selectedOmegaPlayer]?.link || "" :
                           selectedSource === 'wiflix' ? wiflixSources[selectedWiflixSource]?.url || "" :
                             selectedSource === 'fstream' ? fstreamSources[selectedFstreamSource]?.url || "" :
-                              typeof selectedSource === 'number' ? customSources[selectedSource] : ""
+                              selectedSource === 'embed' ? MOVIE_EMBED_PROVIDERS[selectedEmbedProvider]?.url || "" :
+                                typeof selectedSource === 'number' ? customSources[selectedSource] : ""
             }
             className="w-full h-full"
             allowFullScreen
@@ -2129,9 +2155,10 @@ const MovieDetails = (): JSX.Element => {
   // Ajout d'un état pour suivre si le film est sorti
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
 
-  type InlineSource = 'nakios' | 'purstream' | 'animesama' | 'videasy' | 'vidlink' | 'vidmoly' | 'frembed';
+  type InlineSource = 'webflix' | 'frembed' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('videasy');
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
+  const [movieLang, setMovieLang] = useState<'VF' | 'VOSTFR'>('VF');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
@@ -2837,11 +2864,22 @@ const MovieDetails = (): JSX.Element => {
 
   const getInlinePlayerUrl = () => {
     switch (inlinePlayerSource) {
-      case 'videasy':  return `https://player.videasy.net/movie/${id}?autoplay=1`;
-      case 'vidlink':  return `https://vidlink.pro/movie/${id}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
-      case 'vidmoly':  return vidmolyEmbedUrl || '';
-      case 'frembed':  return `https://frembed.click/embed/movie/${id}`;
-      default:         return `https://frembed.click/embed/movie/${id}`;
+      case 'frembed':    return `https://frembed.click/api/film.php?id=${id}`;
+      case 'peachify':   return `https://peachify.top/embed/movie/${id}?sub=French&accent=dc2626`;
+      case 'vidsrc':     return `https://vidsrc.to/embed/movie/${id}`;
+      case 'vidsrc_su':  return `https://vidsrc.su/embed/movie/${id}`;
+      case 'vidsrc_io':  return `https://vidsrc.io/embed/movie?tmdb=${id}`;
+      case 'vidsrcwtf1': return `https://vidsrc.wtf/api/1/movie/?id=${id}`;
+      case 'vidsrcwtf3': return `https://vidsrc.wtf/api/3/movie/?id=${id}`;
+      case 'vidsrcwtf5': return `https://vidsrc.wtf/api/5/movie/?id=${id}`;
+      case 'vidlink':    return `https://vidlink.pro/movie/${id}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
+      case 'videasy':    return `https://player.videasy.net/movie/${id}?autoplay=1`;
+      case 'embed2':     return `https://www.2embed.skin/embed/${id}`;
+      case 'autoembed':  return `https://autoembed.co/movie/tmdb/${id}`;
+      case 'multiembed': return `https://multiembed.mov/?video_id=${id}&tmdb=1`;
+      case 'vidsrc_nl':  return `https://vidsrc.nl/embed/movie/${id}`;
+      case 'vidmoly':    return vidmolyEmbedUrl || '';
+      default:           return `https://frembed.click/api/film.php?id=${id}`;
     }
   };
 
@@ -4583,7 +4621,19 @@ const MovieDetails = (): JSX.Element => {
                 transition={{ duration: 0.3 }}
               >
               <div className="relative w-full min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
-                {(inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
+                {inlinePlayerSource === 'webflix' ? (
+                  <div className="relative w-full">
+                    <video
+                      key={`fastflux-${movie?.title}-${movieLang}`}
+                      src={buildFastfluxUrl(movie?.title || (movie as any)?.original_title || '', 1, 1, movieLang)}
+                      className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                      controls
+                      autoPlay
+                      style={{ display: 'block', background: '#000' }}
+                      title={movie?.title || 'Film'}
+                    />
+                  </div>
+                ) : (inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
                   const loading       = inlinePlayerSource === 'nakios' ? nakiosStreamLoading : purstreamStreamLoading;
                   const streamUrl     = inlinePlayerSource === 'nakios' ? nakiosStreamUrl    : purstreamStreamUrl;
                   const fallbackLabel = inlinePlayerSource === 'nakios' ? 'Film indisponible sur Nakios' : 'Flux Purstream indisponible';
@@ -4696,79 +4746,36 @@ const MovieDetails = (): JSX.Element => {
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
                   <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
                 </div>
-                <div className="p-4 space-y-4">
-                  {/* VF / Multilingue */}
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-white/25 mb-2.5 px-0.5">Français (VF)</p>
-                    <div className="flex flex-wrap gap-2">
-                      {/* Frembed */}
+                <div className="p-4">
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      { src: 'frembed',    label: 'Frembed' },
+                      { src: 'peachify',   label: 'Peachify' },
+                      { src: 'vidsrc',     label: 'VidSrc' },
+                      { src: 'vidsrc_su',  label: 'VidSrc.su' },
+                      { src: 'vidsrc_io',  label: 'VidSrc.io' },
+                      { src: 'vidsrcwtf1', label: 'VidSrc.wtf 1' },
+                      { src: 'vidsrcwtf3', label: 'VidSrc.wtf 3' },
+                      { src: 'vidsrcwtf5', label: 'VidSrc.wtf 5' },
+                      { src: 'vidlink',    label: 'VidLink' },
+                      { src: 'videasy',    label: 'Videasy' },
+                      { src: 'embed2',     label: '2Embed' },
+                      { src: 'autoembed',  label: 'AutoEmbed' },
+                      { src: 'multiembed', label: 'MultiEmbed' },
+                      { src: 'vidsrc_nl',  label: 'VidSrc.nl' },
+                    ] as { src: InlineSource; label: string }[]).map(({ src, label }) => (
                       <button
-                        onClick={() => setInlinePlayerSource('frembed')}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                          inlinePlayerSource === 'frembed'
+                        key={src}
+                        onClick={() => setInlinePlayerSource(src)}
+                        className={`inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
+                          inlinePlayerSource === src
                             ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
                             : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
                         }`}
                       >
-                        Frembed VF
+                        {label}
                       </button>
-                      {/* Purstream */}
-                      <button
-                        onClick={() => setInlinePlayerSource('purstream')}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                          inlinePlayerSource === 'purstream'
-                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                            : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                        }`}
-                      >
-                        Purestream
-                      </button>
-                      {/* Nakios */}
-                      <button
-                        onClick={() => setInlinePlayerSource('nakios')}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                          inlinePlayerSource === 'nakios'
-                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                            : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                        }`}
-                      >
-                        Nakios
-                      </button>
-                      {/* Anime-Sama */}
-                      <button
-                        onClick={() => setInlinePlayerSource('animesama')}
-                        disabled={animeSamaMovieLoading}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                          inlinePlayerSource === 'animesama'
-                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                            : animeSamaMovieLoading
-                              ? 'bg-white/[0.03] border-white/[0.08] text-white/35 cursor-default'
-                              : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                        }`}
-                      >
-                        {animeSamaMovieLoading && inlinePlayerSource === 'animesama'
-                          ? <span className="w-3 h-3 rounded-full border-2 border-white/20 border-t-white/70 animate-spin flex-shrink-0" />
-                          : null
-                        }
-                        Anime-Sama
-                      </button>
-                    </div>
-                  </div>
-                  {/* VOSTFR */}
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-white/25 mb-2.5 px-0.5">VOSTFR</p>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => setInlinePlayerSource('videasy')}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                          inlinePlayerSource === 'videasy'
-                            ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                            : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                        }`}
-                      >
-                        Videasy
-                      </button>
-                    </div>
+                    ))}
                   </div>
                 </div>
               </div>

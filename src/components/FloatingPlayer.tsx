@@ -178,7 +178,7 @@ const FloatingPlayer: React.FC = () => {
       // If we're on a watch page, check if it matches our current video
       const isCurrentVideo =
         (videoType === 'movie' && location.pathname === `/movie/${videoId}`) ||
-        (videoType === 'tv' && location.pathname === `/tv/${videoId}/s/${seasonNumber}/e/${episodeNumber}`);
+        (videoType === 'tv' && location.pathname === `/tv/${videoId}`);
 
       if (isCurrentVideo) {
         disableMiniPlayer();
@@ -242,7 +242,7 @@ const FloatingPlayer: React.FC = () => {
     if (videoType === 'movie') {
       navigate(`/movie/${videoId}`);
     } else if (videoType === 'tv') {
-      navigate(`/tv/${videoId}/s/${seasonNumber}/e/${episodeNumber}`);
+      navigate(`/tv/${videoId}`);
     }
     returnToPlayer();
   };

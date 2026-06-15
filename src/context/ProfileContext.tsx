@@ -133,9 +133,7 @@ export const ProfileProvider: React.FC<ProfileProviderProps> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(false);
   const location = useLocation();
 
-  // Check if we're on a watch route - if so, disable profile data loading (but allow sync)
-  const isWatchRoute = (location.pathname.startsWith('/tv/') && location.pathname.includes('/s/')) ||
-    (location.pathname.startsWith('/anime/') && location.pathname.includes('/season/'));
+  const isWatchRoute = false;
 
   const applyProfileEntriesToLocalStorage = (entries: Record<string, string>) => {
     Object.keys(localStorage).forEach((key) => {

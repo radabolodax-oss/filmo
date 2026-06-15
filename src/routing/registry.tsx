@@ -46,8 +46,6 @@ export const ROUTES: RouteEntry[] = [
   { path: '/search',                  loader: lz(() => import('../pages/Search')) },
 
   // Watch routes (no skeleton — RouteProgressBar fallback)
-  { path: '/tv/:tmdbid/s/:season/e/:episode',             loader: lz(() => import('../pages/Watch/WatchTv')) },
-  { path: '/anime/:id/season/:season/episode/:episode',       loader: lz(() => import('../pages/Watch/WatchAnime')) },
   { path: '/live-tv',                 loader: lz(() => import('../pages/LiveTV')) },
   { path: '/ftv/info/:encoded',       loader: lz(() => import('../pages/FranceTV/FranceTVInfo')) },
   { path: '/ftv/watch/:encoded',      loader: lz(() => import('../pages/FranceTV/FranceTVPlayer')) },

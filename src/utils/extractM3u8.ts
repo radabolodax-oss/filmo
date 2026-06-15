@@ -138,8 +138,7 @@ const ONEUPLOAD_EXTRACTIONS_ENABLED = false;
 const DARKIBOX_EXTRACTIONS_ENABLED = true;
 
 // Les extracteurs ci-dessous sont pilotés par les préférences utilisateur via
-// `isM3u8ExtractorEnabled`. Les appelants externes (WatchMovie, WatchTv)
-// doivent migrer des anciennes constantes vers ces getters.
+// `isM3u8ExtractorEnabled`.
 export const isVoeExtractionEnabled = () => isM3u8ExtractorEnabled('voe');
 export const isUqloadExtractionEnabled = () => isM3u8ExtractorEnabled('uqload');
 export const isVidzyExtractionEnabled = () => isM3u8ExtractorEnabled('vidzy');

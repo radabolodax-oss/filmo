@@ -90,6 +90,8 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
     onlyQualityMenu,
     embedType,
     loadingRivestream,
+    loadingNakios,
+    nakiosStreamUrl,
     handleSourceChange,
     renderSourceQualityMeta,
     renderCopySourceButton,
@@ -192,7 +194,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
   // ===== Milestone 4 — pinned source / hoster ids for PinButton UI =====
   // Ces états reflètent en live l'état épinglé dans les prefs et se mettent
   // à jour via `subscribeToPriorityChanges` (custom event + storage cross-onglets).
-  // `pinnedSourceId` n'existe que pour `moviesTv` (langue côté anime → géré dans WatchAnime).
+  // `pinnedSourceId` n'existe que pour `moviesTv` (langue côté anime gérée dans TVDetails).
   const [pinnedSourceId, setPinnedSourceId] = useState<TopLevelSourceId | null>(
     () => getSourcePriorityPrefs().categories.moviesTv.pinnedSource?.id ?? null,
   );
@@ -508,8 +510,9 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                         <h4 className="text-gray-400 text-xs uppercase tracking-wider mb-2 px-2">{group.title}</h4>
 
                         {group.sources.map(source => {
-                          // Skip rendering individual VOSTFR sources here, they are handled in the dropdown
-                          if (source.type === 'vostfr') return null;
+                          // Skip individual VOSTFR sources handled in the dropdown (Videasy, Vidlink)
+                          // Exception: Purstream (id='purstream') is VF and rendered as standalone button
+                          if (source.type === 'vostfr' && source.id !== 'purstream') return null;
 
                           let isActive = false;
                           // Updated isActive logic for HLS sources
@@ -532,6 +535,8 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                             isActive = voxSources.some(vs => vs.link === embedUrl);
                           } else if (source.type === 'bravo_main') {
                             isActive = purstreamSources.some(ps => ps.url === src);
+                          } else if (source.type === 'nakios') {
+                            isActive = !!(nakiosStreamUrl && src === nakiosStreamUrl);
                           } else {
                             // Existing logic for embed sources
                             isActive = !!source.isActive || (onlyQualityMenu && embedType === source.type && embedUrl === source.url);
@@ -539,7 +544,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                           // Milestone 4 — TopLevelSourceId mappé depuis le `source_main`
                           // pour les boutons de rangée top-level (Films/Séries uniquement).
                           // `nexus_main` est exclu (agrégat ambigu) et le pin ne s'affiche que
-                          // pour la catégorie `moviesTv` (langue anime gérée dans WatchAnime).
+                          // pour la catégorie `moviesTv` (langue anime gérée dans TVDetails).
                           const topLevelForPin: TopLevelSourceId | null = category === 'moviesTv'
                             ? (SOURCE_MAIN_TO_TOP_LEVEL[source.type] ?? null)
                             : null;
@@ -548,13 +553,13 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                               <div className="mb-2 flex items-stretch gap-2">
                                 <button
                                   onClick={() => handleSourceChange(source.type, source.id, source.url)}
-                                  disabled={(source.type === 'rivestream_hls' && loadingRivestream)}
+                                  disabled={(source.type === 'rivestream_hls' && loadingRivestream) || (source.type === 'nakios' && loadingNakios)}
                                   className={`w-full flex-1 px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isActive ? 'bg-gray-800 border-l-4 border-white/20 pl-3' : 'bg-gray-900/60 text-white'
-                                    } ${onlyQualityMenu && embedType && embedUrl && source.type === embedType && source.url === embedUrl ? 'ring-2 ring-red-500 bg-gray-800/80' : ''} ${(source.type === 'rivestream_hls' && loadingRivestream) ? 'opacity-70 cursor-not-allowed' : ''
+                                    } ${onlyQualityMenu && embedType && embedUrl && source.type === embedType && source.url === embedUrl ? 'ring-2 ring-red-500 bg-gray-800/80' : ''} ${((source.type === 'rivestream_hls' && loadingRivestream) || (source.type === 'nakios' && loadingNakios)) ? 'opacity-70 cursor-not-allowed' : ''
                                     }`}
                                 >
                                   <div className="min-w-0 flex flex-1 flex-col">
-                                    <span className={`${isActive ? 'text-green-400 font-medium' : 'text-white'} ${(source.type === 'rivestream_hls' && loadingRivestream) ? 'animate-pulse' : ''
+                                    <span className={`${isActive ? 'text-green-400 font-medium' : 'text-white'} ${((source.type === 'rivestream_hls' && loadingRivestream) || (source.type === 'nakios' && loadingNakios)) ? 'animate-pulse' : ''
                                       }`}>
                                       {source.label}
                                       {topLevelForPin && pinnedSourceId === topLevelForPin && (
@@ -994,15 +999,13 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                       {[
                                         { id: 'vostfr',    label: 'Videasy' },
                                         { id: 'vidlink',   label: 'Vidlink' },
-                                        ...(movieId ? [{ id: 'purstream', label: 'Purstream' }] : []),
                                       ].map((vostfrSource, index) => {
                                         // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
                                         // (épisode spécial / Spéciaux TMDB) tombe dans le fallback '#' qui fait
                                         // charger la page courante en boucle dans l'iframe.
                                         const sourceUrl = movieId ?
                                           vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                                            vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
-                                              `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}` :
+                                            `https://vidlink.pro/movie/${movieId}` :
                                           (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
                                             vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                               `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
