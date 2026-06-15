@@ -102,6 +102,42 @@ router.get('/lookup', async (req, res) => {
   }
 });
 
+// GET /api/franime/episode?anime_id=X&s=1&ep=1&lang=vf
+// Returns { players: [watch2url, ...] } — one URL per lecteur (0-indexed internally)
+router.get('/episode', async (req, res) => {
+  const { anime_id, s = '1', ep = '1', lang = 'vf' } = req.query;
+  if (!anime_id) return res.status(400).json({ error: 'Missing anime_id' });
+
+  const seasonIdx = Math.max(0, parseInt(s) - 1);
+  const epIdx    = Math.max(0, parseInt(ep) - 1);
+  const headers  = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://franime.fr/',
+    'Origin': 'https://franime.fr',
+  };
+
+  const players = [];
+  for (let l = 0; l <= 6; l++) {
+    try {
+      const apiUrl = `https://api.franime.fr/api/anime/${anime_id}/${seasonIdx}/${l}/${lang}/${epIdx}`;
+      const r = await axios.get(apiUrl, { timeout: 5000, headers });
+      const url = typeof r.data === 'string' ? r.data.trim() : '';
+      if (url.includes('/watch2/')) {
+        players.push(url);
+      } else {
+        break;
+      }
+    } catch {
+      break;
+    }
+  }
+
+  if (!players.length) {
+    return res.status(404).json({ error: 'Épisode non disponible sur FRAnime' });
+  }
+  return res.json({ players });
+});
+
 // GET /api/franime/reload-sitemap (force refresh)
 router.post('/reload-sitemap', async (req, res) => {
   _sitemapData = null;

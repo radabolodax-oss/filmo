@@ -31,7 +31,7 @@ import EmblaCarousel from '../components/EmblaCarousel';
 import { encodeId, getTmdbId } from '../utils/idEncoder';
 import AntiSpoilerSettingsModal from '../components/AntiSpoilerSettings';
 import { useAntiSpoilerSettings } from '../hooks/useAntiSpoilerSettings';
-import { buildSiteUrl } from '../config/runtime';
+import { buildSiteUrl, buildApiProxyUrl } from '../config/runtime';
 import { useWrappedTracker } from '../hooks/useWrappedTracker';
 import LazySection from '../components/LazySection';
 import SEO from '../components/SEO';
@@ -45,6 +45,15 @@ import { buildFastfluxUrl } from '../utils/fastflux';
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
 const NAKIOS_PROXY    = (import.meta.env.VITE_NAKIOS_PROXY    as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
+
+function slugifyAnimeSama(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 interface TVShow {
   id?: string | number;
@@ -2505,10 +2514,34 @@ const TVDetails: React.FC = () => {
 
   const cinemaMode = true;
 
-  type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'animesama' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'embed2' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
+  type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'animesama' | 'anicloud' | 'franime' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'embed2' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
   const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
+  // AniCloud states
+  const [anicloudSlug, setAnicloudSlug] = useState<string | null>(null);
+  const [anicloudSections, setAnicloudSections] = useState<any[]>([]);
+  const [anicloudPlayers, setAnicloudPlayers] = useState<{id: number; player_name: string; player_url: string}[]>([]);
+  const [anicloudPlayerIdx, setAnicloudPlayerIdx] = useState(0);
+  const [anicloudLang, setAnicloudLang] = useState<'vf' | 'vostfr'>('vf');
+  const [loadingAnicloud, setLoadingAnicloud] = useState(false);
+  const [anicloudError, setAnicloudError] = useState<string | null>(null);
+  // FRAnime states
+  const [franimeLookup, setFranimeLookup] = useState<{slug: string; animeId: string; langs: string[]} | null>(null);
+  const [franimeLang, setFranimeLang] = useState<string>('vf');
+  const [franimeLoading, setFranimeLoading] = useState(false);
+  const [franimeError, setFranimeError] = useState<string | null>(null);
+  const [franimeWatch2Players, setFranimeWatch2Players] = useState<string[]>([]);
+  const [franimeWatch2PlayerIdx, setFranimeWatch2PlayerIdx] = useState(0);
+  const [franimeEpLoading, setFranimeEpLoading] = useState(false);
+  const [franimeEpError, setFranimeEpError] = useState<string | null>(null);
+  // AnimeSama direct states
+  const [animeSamaDirectSlug, setAnimeSamaDirectSlug] = useState<string | null>(null);
+  const [animeSamaDirectPlayers, setAnimeSamaDirectPlayers] = useState<string[]>([]);
+  const [animeSamaDirectPlayerIdx, setAnimeSamaDirectPlayerIdx] = useState(0);
+  const [animeSamaDirectLang, setAnimeSamaDirectLang] = useState<string>('vostfr');
+  const [animeSamaDirectLoading, setAnimeSamaDirectLoading] = useState(false);
+  const [animeSamaDirectError, setAnimeSamaDirectError] = useState<string | null>(null);
   const [inlineLang, setInlineLang] = useState<'VF' | 'VOSTFR'>('VF');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
@@ -3770,6 +3803,96 @@ const TVDetails: React.FC = () => {
     }
   }, [tvShow?.id, tvShow?.name, tvShow, tmdbEnglishName, tmdbAlternativeTitles, MAIN_API]);
 
+  const loadAnicloudEpisode = useCallback(async (lang: 'vf' | 'vostfr' = 'vf') => {
+    if (selectedSeason === null || !selectedEpisode) return;
+    setLoadingAnicloud(true);
+    setAnicloudError(null);
+    setAnicloudPlayers([]);
+    try {
+      let slug = anicloudSlug;
+      // 1. Search by title if we don't have a slug yet
+      if (!slug && tvShow?.name) {
+        const searchRes = await axios.get(`https://anicloud.top/api/search?q=${encodeURIComponent(tvShow.name)}`);
+        const results: any[] = searchRes.data?.data ?? [];
+        const titleLower = tvShow.name.toLowerCase();
+        const match = results.find((r: any) => r.name?.toLowerCase() === titleLower) ?? results[0];
+        if (!match) { setAnicloudError('Anime non trouvé sur AniCloud'); return; }
+        slug = match.slug as string;
+        setAnicloudSlug(slug);
+      }
+      if (!slug) { setAnicloudError('Slug introuvable'); return; }
+
+      // 2. Load sections if needed
+      let sections = anicloudSections;
+      if (!sections.length) {
+        const loaderRes = await axios.get(`https://anicloud.top/api/anime-loader?slug=${slug}`);
+        sections = loaderRes.data?.sections ?? [];
+        setAnicloudSections(sections);
+      }
+
+      // 3. Pick the main saison section
+      const mainSection = sections.find((s: any) => s.section_type === 'saison') ?? sections[0];
+      if (!mainSection) { setAnicloudError('Aucune section disponible'); return; }
+
+      // 4. Get episodes and find the target one
+      const epsRes = await axios.get(`https://anicloud.top/api/anime-episodes?sectionId=${mainSection.id}`);
+      const episodes: any[] = epsRes.data?.episodes ?? [];
+      const target = episodes.find((e: any) => e.episode_number === (selectedEpisode ?? 1) && e.language === lang);
+      if (!target) { setAnicloudError(`Épisode ${selectedEpisode} indisponible en ${lang.toUpperCase()}`); return; }
+
+      // 5. Get players
+      const playersRes = await axios.get(`https://anicloud.top/api/anime-players?episodeId=${target.id}`);
+      const players = playersRes.data?.players ?? [];
+      setAnicloudPlayers(players);
+      setAnicloudPlayerIdx(0);
+    } catch {
+      setAnicloudError('Erreur lors du chargement AniCloud');
+    } finally {
+      setLoadingAnicloud(false);
+    }
+  }, [tvShow?.name, selectedSeason, selectedEpisode, anicloudSlug, anicloudSections]);
+
+  const loadAnimeSamaEpisode = useCallback(async (lang: string = 'vostfr') => {
+    if (selectedSeason === null || !selectedEpisode || !tvShow?.name) return;
+    setAnimeSamaDirectLoading(true);
+    setAnimeSamaDirectError(null);
+    setAnimeSamaDirectPlayers([]);
+    try {
+      const slug = animeSamaDirectSlug ?? slugifyAnimeSama(tvShow.name);
+      if (!animeSamaDirectSlug) setAnimeSamaDirectSlug(slug);
+      const epIdx = (selectedEpisode ?? 1) - 1;
+      const episodesUrl = `https://anime-sama.to/catalogue/${slug}/saison${selectedSeason ?? 1}/${lang}/episodes.js`;
+      const res = await axios.get(buildApiProxyUrl(episodesUrl), { responseType: 'text', timeout: 10000 });
+      const js: string = typeof res.data === 'string' ? res.data : '';
+      if (!js || js.includes('<html') || js.includes('<!DOCTYPE') || js.includes('Page introuvable') || js.includes('Acces Introuvable')) {
+        setAnimeSamaDirectError(`Épisode ${selectedEpisode} indisponible en ${lang.toUpperCase()}`);
+        return;
+      }
+      // Each [...] block is one mirror containing all episodes.
+      // mirrors[mirrorIdx][episodeIdx] = playerUrl
+      const chunks = js.split('[').slice(1);
+      const mirrors = chunks.map((chunk: string) => {
+        const matches = chunk.match(/'([^']+)'/g) ?? [];
+        return matches
+          .map((m: string) => m.replace(/'/g, '').trim())
+          .filter((u: string) => u.startsWith('http') && u.includes('.'));
+      });
+      const players: string[] = mirrors
+        .map((m: string[]) => m[epIdx])
+        .filter(Boolean) as string[];
+      if (!players.length) {
+        setAnimeSamaDirectError(`Épisode ${selectedEpisode} indisponible en ${lang.toUpperCase()}`);
+        return;
+      }
+      setAnimeSamaDirectPlayers(players);
+      setAnimeSamaDirectPlayerIdx(0);
+    } catch {
+      setAnimeSamaDirectError('Erreur lors du chargement Anime-Sama');
+    } finally {
+      setAnimeSamaDirectLoading(false);
+    }
+  }, [tvShow?.name, selectedSeason, selectedEpisode, animeSamaDirectSlug]);
+
   const syncSelectedAnimeEpisode = useCallback((nextAnimeData: any) => {
     if (selectedSeason === null || !selectedEpisode || !nextAnimeData?.seasons) {
       setSelectedAnimeEpisode(null);
@@ -4006,34 +4129,90 @@ const TVDetails: React.FC = () => {
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode, animeMode]);
 
-  // Quand Anime-Sama est sélectionné et l'épisode n'est pas encore chargé → le charger à la demande
+  // Reset AniCloud slug/sections quand on change d'anime
   useEffect(() => {
-    if (inlinePlayerSource !== 'animesama') return;
-    if (selectedAnimeEpisode) return;       // déjà chargé
-    if (loadingAnimeData) return;           // chargement en cours
-    if (selectedSeason === null || !selectedEpisode) return;
+    setAnicloudSlug(null);
+    setAnicloudSections([]);
+    setAnicloudPlayers([]);
+    setAnicloudError(null);
+  }, [id]);
+
+  // Déclenche le fetch AniCloud quand la source ou l'épisode change
+  useEffect(() => {
+    if (inlinePlayerSource !== 'anicloud') return;
+    loadAnicloudEpisode(anicloudLang);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlinePlayerSource, selectedSeason, selectedEpisode, anicloudLang]);
+
+  // Reset FRAnime lookup quand on change d'anime
+  useEffect(() => {
+    setFranimeLookup(null);
+    setFranimeError(null);
+    setFranimeWatch2Players([]);
+    setFranimeWatch2PlayerIdx(0);
+    setFranimeEpError(null);
+  }, [id]);
+
+  // Reset players quand saison/épisode/langue change
+  useEffect(() => {
+    setFranimeWatch2Players([]);
+    setFranimeWatch2PlayerIdx(0);
+    setFranimeEpError(null);
+  }, [selectedSeason, selectedEpisode, franimeLang]);
+
+  // Fetch watch2 URLs quand le lookup est prêt + épisode connu
+  useEffect(() => {
+    if (inlinePlayerSource !== 'franime') return;
+    if (!franimeLookup || selectedSeason === null || !selectedEpisode) return;
     let cancelled = false;
-    const load = async () => {
-      const data = animeData ?? await loadAnimeData();
-      if (!cancelled && data) syncSelectedAnimeEpisode(data);
-    };
-    load();
+    setFranimeEpLoading(true);
+    setFranimeEpError(null);
+    axios.get(`${MAIN_API}/api/franime/episode`, {
+      params: { anime_id: franimeLookup.animeId, s: selectedSeason, ep: selectedEpisode, lang: franimeLang }
+    })
+      .then(r => { if (!cancelled) { setFranimeWatch2Players(r.data.players || []); setFranimeWatch2PlayerIdx(0); } })
+      .catch(() => { if (!cancelled) setFranimeEpError('Épisode non disponible sur FRAnime'); })
+      .finally(() => { if (!cancelled) setFranimeEpLoading(false); });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inlinePlayerSource, selectedAnimeEpisode, loadingAnimeData, selectedSeason, selectedEpisode, animeData]);
+  }, [inlinePlayerSource, franimeLookup, selectedSeason, selectedEpisode, franimeLang]);
 
-  // Auto-sélectionne la première langue dispo dès que l'épisode devient disponible
+  // Charge le lookup FRAnime quand la source est sélectionnée
+  useEffect(() => {
+    if (inlinePlayerSource !== 'franime') return;
+    if (franimeLookup || franimeLoading) return;
+    if (!tvShow?.name) return;
+    let cancelled = false;
+    setFranimeLoading(true);
+    setFranimeError(null);
+    axios.get(`${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(tvShow.name)}`)
+      .then(res => {
+        if (cancelled) return;
+        const data = res.data as {slug: string; animeId: string; langs: string[]};
+        setFranimeLookup(data);
+        if (data.langs?.length) {
+          setFranimeLang(data.langs.includes('vf') ? 'vf' : data.langs[0]);
+        }
+      })
+      .catch(() => { if (!cancelled) setFranimeError('Anime non trouvé sur FRAnime'); })
+      .finally(() => { if (!cancelled) setFranimeLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlinePlayerSource, tvShow?.name]);
+
+  // Reset AnimeSama direct slug quand on change d'anime
+  useEffect(() => {
+    setAnimeSamaDirectSlug(null);
+    setAnimeSamaDirectPlayers([]);
+    setAnimeSamaDirectError(null);
+  }, [id]);
+
+  // Déclenche le fetch AnimeSama direct quand la source ou l'épisode change
   useEffect(() => {
     if (inlinePlayerSource !== 'animesama') return;
-    if (!selectedAnimeEpisode) return;
-    if (selectedLanguage) return;
-    const links: any[] = selectedAnimeEpisode.streaming_links ?? [];
-    if (!links.length) return;
-    const hasVf = links.some((l: any) => l.language === 'vf');
-    const hasVostfr = links.some((l: any) => l.language === 'vostfr');
-    setSelectedLanguage(hasVf ? 'vf' : hasVostfr ? 'vostfr' : links[0].language);
-    setSelectedPlayer('0');
-  }, [inlinePlayerSource, selectedAnimeEpisode, selectedLanguage]);
+    loadAnimeSamaEpisode(animeSamaDirectLang);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlinePlayerSource, selectedSeason, selectedEpisode, animeSamaDirectLang]);
 
   const getInlinePlayerUrl = () => {
     const s = selectedSeason ?? 1;
@@ -7139,32 +7318,55 @@ const TVDetails: React.FC = () => {
                 </div>
               );
             })() : inlinePlayerSource === 'animesama' ? (() => {
-              if (loadingAnimeData) return (
+              if (animeSamaDirectLoading) return (
                 <div className="w-full h-[360px] flex items-center justify-center bg-black">
-                  <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-10 w-10 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                   </svg>
                 </div>
               );
-              if (!selectedAnimeEpisode) return (
+              if (animeSamaDirectError || !animeSamaDirectPlayers.length) return (
                 <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                  <span>Épisode indisponible sur Anime-Sama</span>
-                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
+                  <span className="text-sm">{animeSamaDirectError ?? 'Épisode indisponible sur Anime-Sama'}</span>
+                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
                     Essayer Frembed
                   </button>
                 </div>
               );
-              const animeLink = selectedAnimeEpisode.streaming_links?.find((l: any) => l.language === selectedLanguage)
-                ?? selectedAnimeEpisode.streaming_links?.[0];
-              const validPlayers: string[] = (animeLink?.players ?? []).filter(
-                (p: string) => !p.includes('vidmoly')
-              );
-              const animePlayerUrl: string = validPlayers[parseInt(selectedPlayer ?? '0')] ?? '';
-              return animePlayerUrl ? (
+              return (
                 <iframe
-                  key={`animesama-${selectedLanguage}-${selectedPlayer}`}
-                  src={animePlayerUrl}
+                  key={`animesama-${selectedSeason}-${selectedEpisode}-${animeSamaDirectLang}-${animeSamaDirectPlayerIdx}`}
+                  src={animeSamaDirectPlayers[animeSamaDirectPlayerIdx]}
+                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                  allowFullScreen
+                  allow="autoplay; fullscreen; encrypted-media"
+                  style={{ border: 'none', display: 'block' }}
+                  title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
+                />
+              );
+            })() : inlinePlayerSource === 'anicloud' ? (() => {
+              if (loadingAnicloud) return (
+                <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                  <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                </div>
+              );
+              if (anicloudError) return (
+                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                  <span className="text-sm">{anicloudError}</span>
+                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                    Essayer Frembed
+                  </button>
+                </div>
+              );
+              const currentPlayer = anicloudPlayers[anicloudPlayerIdx];
+              return currentPlayer ? (
+                <iframe
+                  key={`anicloud-${selectedSeason}-${selectedEpisode}-${anicloudLang}-${anicloudPlayerIdx}`}
+                  src={currentPlayer.player_url}
                   className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
                   allowFullScreen
                   allow="autoplay; fullscreen; encrypted-media"
@@ -7173,7 +7375,38 @@ const TVDetails: React.FC = () => {
                 />
               ) : (
                 <div className="w-full h-[360px] flex items-center justify-center bg-black text-gray-400 text-sm">
-                  Sélectionne une langue et un lecteur
+                  Aucun lecteur disponible
+                </div>
+              );
+            })() : inlinePlayerSource === 'franime' ? (() => {
+              const isLoading = franimeLoading || franimeEpLoading || (!!franimeLookup && !franimeWatch2Players.length && !franimeEpError);
+              if (isLoading) return (
+                <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                  <svg className="animate-spin h-10 w-10 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                </div>
+              );
+              if (franimeError || !franimeLookup) return (
+                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                  <span className="text-sm">{franimeError ?? 'Anime non trouvé sur FRAnime'}</span>
+                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                    Essayer Frembed
+                  </button>
+                </div>
+              );
+              const franimeSrc = `https://franime.fr/anime/${franimeLookup.slug}?anime_id=${franimeLookup.animeId}&lang=${franimeLang}&ep=${selectedEpisode ?? 1}`;
+              return (
+                <div className="w-full h-[40vw] min-h-[140px] sm:h-[220px] md:h-[360px] lg:h-[420px] 2xl:h-[560px] overflow-hidden relative">
+                  <iframe
+                    key={`franime-${selectedSeason}-${selectedEpisode}-${franimeLang}`}
+                    src={franimeSrc}
+                    allowFullScreen
+                    allow="autoplay; fullscreen; encrypted-media"
+                    style={{ border: 'none', display: 'block', position: 'absolute', top: '-220px', left: 0, width: '100%', height: 'calc(100% + 420px)' }}
+                    title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
+                  />
                 </div>
               );
             })() : inlinePlayerSource === 'webflix' ? (() => {
@@ -7206,19 +7439,12 @@ const TVDetails: React.FC = () => {
                 />
               ) : null;
             })()}
-            {/* Langue + Lecteurs — uniquement pour Anime-Sama */}
-            {inlinePlayerSource === 'animesama' && !loadingAnimeData && selectedAnimeEpisode && (() => {
-              const animeLink = selectedAnimeEpisode.streaming_links?.find((l: any) => l.language === selectedLanguage)
-                ?? selectedAnimeEpisode.streaming_links?.[0];
-              // Exclure les hébergeurs hors-service
-              const validPlayers: string[] = (animeLink?.players ?? []).filter(
-                (p: string) => !p.includes('vidmoly')
-              );
+            {/* Langue + Lecteurs — Anime-Sama direct */}
+            {inlinePlayerSource === 'animesama' && !animeSamaDirectLoading && animeSamaDirectPlayers.length > 0 && (() => {
               const getHostLabel = (url: string, idx: number): string => {
                 try {
                   const h = new URL(url).hostname.replace('www.', '');
-                  const n = h.split('.')[0];
-                  return n.charAt(0).toUpperCase() + n.slice(1);
+                  return h.split('.')[0].charAt(0).toUpperCase() + h.split('.')[0].slice(1);
                 } catch { return `Lecteur ${idx + 1}`; }
               };
               const glassStyle = {
@@ -7234,31 +7460,25 @@ const TVDetails: React.FC = () => {
                   <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
                     <div className="flex gap-1.5 flex-wrap items-center">
                       <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Langue :</span>
-                      {selectedAnimeEpisode.streaming_links?.map((link: any, i: number) => (
-                        <button
-                          key={`lang-${link.language}-${i}`}
-                          onClick={() => { setSelectedLanguage(link.language); setSelectedPlayer('0'); }}
+                      {(['vostfr', 'vf'] as const).map(lang => (
+                        <button key={lang} onClick={() => setAnimeSamaDirectLang(lang)}
                           className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
-                          style={selectedLanguage === link.language ? btnOn : btnOff}
-                        >
-                          {getAnimeLanguageLabel(link.language, t)}
+                          style={animeSamaDirectLang === lang ? btnOn : btnOff}>
+                          {lang.toUpperCase()}
                         </button>
                       ))}
                     </div>
                   </div>
-                  {validPlayers.length > 0 && (
+                  {animeSamaDirectPlayers.length > 1 && (
                     <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
                       <div className="flex gap-1.5 flex-wrap items-center">
                         <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Lecteur :</span>
-                        {validPlayers.map((playerUrl: string, idx: number) => (
-                          <button
-                            key={`player-${idx}`}
-                            onClick={() => setSelectedPlayer(idx.toString())}
+                        {animeSamaDirectPlayers.map((url: string, idx: number) => (
+                          <button key={idx} onClick={() => setAnimeSamaDirectPlayerIdx(idx)}
                             className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
-                            style={selectedPlayer === idx.toString() ? btnOn : btnOff}
-                          >
+                            style={animeSamaDirectPlayerIdx === idx ? btnOn : btnOff}>
                             <Play className="w-3 h-3" />
-                            {getHostLabel(playerUrl, idx)}
+                            {getHostLabel(url, idx)}
                           </button>
                         ))}
                       </div>
@@ -7269,6 +7489,92 @@ const TVDetails: React.FC = () => {
             })()}
           </div>
 
+          {/* Langue + Lecteurs — AniCloud */}
+          {inlinePlayerSource === 'anicloud' && !loadingAnicloud && anicloudPlayers.length > 0 && (() => {
+            const glassStyle = {
+              background: 'rgba(255,255,255,0.03)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              borderColor: 'rgba(255,255,255,0.08)',
+            };
+            const btnOn  = { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' } as const;
+            const btnOff = { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' } as const;
+            return (
+              <>
+                <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                  <div className="flex gap-1.5 flex-wrap items-center">
+                    <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Langue :</span>
+                    {(['vf', 'vostfr'] as const).map(lang => (
+                      <button key={lang} onClick={() => setAnicloudLang(lang)}
+                        className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
+                        style={anicloudLang === lang ? btnOn : btnOff}>
+                        {lang.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                  <div className="flex gap-1.5 flex-wrap items-center">
+                    <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Lecteur :</span>
+                    {anicloudPlayers.map((p, i) => (
+                      <button key={p.id} onClick={() => setAnicloudPlayerIdx(i)}
+                        className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
+                        style={anicloudPlayerIdx === i ? btnOn : btnOff}>
+                        <Play className="w-3 h-3" />
+                        {p.player_name.charAt(0).toUpperCase() + p.player_name.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+
+          {/* Langue + Lecteurs — FRAnime */}
+          {inlinePlayerSource === 'franime' && !franimeLoading && !franimeEpLoading && franimeLookup && franimeWatch2Players.length > 0 && (() => {
+            const glassStyle = {
+              background: 'rgba(255,255,255,0.03)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              borderColor: 'rgba(255,255,255,0.08)',
+            };
+            const btnOn  = { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' } as const;
+            const btnOff = { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' } as const;
+            return (
+              <>
+                {franimeLookup.langs.length > 1 && (
+                  <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                    <div className="flex gap-1.5 flex-wrap items-center">
+                      <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Langue :</span>
+                      {franimeLookup.langs.map(lang => (
+                        <button key={lang} onClick={() => setFranimeLang(lang)}
+                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
+                          style={franimeLang === lang ? btnOn : btnOff}>
+                          {lang.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {franimeWatch2Players.length > 1 && (
+                  <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                    <div className="flex gap-1.5 flex-wrap items-center">
+                      <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Lecteur :</span>
+                      {franimeWatch2Players.map((_, idx) => (
+                        <button key={idx} onClick={() => setFranimeWatch2PlayerIdx(idx)}
+                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
+                          style={franimeWatch2PlayerIdx === idx ? btnOn : btnOff}>
+                          <Play className="w-3 h-3" />
+                          Lecteur {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
           {/* ===== SOURCE PANEL — Liquid Glass ===== */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
             <div className="flex items-center gap-2.5 px-5 py-3 border-b border-white/[0.06]">
@@ -7278,6 +7584,9 @@ const TVDetails: React.FC = () => {
             <div className="p-3 relative">
               {(() => {
                 const sources: { src: InlineSource; label: string }[] = [
+                  { src: 'anicloud',   label: 'AniCloud' },
+                  { src: 'animesama',  label: 'Anime-Sama' },
+                  { src: 'franime',    label: 'FRAnime' },
                   { src: 'frembed',    label: 'Frembed' },
                   { src: 'peachify',   label: 'Peachify' },
                   { src: 'vidsrc',     label: 'VidSrc' },

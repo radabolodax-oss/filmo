@@ -463,6 +463,7 @@ app.use("/api/livetv", require("./liveTvRoutes"));
 // New modular routes
 app.use('/api/cpasmal', cpasmalRouter);
 app.use('/anime', animeSamaRouter);
+app.use('/api/franime', require('./routes/franime'));
 app.use('/api', tmdbRouter);
 app.use('/', searchRouter);
 app.use('/api', downloadRouter);
