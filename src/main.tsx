@@ -138,7 +138,11 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // Enregistrer le service worker et re-souscrire au push si la permission est déjà accordée
-if ('serviceWorker' in navigator) {
+// Skip in Capacitor — the app bundles its own assets, the SW fallback-domain logic is irrelevant.
+const isCapacitor = !!(window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } })
+  .Capacitor?.isNativePlatform?.();
+
+if ('serviceWorker' in navigator && !isCapacitor) {
   window.addEventListener('load', async () => {
     try {
       const registration = await navigator.serviceWorker.register('/sw.js');

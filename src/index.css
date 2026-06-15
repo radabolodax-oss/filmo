@@ -1894,6 +1894,29 @@ body.tv-mode {
   }
 }
 
+/* ── Android TV — même styles que le bloc @media(min-width:1921px) ci-dessus,
+   mais activés via classe seule car Android TV rapporte ~960px CSS (density 2).
+   Sur desktop ≥1921px les deux blocs s'appliquent, résultat identique. ── */
+body.tv-mode a,
+body.tv-mode button {
+  min-height: 56px;
+  min-width: 56px;
+}
+
+body.tv-mode h1 { font-size: 3rem; }
+body.tv-mode h2 { font-size: 2.25rem; }
+body.tv-mode h3 { font-size: 1.75rem; }
+body.tv-mode p,
+body.tv-mode li,
+body.tv-mode span { font-size: 1.125rem; }
+
+body.tv-mode .hover\:scale-105:hover,
+body.tv-mode .group-hover\/carousel\:opacity-100,
+body.tv-mode .group-hover\/carousel\:translate-x-0 {
+  transform: none !important;
+  opacity: 1 !important;
+}
+
 .bg-pantone-100\/20 {
   background-color: rgba(204, 225, 243, 0.2);
 }

@@ -2,6 +2,14 @@ import { useEffect } from 'react';
 
 const TV_BREAKPOINT = 1921;
 
+// Android TV reports CSS pixels at device density, so a 1080p TV at density 2
+// appears as 960×540 — never reaching 1921px. Detect TV via UA as a fallback.
+function isAndroidTV(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  return /Android/i.test(ua) && /TV|Television|GoogleTV|Chromecast/i.test(ua);
+}
+
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -21,7 +29,8 @@ function getVisibleFocusable(): HTMLElement[] {
 export const useTVMode = () => {
   useEffect(() => {
     const update = () => {
-      document.body.classList.toggle('tv-mode', window.innerWidth >= TV_BREAKPOINT);
+      const tvMode = window.innerWidth >= TV_BREAKPOINT || isAndroidTV();
+      document.body.classList.toggle('tv-mode', tvMode);
     };
     update();
     window.addEventListener('resize', update, { passive: true });
@@ -33,7 +42,7 @@ export const useTVMode = () => {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (window.innerWidth < TV_BREAKPOINT) return;
+      if (window.innerWidth < TV_BREAKPOINT && !isAndroidTV()) return;
 
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         e.preventDefault();
