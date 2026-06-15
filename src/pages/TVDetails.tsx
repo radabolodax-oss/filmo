@@ -2,7 +2,7 @@
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import axios from 'axios';
-import { Loader, Video, Star, Calendar, List, Check, FolderPlus, ChevronRight, AlertTriangle, Play, X, MapPin, Languages, Building, ArrowLeft, Image, Download, Shield, EyeOff, Archive, CheckCircle } from 'lucide-react';
+import { Loader, Video, Star, Calendar, List, Check, FolderPlus, ChevronRight, ChevronDown, AlertTriangle, Play, X, MapPin, Languages, Building, ArrowLeft, Image, Download, Shield, EyeOff, Archive, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
@@ -2508,6 +2508,7 @@ const TVDetails: React.FC = () => {
   type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'animesama' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'embed2' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
   const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
+  const [showSourceDropdown, setShowSourceDropdown] = useState(false);
   const [inlineLang, setInlineLang] = useState<'VF' | 'VOSTFR'>('VF');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
@@ -7274,9 +7275,9 @@ const TVDetails: React.FC = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
               <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
             </div>
-            <div className="p-4">
-              <div className="flex flex-wrap gap-2">
-                {([
+            <div className="p-3 relative">
+              {(() => {
+                const sources: { src: InlineSource; label: string }[] = [
                   { src: 'frembed',    label: 'Frembed' },
                   { src: 'peachify',   label: 'Peachify' },
                   { src: 'vidsrc',     label: 'VidSrc' },
@@ -7291,20 +7292,41 @@ const TVDetails: React.FC = () => {
                   { src: 'autoembed',  label: 'AutoEmbed' },
                   { src: 'multiembed', label: 'MultiEmbed' },
                   { src: 'vidsrc_nl',  label: 'VidSrc.nl' },
-                ] as { src: InlineSource; label: string }[]).map(({ src, label }) => (
-                  <button
-                    key={src}
-                    onClick={() => setInlinePlayerSource(src)}
-                    className={`inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-medium border transition-all duration-200 ${
-                      inlinePlayerSource === src
-                        ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
-                        : 'bg-white/[0.06] border-white/10 text-white hover:bg-white/10 hover:border-white/[0.18] active:scale-95'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+                ];
+                const activeLabel = sources.find(s => s.src === inlinePlayerSource)?.label ?? inlinePlayerSource;
+                return (
+                  <>
+                    <button
+                      onClick={() => setShowSourceDropdown(v => !v)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.06] border border-white/10 text-white text-sm font-medium hover:bg-white/10 hover:border-white/[0.18] transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                        <span>{activeLabel}</span>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-200 ${showSourceDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showSourceDropdown && (
+                      <div className="absolute left-3 right-3 bottom-full mb-1 z-50 rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl shadow-2xl overflow-hidden">
+                        {sources.map(({ src, label }) => (
+                          <button
+                            key={src}
+                            onClick={() => { setInlinePlayerSource(src); setShowSourceDropdown(false); }}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-150 ${
+                              inlinePlayerSource === src
+                                ? 'bg-emerald-500/15 text-emerald-300'
+                                : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${inlinePlayerSource === src ? 'bg-emerald-400' : 'bg-white/20'}`} />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
 
