@@ -46,6 +46,71 @@ const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
 const NAKIOS_PROXY    = (import.meta.env.VITE_NAKIOS_PROXY    as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
 
+// Cache module-level pour éviter les re-fetches Nakios (TTL 5 min)
+type NakiosSource = { url: string; name?: string };
+const _nakiosSeriesCache = new Map<string, { sources: NakiosSource[]; ts: number }>();
+const _nakiosSeriesPending = new Map<string, Promise<NakiosSource[]>>();
+const NAKIOS_CACHE_TTL = 5 * 60 * 1000;
+
+function _toNakiosProxied(rawUrl: string): string {
+  return rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
+    ? rawUrl
+    : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
+}
+
+function _extractNakiosUrl(data: any): string | null {
+  if (!data) return null;
+  if (Array.isArray(data.sources) && data.sources.length > 0) {
+    const getUrl = (s: any) => s?.url || s?.file || s?.src || null;
+    const m3u8 = data.sources.find((s: any) => s.isM3U8 && getUrl(s));
+    const best = m3u8 || data.sources.find((s: any) => getUrl(s));
+    if (best) return getUrl(best);
+  }
+  if (typeof data.url === 'string' && data.url) return data.url;
+  if (typeof data.stream === 'string' && data.stream) return data.stream;
+  if (typeof data.link === 'string' && data.link) return data.link;
+  if (data.data) return _extractNakiosUrl(data.data);
+  return null;
+}
+
+async function resolveNakiosSeriesSources(id: string, season: number, episode: number): Promise<NakiosSource[]> {
+  const key = `series:${id}:${season}:${episode}`;
+  const cached = _nakiosSeriesCache.get(key);
+  if (cached && Date.now() - cached.ts < NAKIOS_CACHE_TTL) return cached.sources;
+  if (_nakiosSeriesPending.has(key)) return _nakiosSeriesPending.get(key)!;
+
+  const promise = (async (): Promise<NakiosSource[]> => {
+    try {
+      const data = await fetch(`${NAKIOS_PROXY}/series?id=${id}&s=${season}&e=${episode}`).then(r => r.json());
+      const all: NakiosSource[] = [];
+      if (Array.isArray(data.sources) && data.sources.length > 0) {
+        for (const src of data.sources) {
+          const raw = src?.url || src?.file || src?.src;
+          if (raw && typeof raw === 'string')
+            all.push({ url: _toNakiosProxied(raw), name: src?.name || src?.label || src?.source_name || undefined });
+        }
+      } else {
+        const rawUrl = _extractNakiosUrl(data);
+        if (rawUrl) all.push({ url: _toNakiosProxied(rawUrl) });
+      }
+      if (data._vidmolyUrl && !all.some(s => s.url.includes('vidmoly'))) {
+        try {
+          const vData = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(data._vidmolyUrl)}`).then(r => r.json());
+          const vUrl: string | null = vData?.url || null;
+          if (vUrl) all.push({ url: _toNakiosProxied(vUrl), name: 'Vidmoly' });
+        } catch {}
+      }
+      _nakiosSeriesCache.set(key, { sources: all, ts: Date.now() });
+      return all;
+    } finally {
+      _nakiosSeriesPending.delete(key);
+    }
+  })();
+
+  _nakiosSeriesPending.set(key, promise);
+  return promise;
+}
+
 function slugifyAnimeSama(name: string): string {
   return name
     .toLowerCase()
@@ -2516,7 +2581,7 @@ const TVDetails: React.FC = () => {
 
   type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'animesama' | 'anicloud' | 'franime' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'embed2' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
   // AniCloud states
   const [anicloudSlug, setAnicloudSlug] = useState<string | null>(null);
@@ -2531,10 +2596,6 @@ const TVDetails: React.FC = () => {
   const [franimeLang, setFranimeLang] = useState<string>('vf');
   const [franimeLoading, setFranimeLoading] = useState(false);
   const [franimeError, setFranimeError] = useState<string | null>(null);
-  const [franimeWatch2Players, setFranimeWatch2Players] = useState<string[]>([]);
-  const [franimeWatch2PlayerIdx, setFranimeWatch2PlayerIdx] = useState(0);
-  const [franimeEpLoading, setFranimeEpLoading] = useState(false);
-  const [franimeEpError, setFranimeEpError] = useState<string | null>(null);
   // AnimeSama direct states
   const [animeSamaDirectSlug, setAnimeSamaDirectSlug] = useState<string | null>(null);
   const [animeSamaDirectPlayers, setAnimeSamaDirectPlayers] = useState<string[]>([]);
@@ -3123,7 +3184,7 @@ const TVDetails: React.FC = () => {
       season: selectedSeason!,
       episode: epNumber
     });
-    setInlinePlayerSource('frembed');
+    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
@@ -3506,7 +3567,7 @@ const TVDetails: React.FC = () => {
     setSelectedEpisode(episodeToWatch);
 
     // Toujours ouvrir le lecteur inline (anime ou non)
-    setInlinePlayerSource('frembed');
+    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
 
@@ -3535,7 +3596,7 @@ const TVDetails: React.FC = () => {
     setSelectedSeason(season);
     setSelectedEpisode(epNumber);
     setLastWatched({ season, episode: epNumber });
-    setInlinePlayerSource('frembed');
+    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
     // Démarrer le timer Skip Intro (pour sources iframe qui n'exposent pas le temps vidéo)
@@ -3587,7 +3648,7 @@ const TVDetails: React.FC = () => {
     else if (episode.streaming_links.length > 0) setSelectedLanguage(episode.streaming_links[0].language);
     setSelectedPlayer('0');
     setShowInlinePlayer(true);
-    setInlinePlayerSource('frembed');
+    setInlinePlayerSource('animesama');
     scrollToInlinePlayer();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3706,7 +3767,7 @@ const TVDetails: React.FC = () => {
   const handleEpisodeSelect = async (seasonNumber: number, episodeNumber: number) => {
     setSelectedSeason(seasonNumber);
     setSelectedEpisode(episodeNumber);
-    setInlinePlayerSource('frembed');
+    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
@@ -3989,6 +4050,11 @@ const TVDetails: React.FC = () => {
     };
   }, [id, isAnime, loadAnimeData]);
 
+  // Source par défaut selon le mode : Nakios pour les séries, AnimeSama pour les animes
+  useEffect(() => {
+    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
+  }, [animeMode]);
+
   useEffect(() => {
     if (animeMode && animeData) {
       // Filter out seasons without episodes
@@ -4046,25 +4112,6 @@ const TVDetails: React.FC = () => {
     }));
   };
 
-  /** Extrait l'URL vidéo depuis la réponse JSON de Nakios — préfère les flux M3U8 aux MP4 */
-  const extractNakiosUrl = (data: any): string | null => {
-    if (!data) return null;
-    // Format sources tableau : préférer M3U8 pour compatibilité HLSPlayer
-    if (Array.isArray(data.sources) && data.sources.length > 0) {
-      const getUrl = (s: any) => s?.url || s?.file || s?.src || null;
-      const m3u8 = data.sources.find((s: any) => s.isM3U8 && getUrl(s));
-      const best = m3u8 || data.sources.find((s: any) => getUrl(s));
-      if (best) return getUrl(best);
-    }
-    // Format direct (réponse plate)
-    if (typeof data.url === 'string' && data.url) return data.url;
-    if (typeof data.stream === 'string' && data.stream) return data.stream;
-    if (typeof data.link === 'string' && data.link) return data.link;
-    // Format data imbriqué
-    if (data.data) return extractNakiosUrl(data.data);
-    return null;
-  };
-
   // Résolution du flux Purstream (HLSPlayer natif, pas d'iframe)
   useEffect(() => {
     if (!showInlinePlayer || inlinePlayerSource !== 'purstream' || !id || !selectedSeason || !selectedEpisode) {
@@ -4098,6 +4145,15 @@ const TVDetails: React.FC = () => {
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode]);
 
+  // Pré-fetch Nakios depuis URL params dès le montage, sans attendre selectedSeason/selectedEpisode
+  useEffect(() => {
+    if (!id) return;
+    const s = searchParams.get('season');
+    const e = searchParams.get('episode');
+    if (s && e) resolveNakiosSeriesSources(id, Number(s), Number(e)).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   // Résolution du flux Nakios via le Worker
   useEffect(() => {
     if (!showInlinePlayer || inlinePlayerSource !== 'nakios' || !id || !selectedSeason || !selectedEpisode) {
@@ -4110,46 +4166,8 @@ const TVDetails: React.FC = () => {
     setNakiosStreamUrl(null);
     setNakiosSources([]);
     setNakiosSourceIdx(0);
-    fetch(`${NAKIOS_PROXY}/series?id=${id}&s=${selectedSeason}&e=${selectedEpisode}`)
-      .then(r => r.json())
-      .then(async (data) => {
-        if (cancelled) return;
-        const toProxied = (rawUrl: string) =>
-          rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
-            ? rawUrl
-            : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
-
-        const allSources: Array<{url: string; name?: string}> = [];
-
-        if (Array.isArray(data.sources) && data.sources.length > 0) {
-          for (const src of data.sources) {
-            const raw = src?.url || src?.file || src?.src;
-            if (raw && typeof raw === 'string') {
-              allSources.push({ url: toProxied(raw), name: src?.name || src?.label || src?.source_name || undefined });
-            }
-          }
-        } else {
-          const rawUrl = extractNakiosUrl(data);
-          if (rawUrl) allSources.push({ url: toProxied(rawUrl) });
-        }
-
-        // Vidmoly comme source supplémentaire si pas encore inclus
-        if (data._vidmolyUrl && !allSources.some(s => s.url.includes('vidmoly'))) {
-          try {
-            const vRes = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(data._vidmolyUrl)}`);
-            const vData = await vRes.json();
-            const vUrl: string | null = vData?.url || null;
-            if (vUrl && !cancelled) {
-              allSources.push({ url: toProxied(vUrl), name: 'Vidmoly' });
-            }
-          } catch {}
-        }
-
-        if (!cancelled) {
-          setNakiosSources(allSources);
-          setNakiosStreamUrl(allSources[0]?.url || null);
-        }
-      })
+    resolveNakiosSeriesSources(id, selectedSeason, selectedEpisode)
+      .then(sources => { if (!cancelled) { setNakiosSources(sources); setNakiosStreamUrl(sources[0]?.url || null); } })
       .catch(() => { if (!cancelled) { setNakiosSources([]); setNakiosStreamUrl(null); } })
       .finally(() => { if (!cancelled) setNakiosStreamLoading(false); });
     return () => { cancelled = true; };
@@ -4193,34 +4211,7 @@ const TVDetails: React.FC = () => {
   useEffect(() => {
     setFranimeLookup(null);
     setFranimeError(null);
-    setFranimeWatch2Players([]);
-    setFranimeWatch2PlayerIdx(0);
-    setFranimeEpError(null);
   }, [id]);
-
-  // Reset players quand saison/épisode/langue change
-  useEffect(() => {
-    setFranimeWatch2Players([]);
-    setFranimeWatch2PlayerIdx(0);
-    setFranimeEpError(null);
-  }, [selectedSeason, selectedEpisode, franimeLang]);
-
-  // Fetch watch2 URLs quand le lookup est prêt + épisode connu
-  useEffect(() => {
-    if (inlinePlayerSource !== 'franime') return;
-    if (!franimeLookup || selectedSeason === null || !selectedEpisode) return;
-    let cancelled = false;
-    setFranimeEpLoading(true);
-    setFranimeEpError(null);
-    axios.get(`${MAIN_API}/api/franime/episode`, {
-      params: { anime_id: franimeLookup.animeId, s: selectedSeason, ep: selectedEpisode, lang: franimeLang }
-    })
-      .then(r => { if (!cancelled) { setFranimeWatch2Players(r.data.players || []); setFranimeWatch2PlayerIdx(0); } })
-      .catch(() => { if (!cancelled) setFranimeEpError('Épisode non disponible sur FRAnime'); })
-      .finally(() => { if (!cancelled) setFranimeEpLoading(false); });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inlinePlayerSource, franimeLookup, selectedSeason, selectedEpisode, franimeLang]);
 
   // Charge le lookup FRAnime quand la source est sélectionnée
   useEffect(() => {
@@ -7424,8 +7415,7 @@ const TVDetails: React.FC = () => {
                 </div>
               );
             })() : inlinePlayerSource === 'franime' ? (() => {
-              const isLoading = franimeLoading || franimeEpLoading || (!!franimeLookup && !franimeWatch2Players.length && !franimeEpError);
-              if (isLoading) return (
+              if (franimeLoading) return (
                 <div className="w-full h-[360px] flex items-center justify-center bg-black">
                   <svg className="animate-spin h-10 w-10 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
@@ -7449,7 +7439,8 @@ const TVDetails: React.FC = () => {
                     src={franimeSrc}
                     allowFullScreen
                     allow="autoplay; fullscreen; encrypted-media"
-                    style={{ border: 'none', display: 'block', position: 'absolute', top: '-220px', left: 0, width: '100%', height: 'calc(100% + 420px)' }}
+                    scrolling="no"
+                    style={{ border: 'none', display: 'block', position: 'absolute', top: '-140px', left: 0, width: '100%', height: 'calc(100% + 140px)' }}
                     title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
                   />
                 </div>
@@ -7629,8 +7620,8 @@ const TVDetails: React.FC = () => {
             );
           })()}
 
-          {/* Langue + Lecteurs — FRAnime */}
-          {inlinePlayerSource === 'franime' && !franimeLoading && !franimeEpLoading && franimeLookup && franimeWatch2Players.length > 0 && (() => {
+          {/* Langue — FRAnime */}
+          {inlinePlayerSource === 'franime' && !franimeLoading && franimeLookup && franimeLookup.langs.length > 1 && (() => {
             const glassStyle = {
               background: 'rgba(255,255,255,0.03)',
               backdropFilter: 'blur(20px) saturate(180%)',
@@ -7640,37 +7631,18 @@ const TVDetails: React.FC = () => {
             const btnOn  = { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' } as const;
             const btnOff = { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' } as const;
             return (
-              <>
-                {franimeLookup.langs.length > 1 && (
-                  <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
-                    <div className="flex gap-1.5 flex-wrap items-center">
-                      <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Langue :</span>
-                      {franimeLookup.langs.map(lang => (
-                        <button key={lang} onClick={() => setFranimeLang(lang)}
-                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
-                          style={franimeLang === lang ? btnOn : btnOff}>
-                          {lang.toUpperCase()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {franimeWatch2Players.length > 1 && (
-                  <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
-                    <div className="flex gap-1.5 flex-wrap items-center">
-                      <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Lecteur :</span>
-                      {franimeWatch2Players.map((_, idx) => (
-                        <button key={idx} onClick={() => setFranimeWatch2PlayerIdx(idx)}
-                          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
-                          style={franimeWatch2PlayerIdx === idx ? btnOn : btnOff}>
-                          <Play className="w-3 h-3" />
-                          Lecteur {idx + 1}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
+              <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
+                <div className="flex gap-1.5 flex-wrap items-center">
+                  <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Langue :</span>
+                  {franimeLookup.langs.map(lang => (
+                    <button key={lang} onClick={() => setFranimeLang(lang)}
+                      className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200"
+                      style={franimeLang === lang ? btnOn : btnOff}>
+                      {lang.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
             );
           })()}
 

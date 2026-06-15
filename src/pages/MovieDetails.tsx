@@ -30,6 +30,50 @@ const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
 const PURSTREAM_EMBED_BASE = 'https://purstream.ch/watch';
 const NAKIOS_PROXY    = (import.meta.env.VITE_NAKIOS_PROXY as string || 'https://nakios-proxy.radabolodax.workers.dev').replace(/\/+$/, '');
 
+// Cache module-level pour éviter les re-fetches Nakios (TTL 5 min)
+type NakiosSource = { url: string; name?: string };
+const _nakiosMovieCache = new Map<string, { sources: NakiosSource[]; ts: number }>();
+const _nakiosMoviePending = new Map<string, Promise<NakiosSource[]>>();
+const NAKIOS_CACHE_TTL = 5 * 60 * 1000;
+
+function _toNakiosProxied(rawUrl: string): string {
+  return rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
+    ? rawUrl
+    : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
+}
+
+async function resolveNakiosMovieSources(id: string): Promise<NakiosSource[]> {
+  const key = `movie:${id}`;
+  const cached = _nakiosMovieCache.get(key);
+  if (cached && Date.now() - cached.ts < NAKIOS_CACHE_TTL) return cached.sources;
+  if (_nakiosMoviePending.has(key)) return _nakiosMoviePending.get(key)!;
+
+  const promise = (async (): Promise<NakiosSource[]> => {
+    try {
+      const data = await fetch(`${NAKIOS_PROXY}/movie?id=${id}`).then(r => r.json());
+      const all: NakiosSource[] = [];
+      const rawUrl = data?.url || data?.stream || data?.link ||
+        data?.sources?.[0]?.url || data?.sources?.[0]?.file ||
+        data?.data?.url || data?.data?.stream || null;
+      if (rawUrl) all.push({ url: _toNakiosProxied(rawUrl) });
+      if (data?._vidmolyUrl) {
+        try {
+          const vData = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(data._vidmolyUrl)}`).then(r => r.json());
+          const vUrl: string | null = vData?.url || null;
+          if (vUrl) all.push({ url: _toNakiosProxied(vUrl), name: 'Vidmoly' });
+        } catch {}
+      }
+      _nakiosMovieCache.set(key, { sources: all, ts: Date.now() });
+      return all;
+    } finally {
+      _nakiosMoviePending.delete(key);
+    }
+  })();
+
+  _nakiosMoviePending.set(key, promise);
+  return promise;
+}
+
 interface Movie {
   title: string;
   overview: string;
@@ -2155,9 +2199,9 @@ const MovieDetails = (): JSX.Element => {
   // Ajout d'un état pour suivre si le film est sorti
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
 
-  type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
+  type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'purstream' | 'franime' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('frembed');
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
   const [movieLang, setMovieLang] = useState<'VF' | 'VOSTFR'>('VF');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
@@ -2173,6 +2217,11 @@ const MovieDetails = (): JSX.Element => {
   const [animeSamaMovieLoading, setAnimeSamaMovieLoading] = useState(false);
   const [animeSamaMovieLang, setAnimeSamaMovieLang] = useState<string | null>(null);
   const [animeSamaMoviePlayer, setAnimeSamaMoviePlayer] = useState<string>('0');
+  // FRAnime states
+  const [franimeLookup, setFranimeLookup] = useState<{slug: string; animeId: string; langs: string[]} | null>(null);
+  const [franimeLang, setFranimeLang] = useState<string>('vf');
+  const [franimeLoading, setFranimeLoading] = useState(false);
+  const [franimeError, setFranimeError] = useState<string | null>(null);
   const [collection, setCollection] = useState<Collection | null>(null);
   const [loadingCollection, setLoadingCollection] = useState(false);
   const [images, setImages] = useState<MovieImages | null>(null);
@@ -2677,6 +2726,11 @@ const MovieDetails = (): JSX.Element => {
 
 
 
+  // Pré-fetch Nakios en background dès que id est connu, sans attendre showInlinePlayer
+  useEffect(() => {
+    if (id) resolveNakiosMovieSources(id).catch(() => {});
+  }, [id]);
+
   // Résolution du flux Nakios film via le Worker → HLSPlayer natif
   useEffect(() => {
     if (!showInlinePlayer || inlinePlayerSource !== 'nakios' || !id) {
@@ -2689,44 +2743,8 @@ const MovieDetails = (): JSX.Element => {
     setNakiosStreamUrl(null);
     setNakiosSources([]);
     setNakiosSourceIdx(0);
-    fetch(`${NAKIOS_PROXY}/movie?id=${id}`)
-      .then(r => r.json())
-      .then(async (data) => {
-        if (cancelled) return;
-        const toProxied = (rawUrl: string) =>
-          rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
-            ? rawUrl
-            : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
-
-        const allSources: Array<{url: string; name?: string}> = [];
-
-        const rawUrl =
-          data?.url || data?.stream || data?.link ||
-          data?.sources?.[0]?.url || data?.sources?.[0]?.file ||
-          data?.data?.url || data?.data?.stream || null;
-
-        if (rawUrl) {
-          allSources.push({ url: toProxied(rawUrl) });
-        }
-
-        // Vidmoly comme source supplémentaire
-        const vidmolyEmbedUrl: string | null = data?._vidmolyUrl || null;
-        if (vidmolyEmbedUrl) {
-          try {
-            const vRes = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(vidmolyEmbedUrl)}`);
-            const vData = await vRes.json();
-            const vUrl: string | null = vData?.url || null;
-            if (vUrl && !cancelled) {
-              allSources.push({ url: toProxied(vUrl), name: 'Vidmoly' });
-            }
-          } catch {}
-        }
-
-        if (!cancelled) {
-          setNakiosSources(allSources);
-          setNakiosStreamUrl(allSources[0]?.url || null);
-        }
-      })
+    resolveNakiosMovieSources(id)
+      .then(sources => { if (!cancelled) { setNakiosSources(sources); setNakiosStreamUrl(sources[0]?.url || null); } })
       .catch(() => { if (!cancelled) { setNakiosSources([]); setNakiosStreamUrl(null); } })
       .finally(() => { if (!cancelled) setNakiosStreamLoading(false); });
     return () => { cancelled = true; };
@@ -2810,6 +2828,35 @@ const MovieDetails = (): JSX.Element => {
       .finally(() => { if (!cancelled) setAnimeSamaMovieLoading(false); });
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, movie, animeSamaMovieEpisode, MAIN_API]);
+
+  // Reset FRAnime quand on change de film
+  useEffect(() => {
+    setFranimeLookup(null);
+    setFranimeError(null);
+  }, [id]);
+
+  // Lookup FRAnime quand la source est sélectionnée
+  useEffect(() => {
+    if (inlinePlayerSource !== 'franime') return;
+    if (franimeLookup || franimeLoading) return;
+    if (!movie?.title) return;
+    let cancelled = false;
+    setFranimeLoading(true);
+    setFranimeError(null);
+    axios.get(`${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(movie.title)}`)
+      .then(res => {
+        if (cancelled) return;
+        const data = res.data as {slug: string; animeId: string; langs: string[]};
+        setFranimeLookup(data);
+        if (data.langs?.length) {
+          setFranimeLang(data.langs.includes('vf') ? 'vf' : data.langs[0]);
+        }
+      })
+      .catch(() => { if (!cancelled) setFranimeError('Anime non trouvé sur FRAnime'); })
+      .finally(() => { if (!cancelled) setFranimeLoading(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlinePlayerSource, movie?.title]);
 
   const handleWatchClick = () => {
     setInlinePlayerSource('videasy');
@@ -4721,6 +4768,37 @@ const MovieDetails = (): JSX.Element => {
                   ) : (
                     <div className="w-full h-[360px] flex items-center justify-center bg-black text-gray-400 text-sm">Sélectionne une langue et un lecteur</div>
                   );
+                })() : inlinePlayerSource === 'franime' ? (() => {
+                  if (franimeLoading) return (
+                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                      <svg className="animate-spin h-10 w-10 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    </div>
+                  );
+                  if (franimeError || !franimeLookup) return (
+                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                      <span className="text-sm">{franimeError ?? 'Anime non trouvé sur FRAnime'}</span>
+                      <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
+                        Essayer Frembed
+                      </button>
+                    </div>
+                  );
+                  const franimeSrc = `https://franime.fr/anime/${franimeLookup.slug}?anime_id=${franimeLookup.animeId}&lang=${franimeLang}&ep=1`;
+                  return (
+                    <div className="w-full h-[40vw] min-h-[140px] sm:h-[220px] md:h-[360px] lg:h-[420px] 2xl:h-[560px] overflow-hidden relative">
+                      <iframe
+                        key={`franime-movie-${franimeLang}`}
+                        src={franimeSrc}
+                        allowFullScreen
+                        allow="autoplay; fullscreen; encrypted-media"
+                        scrolling="no"
+                        style={{ border: 'none', display: 'block', position: 'absolute', top: '-140px', left: 0, width: '100%', height: 'calc(100% + 140px)' }}
+                        title={movie?.title || 'FRAnime'}
+                      />
+                    </div>
+                  );
                 })() : (
                   <iframe
                     key={inlinePlayerSource}
@@ -4810,6 +4888,24 @@ const MovieDetails = (): JSX.Element => {
                     </>
                   );
                 })()}
+                {/* Langue — FRAnime */}
+                {inlinePlayerSource === 'franime' && !franimeLoading && franimeLookup && franimeLookup.langs.length > 1 && (() => {
+                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
+                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
+                  return (
+                    <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
+                      <div className="flex gap-1.5 flex-wrap items-center">
+                        <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Langue :</span>
+                        {franimeLookup.langs.map(lang => (
+                          <button key={lang} onClick={() => setFranimeLang(lang)}
+                            className={franimeLang === lang ? btnOn : btnOff}>
+                            {lang.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* ===== SOURCE PANEL — Liquid Glass ===== */}
@@ -4823,6 +4919,7 @@ const MovieDetails = (): JSX.Element => {
                     const sources: { src: InlineSource; label: string }[] = [
                       { src: 'nakios',     label: 'Nakios' },
                       { src: 'purstream',  label: 'Purstream' },
+                      { src: 'franime',    label: 'FRAnime' },
                       { src: 'frembed',    label: 'Frembed' },
                       { src: 'peachify',   label: 'Peachify' },
                       { src: 'vidsrc',     label: 'VidSrc' },
