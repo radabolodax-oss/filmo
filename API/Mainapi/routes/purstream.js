@@ -19,14 +19,47 @@ const PURSTREAM_BASE = 'https://api.purstream.ch/api/v1';
 const PURSTREAM_CACHE_DIR = CACHE_DIR.PURSTREAM;
 
 // ---------------------------------------------------------------------------
-// Session Purstream — renouvellement automatique toutes les 90 minutes
+// Auth Purstream — Bearer token (prioritaire) + session cookie (fallback)
+// Renouvellement automatique toutes les 90 minutes
 // ---------------------------------------------------------------------------
 let currentSession = process.env.PURSTREAM_SESSION || '';
+let currentBearerToken = process.env.PURSTREAM_BEARER_TOKEN || '';
 let _renewalInterval = null;
 
 const PURSTREAM_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
 
-/** Se connecte sur purstream.ac et met à jour currentSession. Retourne true si succès. */
+/** Tente le login API JSON (→ Bearer token). Retourne le token ou null. */
+async function tryApiLogin(email, password) {
+  const endpoints = [
+    'https://api.purstream.ch/api/v1/auth/login',
+    'https://purstream.ch/api/v1/auth/login',
+    'https://api.purstream.ch/api/v1/login',
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await axios.post(url, { email, password }, {
+        timeout: 12000,
+        validateStatus: s => s < 500,
+        headers: {
+          'User-Agent': PURSTREAM_UA,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Origin': 'https://purstream.ch',
+          'Referer': 'https://purstream.ch/',
+        },
+      });
+      const token = res.data?.token || res.data?.access_token || res.data?.api_token
+        || res.data?.data?.token || res.data?.data?.access_token;
+      if (res.status === 200 && token) {
+        console.log(`[PURSTREAM] Bearer token obtenu via ${url}`);
+        return token;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+/** Se connecte sur purstream.ch et met à jour currentSession + tente d'obtenir currentBearerToken. */
 async function loginPurstream() {
   const email = process.env.PURSTREAM_EMAIL;
   const password = process.env.PURSTREAM_PASSWORD;
@@ -36,8 +69,15 @@ async function loginPurstream() {
     return false;
   }
 
+  // 1. Essai login API JSON → Bearer token
+  const apiToken = await tryApiLogin(email, password);
+  if (apiToken) {
+    currentBearerToken = apiToken;
+    return true;
+  }
+
   try {
-    // 1. GET /login pour récupérer le token CSRF Laravel + cookies initiaux
+    // 2. Fallback : login web form → session cookie
     const pageRes = await axios.get('https://purstream.ch/login', {
       timeout: 15000,
       headers: {
@@ -54,11 +94,10 @@ async function loginPurstream() {
       .map(c => c.split(';')[0])
       .join('; ');
 
-    // 2. POST /login avec les credentials
     const body = new URLSearchParams({ _token: csrfToken, email, password }).toString();
     const loginRes = await axios.post('https://purstream.ch/login', body, {
       timeout: 15000,
-      maxRedirects: 0,
+      maxRedirects: 5,
       validateStatus: s => s < 500,
       headers: {
         'User-Agent': PURSTREAM_UA,
@@ -68,15 +107,35 @@ async function loginPurstream() {
       },
     });
 
-    // 3. Extraire purstream_session depuis Set-Cookie
     const setCookies = loginRes.headers['set-cookie'] || [];
     const sessionCookie = setCookies
       .map(c => c.match(/(?:purstream_session|session)=([^;]+)/))
       .find(Boolean)?.[1];
 
     if (!sessionCookie) throw new Error('Cookie purstream_session absent de la réponse login');
-
     currentSession = sessionCookie;
+
+    // 3. Tenter d'obtenir le Bearer token via la session active
+    const allCookies = [initialCookies, `purstream_session=${sessionCookie}`].filter(Boolean).join('; ');
+    try {
+      const userRes = await axios.get('https://api.purstream.ch/api/v1/user', {
+        timeout: 10000,
+        validateStatus: () => true,
+        headers: {
+          'User-Agent': PURSTREAM_UA,
+          'Accept': 'application/json',
+          'Origin': 'https://purstream.ch',
+          'Referer': 'https://purstream.ch/',
+          'Cookie': allCookies,
+        },
+      });
+      const tok = userRes.data?.api_token || userRes.data?.token || userRes.data?.access_token;
+      if (userRes.status === 200 && tok) {
+        currentBearerToken = tok;
+        console.log('[PURSTREAM] Bearer token extrait depuis /user');
+      }
+    } catch {}
+
     console.log('[PURSTREAM] Session renouvelée avec succès');
     return true;
   } catch (err) {
@@ -131,12 +190,17 @@ async function purstreamRequest(urlPath) {
   const agent = proxy ? getProxyAgent(proxy) : null;
 
   const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+    'User-Agent': PURSTREAM_UA,
     'Accept': 'application/json',
+    'Content-Type': 'application/json',
     'Origin': 'https://purstream.ch',
     'Referer': 'https://purstream.ch/',
   };
-  if (currentSession) headers['Cookie'] = `session=${currentSession}`;
+  if (currentBearerToken) {
+    headers['Authorization'] = `Bearer ${currentBearerToken}`;
+  } else if (currentSession) {
+    headers['Cookie'] = `purstream_session=${currentSession}`;
+  }
 
   return axios({
     url: `${PURSTREAM_BASE}${urlPath}`,
@@ -177,11 +241,30 @@ async function resolvePurstreamId(tmdbId, type) {
   return await fetchAndCacheMapping(tmdbId, type, cacheKey);
 }
 
+/** Fallback : lire le cache TMDB via la route interne (cache fichier Coflix) */
+async function fetchTmdbFallback(tmdbId, type) {
+  const port = process.env.PORT || 25565;
+  try {
+    const res = await axios.get(`http://localhost:${port}/api/tmdb/${type}/${tmdbId}`, {
+      timeout: 8000,
+      headers: { Accept: 'application/json' },
+      validateStatus: () => true,
+    });
+    if (res.status !== 200) return null;
+    const d = res.data?.tmdb_details || res.data;
+    if (d && (d.title || d.name)) return d;
+  } catch {}
+  return null;
+}
+
 /** Recherche et cache le mapping TMDB → PurStream */
 async function fetchAndCacheMapping(tmdbId, type, cacheKey) {
-  const tmdbData = await fetchTmdbDetails(TMDB_API_URL, TMDB_API_KEY, tmdbId, type, 'fr-FR');
+  let tmdbData = await fetchTmdbDetails(TMDB_API_URL, TMDB_API_KEY, tmdbId, type, 'fr-FR');
   if (!tmdbData) {
-    console.warn(`[PURSTREAM] TMDB ${type}:${tmdbId} introuvable`);
+    tmdbData = await fetchTmdbFallback(tmdbId, type);
+  }
+  if (!tmdbData) {
+    console.warn(`[PURSTREAM] TMDB ${type}:${tmdbId} introuvable (direct + cache interne)`);
     await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
     return null;
   }
@@ -516,3 +599,4 @@ async function backgroundUpdateStreamTv(tmdbId, season, episode, cacheKey) {
 module.exports = router;
 module.exports.configure = configure;
 module.exports.getCurrentSession = () => currentSession;
+module.exports.getCurrentBearerToken = () => currentBearerToken;
