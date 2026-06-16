@@ -1,0 +1,322 @@
+﻿<!DOCTYPE html>
+<html lang="fr" class="dark" translate="no">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="robots" content="index, follow, noarchive, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+    <meta name="google" content="notranslate">
+    <meta name="apple-mobile-web-app-title" content="Prowler" />
+    <meta name="application-name" content="Prowler" />
+    <meta name="msapplication-TileColor" content="#000000" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="Regardez des milliers de films et séries en streaming HD sur Prowler. Catalogue complet en VF et VOSTFR, live TV, collections et watch parties synchronisées entre amis." />
+
+    <!-- Prefetch -->
+    <link rel="dns-prefetch" href="//image.tmdb.org">
+    <link rel="preconnect" href="https://image.tmdb.org" crossorigin>
+    <link rel="dns-prefetch" href="//www.gstatic.com">
+    <link rel="dns-prefetch" href="//www.google.com">
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="//www.googletagmanager.com">
+    <link rel="preconnect" href="https://www.googletagmanager.com">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Icons -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/favicon.png" sizes="512x512" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png" />
+    <link rel="manifest" href="/assets/manifest-T1D6qpuK.json" />
+
+    <title data-rh="true">Prowler — Films et séries en streaming gratuit | VF, VOSTFR, HD</title>
+
+    <!-- JSON-LD -->
+    <script type="application/ld+json" data-rh="true">
+    [
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Prowler",
+        "alternateName": "Prowler Streaming",
+        "url": "https://Prowler.cash",
+        "description": "Prowler est une plateforme française open-source (CC BY-NC 4.0) de streaming multimédia : films, séries, anime, TV en direct et Watch Parties synchronisées.",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://Prowler.cash/favicon.png",
+          "width": 512,
+          "height": 512
+        },
+        "sameAs": [
+          "https://t.me/Prowler_site"
+        ],
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "customer support",
+          "email": "Prowlerstreaming@gmail.com",
+          "availableLanguage": ["French", "English"]
+        }
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Prowler",
+        "url": "https://Prowler.cash",
+        "inLanguage": "fr",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "https://Prowler.cash/search?q={search_term_string}"
+          },
+          "query-input": "required name=search_term_string"
+        }
+      }
+    ]
+    </script>
+  <script>
+    // Object.hasOwn is ES2022 (Chrome 93+, Safari 15.4+, Firefox 92+). react-markdown
+    // calls it directly; older Chromium builds (e.g. Chrome 88 on armv7l) crash without this.
+    if (typeof Object.hasOwn !== 'function') {
+      Object.defineProperty(Object, 'hasOwn', {
+        value: function (obj, prop) {
+          if (obj === null || obj === undefined) {
+            throw new TypeError('Cannot convert undefined or null to object');
+          }
+          return Object.prototype.hasOwnProperty.call(Object(obj), prop);
+        },
+        configurable: true,
+        writable: true,
+      });
+    }
+  </script>
+  <script>
+    (() => {
+      const buildId = '2026-06-15T22:47:56.560Z';
+      const buildStorageKey = 'prowler_build_id';
+      const recoveryStorageKey = `prowler_build_recovery_${buildId}`;
+      const refreshSearchParam = 'prowler_build_refresh';
+
+      const buildRecoveryUrl = () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set(refreshSearchParam, `${buildId}-${Date.now()}`);
+        return url.toString();
+      };
+
+      const recoverClientCache = async () => {
+        try {
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+          }
+
+          if ('caches' in window) {
+            const cacheKeys = await caches.keys();
+            await Promise.all(cacheKeys.map((cacheKey) => caches.delete(cacheKey)));
+          }
+        } catch {
+          // Ignore cleanup errors and continue with reload.
+        }
+
+        try {
+          localStorage.setItem(buildStorageKey, buildId);
+          sessionStorage.setItem(recoveryStorageKey, 'done');
+        } catch {
+          // Ignore storage errors.
+        }
+
+        window.location.replace(buildRecoveryUrl());
+      };
+
+      try {
+        const currentUrl = new URL(window.location.href);
+        const previousBuildId = localStorage.getItem(buildStorageKey);
+        const alreadyRecovered = sessionStorage.getItem(recoveryStorageKey) === 'done';
+
+        if (previousBuildId && previousBuildId !== buildId && !alreadyRecovered) {
+          window.__MOVIX_CACHE_RECOVERY__ = recoverClientCache();
+          return;
+        }
+
+        localStorage.setItem(buildStorageKey, buildId);
+
+        if (currentUrl.searchParams.has(refreshSearchParam)) {
+          currentUrl.searchParams.delete(refreshSearchParam);
+          window.history.replaceState({}, document.title, currentUrl.toString());
+        }
+      } catch {
+        // Ignore storage errors.
+      }
+
+      window.addEventListener('error', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLScriptElement)) return;
+        if (target.type !== 'module') return;
+        if (!target.src.includes('/assets/')) return;
+
+        try {
+          if (sessionStorage.getItem(recoveryStorageKey) === 'done') {
+            return;
+          }
+        } catch {
+          // Ignore storage errors.
+        }
+
+        window.__MOVIX_CACHE_RECOVERY__ = recoverClientCache();
+      }, true);
+    })();
+  </script>
+  <script>
+    (function () {
+      'use strict';
+
+      // 1. Block all window.open calls — returns null instead of opening a popup.
+      window.open = function () { return null; };
+
+      // 2. If this page ever loses focus (iframe-triggered popup / new tab),
+      //    immediately reclaim focus so the user stays on the page.
+      var _refocusTimer = null;
+      function scheduleRefocus() {
+        clearTimeout(_refocusTimer);
+        _refocusTimer = setTimeout(function () {
+          try { window.focus(); } catch (_) {}
+        }, 50);
+      }
+      window.addEventListener('blur', scheduleRefocus, true);
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') scheduleRefocus();
+      }, true);
+
+      // 3. Block target="_blank" / _new / _top anchor clicks inside our document.
+      document.addEventListener('click', function (e) {
+        var el = e.target;
+        while (el && el.tagName) {
+          if (el.tagName === 'A') {
+            var t = (el.target || '').toLowerCase();
+            if (t === '_blank' || t === '_new' || t === '_top') {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+            break;
+          }
+          el = el.parentElement;
+        }
+      }, true);
+
+      // 4. Patch every iframe:
+      //    • Same-origin  → override contentWindow.open after load.
+      //    • Cross-origin → add sandbox without allow-popups / allow-top-navigation
+      //      while keeping the permissions video players need.
+      function patchIframe(iframe) {
+        iframe.addEventListener('load', function () {
+          try {
+            var cw = iframe.contentWindow;
+            if (cw) cw.open = function () { return null; };
+          } catch (_) { /* cross-origin: handled by sandbox below */ }
+        });
+
+        var existing = iframe.getAttribute('sandbox');
+        if (existing === null) {
+          iframe.setAttribute(
+            'sandbox',
+            'allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock'
+          );
+        } else {
+          var cleaned = existing
+            .split(/\s+/)
+            .filter(function (p) {
+              return p &&
+                p !== 'allow-popups' &&
+                p !== 'allow-top-navigation' &&
+                p !== 'allow-popups-to-escape-sandbox';
+            })
+            .join(' ');
+          if (cleaned !== existing) iframe.setAttribute('sandbox', cleaned);
+        }
+      }
+
+      var mo = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var added = mutations[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            var node = added[j];
+            if (node.nodeName === 'IFRAME') patchIframe(node);
+            if (node.querySelectorAll) {
+              node.querySelectorAll('iframe').forEach(patchIframe);
+            }
+          }
+        }
+      });
+
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+
+      // Patch iframes already present (e.g. injected before this script ran).
+      document.querySelectorAll('iframe').forEach(patchIframe);
+    })();
+  </script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-6Q3B4D5KQL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-6Q3B4D5KQL');
+  </script>
+  <script type="module" crossorigin src="/assets/index-B-jFuQ2c.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-BM3Ffeng.js">
+  <link rel="modulepreload" crossorigin href="/assets/react-vendor-B2zTXonl.js">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-By-J0kSF.js">
+  <link rel="modulepreload" crossorigin href="/assets/axios-z4nC06Dh.js">
+  <link rel="modulepreload" crossorigin href="/assets/embla-carousel-react.esm-DGuvYkPK.js">
+  <link rel="modulepreload" crossorigin href="/assets/motion-C0tBpXnE.js">
+  <link rel="modulepreload" crossorigin href="/assets/i18n-B8BzBuy2.js">
+  <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-CcOq-2cP.js">
+  <link rel="modulepreload" crossorigin href="/assets/calendar-D8bbvHqN.js">
+  <link rel="modulepreload" crossorigin href="/assets/check-UJZInqd2.js">
+  <link rel="modulepreload" crossorigin href="/assets/chevron-down-7EXl8vhp.js">
+  <link rel="modulepreload" crossorigin href="/assets/chevron-left-BwmkaTdE.js">
+  <link rel="modulepreload" crossorigin href="/assets/chevron-right-Bj4w1jFM.js">
+  <link rel="modulepreload" crossorigin href="/assets/info-CZaL_wyH.js">
+  <link rel="modulepreload" crossorigin href="/assets/play-D-r2T25X.js">
+  <link rel="modulepreload" crossorigin href="/assets/star-Ceztl2uH.js">
+  <link rel="modulepreload" crossorigin href="/assets/trash-2-Jy3zV-qB.js">
+  <link rel="modulepreload" crossorigin href="/assets/x-C6elaHG5.js">
+  <link rel="modulepreload" crossorigin href="/assets/radix-C1NeTgpN.js">
+  <link rel="modulepreload" crossorigin href="/assets/utils-Ch9hq-xH.js">
+  <link rel="modulepreload" crossorigin href="/assets/lazyWithRetry-49UGImcP.js">
+  <link rel="modulepreload" crossorigin href="/assets/PrefetchLink-A7nw2TC4.js">
+  <link rel="modulepreload" crossorigin href="/assets/tooltip-D4XFmeoT.js">
+  <link rel="modulepreload" crossorigin href="/assets/i18n-DgUnAtfI.js">
+  <link rel="modulepreload" crossorigin href="/assets/syncStorage-BSbxeuMi.js">
+  <link rel="modulepreload" crossorigin href="/assets/vipUtils-BKkGzn-6.js">
+  <link rel="modulepreload" crossorigin href="/assets/ProfileContext-CeBi-2_7.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountAuth-BXXMb52M.js">
+  <link rel="modulepreload" crossorigin href="/assets/idEncoder-B00fK0WQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/tmdbKeywords-DIPoBSka.js">
+  <link rel="stylesheet" crossorigin href="/assets/motion-fOJvfYOR.css">
+  <link rel="stylesheet" crossorigin href="/assets/PrefetchLink-CGmq9_dR.css">
+  <link rel="stylesheet" crossorigin href="/assets/index-DrZF-D4y.css">
+</head>
+<body>
+    
+    <div id="root"></div>
+
+    <script>
+      // Cache-bust the Cast SDK URL on every page load so a stale SDK never
+      // sticks around in the browser/SW cache (defensive — gstatic already
+      // sets sane Cache-Control, but cinepulse does this too).
+      (function loadCastSender() {
+        var s = document.createElement('script');
+        s.type = 'text/javascript';
+        s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1&cb=' + Date.now();
+        document.body.appendChild(s);
+      })();
+    </script>
+</body>
+</html>
