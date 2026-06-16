@@ -1,6 +1,0 @@
-ALTER USER 'root'@'localhost' IDENTIFIED BY 'RAF2004mar!';
-CREATE DATABASE IF NOT EXISTS movix;
-CREATE USER IF NOT EXISTS 'movix'@'localhost' IDENTIFIED BY 'movix_pass';
-GRANT ALL PRIVILEGES ON movix.* TO 'movix'@'localhost';
-FLUSH PRIVILEGES;
-SHUTDOWN;

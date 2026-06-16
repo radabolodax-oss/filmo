@@ -2203,6 +2203,18 @@ const MovieDetails = (): JSX.Element => {
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
   const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
+
+  // Ferme le dropdown des sources au clic en dehors
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (showSourceDropdown && !target.closest('.source-dropdown')) {
+        setShowSourceDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSourceDropdown]);
   const [movieLang, setMovieLang] = useState<'VF' | 'VOSTFR'>('VF');
   const [nakiosStreamUrl, setNakiosStreamUrl] = useState<string | null>(null);
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
@@ -4914,7 +4926,7 @@ const MovieDetails = (): JSX.Element => {
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
                   <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
                 </div>
-                <div className="p-3 relative">
+                <div className="p-3 relative source-dropdown">
                   {(() => {
                     const sources: { src: InlineSource; label: string }[] = [
                       { src: 'nakios',     label: 'Nakios' },
@@ -4949,7 +4961,7 @@ const MovieDetails = (): JSX.Element => {
                           <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-200 ${showSourceDropdown ? 'rotate-180' : ''}`} />
                         </button>
                         {showSourceDropdown && (
-                          <div className="absolute left-3 right-3 bottom-full mb-1 z-50 rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl shadow-2xl overflow-hidden">
+                          <div className="absolute left-3 right-3 bottom-full mb-1 z-50 rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl shadow-2xl overflow-y-auto max-h-64">
                             {sources.map(({ src, label }) => (
                               <button
                                 key={src}
