@@ -229,7 +229,7 @@ async function resolvePurstreamId(tmdbId, type) {
       if (stale) {
         backgroundUpdateMapping(tmdbId, type, cacheKey).catch(() => {});
       }
-      return null;
+      return false; // not-found confirmé (déjà en cache) — distinct d'un échec transitoire
     }
     const stale = await shouldUpdateCache(PURSTREAM_CACHE_DIR, cacheKey);
     if (stale) {
@@ -257,23 +257,28 @@ async function fetchTmdbFallback(tmdbId, type) {
   return null;
 }
 
-/** Recherche et cache le mapping TMDB → PurStream */
+/**
+ * Recherche et cache le mapping TMDB → PurStream.
+ * Convention de retour : objet mapping (succès) | `false` (not-found confirmé,
+ * mis en cache) | `null` (échec transitoire — réseau/TMDB/PurStream indisponible,
+ * jamais mis en cache pour ne pas figer un faux négatif pendant 40 min).
+ */
 async function fetchAndCacheMapping(tmdbId, type, cacheKey) {
   let tmdbData = await fetchTmdbDetails(TMDB_API_URL, TMDB_API_KEY, tmdbId, type, 'fr-FR');
   if (!tmdbData) {
     tmdbData = await fetchTmdbFallback(tmdbId, type);
   }
   if (!tmdbData) {
-    console.warn(`[PURSTREAM] TMDB ${type}:${tmdbId} introuvable (direct + cache interne)`);
-    await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
+    // Impossible de distinguer "ID TMDB invalide" d'un blip réseau/TMDB —
+    // on traite comme transitoire pour ne pas caching un faux not_found.
+    console.warn(`[PURSTREAM] TMDB ${type}:${tmdbId} introuvable (direct + cache interne) — traité comme transitoire`);
     return null;
   }
 
   const tmdbTitle = type === 'movie' ? tmdbData.title : tmdbData.name;
   const tmdbOriginalTitle = type === 'movie' ? tmdbData.original_title : tmdbData.original_name;
   if (!tmdbTitle) {
-    console.warn(`[PURSTREAM] TMDB ${type}:${tmdbId} n'a pas de titre`);
-    await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
+    console.warn(`[PURSTREAM] TMDB ${type}:${tmdbId} n'a pas de titre — traité comme transitoire`);
     return null;
   }
 
@@ -332,7 +337,7 @@ async function fetchAndCacheMapping(tmdbId, type, cacheKey) {
 
   if (allItems.length === 0) {
     await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
-    return null;
+    return false;
   }
 
   // Extraire posters PurStream
@@ -378,7 +383,7 @@ async function fetchAndCacheMapping(tmdbId, type, cacheKey) {
   if (!best) {
     console.warn(`[PURSTREAM] Aucun match pour ${type}:${tmdbId} "${tmdbTitle}"`);
     await saveToCache(PURSTREAM_CACHE_DIR, cacheKey, NOT_FOUND_MARKER);
-    return null;
+    return false;
   }
 
   const result = { purstream_id: best.id, title: best.title, type: best.type };
@@ -437,9 +442,14 @@ router.get('/movie/:tmdbId/stream', async (req, res) => {
     }
 
     const mapping = await resolvePurstreamId(tmdbId, 'movie');
-    if (!mapping) {
+    if (mapping === false) {
       await saveToCache(PURSTREAM_CACHE_DIR, notFoundKey, NOT_FOUND_MARKER);
       return res.status(404).json({ error: 'Film non trouvé sur PurStream' });
+    }
+    if (!mapping) {
+      // Échec transitoire (TMDB/PurStream temporairement indisponible) — on ne
+      // pollue pas le cache "non trouvé" avec un faux négatif, on réessaiera.
+      return res.status(502).json({ error: 'Erreur temporaire lors de la résolution PurStream' });
     }
 
     const streamData = await fetchStream(mapping.purstream_id, `/stream/${mapping.purstream_id}`);
@@ -496,9 +506,14 @@ router.get('/tv/:tmdbId/stream', async (req, res) => {
     }
 
     const mapping = await resolvePurstreamId(tmdbId, 'tv');
-    if (!mapping) {
+    if (mapping === false) {
       await saveToCache(PURSTREAM_CACHE_DIR, notFoundKey, NOT_FOUND_MARKER);
       return res.status(404).json({ error: 'Série non trouvée sur PurStream' });
+    }
+    if (!mapping) {
+      // Échec transitoire (TMDB/PurStream temporairement indisponible) — on ne
+      // pollue pas le cache "non trouvé" avec un faux négatif, on réessaiera.
+      return res.status(502).json({ error: 'Erreur temporaire lors de la résolution PurStream' });
     }
 
     const streamData = await fetchStream(mapping.purstream_id, `/stream/${mapping.purstream_id}/episode?season=${Number(season)}&episode=${Number(episode)}`);

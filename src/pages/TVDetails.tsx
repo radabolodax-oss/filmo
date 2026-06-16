@@ -120,6 +120,15 @@ function slugifyAnimeSama(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+// Extrait le slug catalogue depuis l'URL anime-sama.to déjà résolue par /anime/search
+// (ex: "https://anime-sama.to/catalogue/naruto/" -> "naruto"). Plus fiable que de
+// re-deviner le slug à partir du titre TMDB (accents, apostrophes, titre FR vs JP...).
+function extractAnimeSamaSlug(url?: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/catalogue\/([^/]+)\/?/);
+  return match ? match[1] : null;
+}
+
 interface TVShow {
   id?: string | number;
   name: string;
@@ -3935,8 +3944,13 @@ const TVDetails: React.FC = () => {
     setAnimeSamaDirectError(null);
     setAnimeSamaDirectPlayers([]);
     try {
-      const slug = animeSamaDirectSlug ?? slugifyAnimeSama(tvShow.name);
-      if (!animeSamaDirectSlug) setAnimeSamaDirectSlug(slug);
+      // Priorité au slug réel résolu via /anime/search (animeData.url), qui matche
+      // correctement les titres avec accents/apostrophes ou différents de la VF TMDB.
+      // On ne fige (setAnimeSamaDirectSlug) que ce slug fiable, pas le devinage naïf,
+      // pour pouvoir corriger automatiquement dès que animeData arrive.
+      const resolvedSlug = extractAnimeSamaSlug(animeData?.url);
+      const slug = animeSamaDirectSlug ?? resolvedSlug ?? slugifyAnimeSama(tvShow.name);
+      if (!animeSamaDirectSlug && resolvedSlug) setAnimeSamaDirectSlug(resolvedSlug);
       const epIdx = (selectedEpisode ?? 1) - 1;
       const episodesUrl = `https://anime-sama.to/catalogue/${slug}/saison${selectedSeason ?? 1}/${lang}/episodes.js`;
       const res = await axios.get(buildApiProxyUrl(episodesUrl), { responseType: 'text', timeout: 10000 });
@@ -3968,7 +3982,7 @@ const TVDetails: React.FC = () => {
     } finally {
       setAnimeSamaDirectLoading(false);
     }
-  }, [tvShow?.name, selectedSeason, selectedEpisode, animeSamaDirectSlug]);
+  }, [tvShow?.name, selectedSeason, selectedEpisode, animeSamaDirectSlug, animeData?.url]);
 
   const syncSelectedAnimeEpisode = useCallback((nextAnimeData: any) => {
     if (selectedSeason === null || !selectedEpisode || !nextAnimeData?.seasons) {
@@ -4260,7 +4274,7 @@ const TVDetails: React.FC = () => {
     if (inlinePlayerSource !== 'animesama') return;
     loadAnimeSamaEpisode(animeSamaDirectLang);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inlinePlayerSource, selectedSeason, selectedEpisode, animeSamaDirectLang]);
+  }, [inlinePlayerSource, selectedSeason, selectedEpisode, animeSamaDirectLang, animeData?.url]);
 
   const getInlinePlayerUrl = () => {
     const s = selectedSeason ?? 1;
