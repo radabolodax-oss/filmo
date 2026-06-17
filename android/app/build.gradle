@@ -1,5 +1,14 @@
 apply plugin: 'com.android.application'
 
+// Release signing, read from android/keystore.properties (gitignored, see
+// keystore.properties.example). Falls back to debug signing when absent so
+// `npm run cap:run` / debug builds keep working without a release keystore.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "fr.movix.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,10 +25,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystoreProperties['MOVIX_RELEASE_STORE_FILE']) {
+                storeFile file(keystoreProperties['MOVIX_RELEASE_STORE_FILE'])
+                storePassword keystoreProperties['MOVIX_RELEASE_STORE_PASSWORD']
+                keyAlias keystoreProperties['MOVIX_RELEASE_KEY_ALIAS']
+                keyPassword keystoreProperties['MOVIX_RELEASE_KEY_PASSWORD']
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig keystoreProperties['MOVIX_RELEASE_STORE_FILE'] ? signingConfigs.release : signingConfigs.debug
         }
     }
 }

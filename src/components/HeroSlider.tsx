@@ -49,16 +49,11 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, duration: 40 });
   const autoSlideInterval = useRef<NodeJS.Timeout | null>(null);
   const [logoUrls, setLogoUrls] = useState<{ [key: number]: string | null }>({});
-  const [trailerKeys, setTrailerKeys] = useState<{ [key: number]: string | null }>({});
-  // true once the active-slide iframe has fired onLoad and the 1.5s reveal delay passed
-  const [trailerReady, setTrailerReady] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isPaused] = useState(detectLowEndDevice);
   const [isVisible, setIsVisible] = useState(true);
   const logoCache = useRef<{ [key: number]: string | null }>({});
-  const trailerCache = useRef<{ [key: number]: string | null }>({});
   const progressStartRef = useRef<number>(performance.now());
-  const trailerRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Logo fetching (unchanged) ──────────────────────────────────────────────
   useEffect(() => {
@@ -107,84 +102,6 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
     fetchLogos();
   }, [items]);
 
-  // ── Trailer key fetching ───────────────────────────────────────────────────
-  useEffect(() => {
-    // Low-end / TV devices: skip trailer fetching entirely to save bandwidth
-    if (detectLowEndDevice()) return;
-
-    const fetchTrailers = async () => {
-      const storedCache = sessionStorage.getItem('movix_hero_trailers');
-      const storedTimestamp = sessionStorage.getItem('movix_hero_trailers_timestamp');
-      const oneDayMs = 24 * 60 * 60 * 1000;
-
-      let sessionCache: { [key: number]: string | null } = {};
-      if (storedCache && storedTimestamp && (Date.now() - parseInt(storedTimestamp)) < oneDayMs) {
-        sessionCache = JSON.parse(storedCache);
-        trailerCache.current = { ...trailerCache.current, ...sessionCache };
-      }
-
-      const keys: { [key: number]: string | null } = { ...trailerCache.current };
-      const missing = items.filter((item) => trailerCache.current[item.id] === undefined);
-
-      if (missing.length > 0) {
-        const results = await Promise.allSettled(missing.map(async (item) => {
-          const endpoint = `https://api.themoviedb.org/3/${item.media_type}/${item.id}/videos`;
-
-          // Try French first
-          let videos: any[] = [];
-          try {
-            const frRes = await axios.get(endpoint, {
-              params: { api_key: TMDB_API_KEY, language: 'fr-FR' },
-              timeout: 6000,
-            });
-            videos = frRes.data.results || [];
-          } catch { /* ignore */ }
-
-          const hasYtTrailer = (list: any[]) =>
-            list.some(v => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'));
-
-          // Fall back to English if no French trailer
-          if (!hasYtTrailer(videos)) {
-            try {
-              const enRes = await axios.get(endpoint, {
-                params: { api_key: TMDB_API_KEY, language: 'en-US' },
-                timeout: 6000,
-              });
-              const enVideos = enRes.data.results || [];
-              if (hasYtTrailer(enVideos)) videos = enVideos;
-            } catch { /* ignore */ }
-          }
-
-          const trailer =
-            videos.find(v => v.site === 'YouTube' && v.type === 'Trailer') ||
-            videos.find(v => v.site === 'YouTube' && v.type === 'Teaser') ||
-            null;
-
-          return trailer ? (trailer.key as string) : null;
-        }));
-
-        results.forEach((result, idx) => {
-          const item = missing[idx];
-          const key = result.status === 'fulfilled' ? result.value : null;
-          keys[item.id] = key;
-          trailerCache.current[item.id] = key;
-        });
-
-        sessionStorage.setItem('movix_hero_trailers', JSON.stringify(trailerCache.current));
-        sessionStorage.setItem('movix_hero_trailers_timestamp', Date.now().toString());
-      }
-
-      setTrailerKeys(keys);
-    };
-
-    fetchTrailers();
-  }, [items]);
-
-  // ── Reset trailer reveal when slide changes ────────────────────────────────
-  useEffect(() => {
-    setTrailerReady(false);
-    if (trailerRevealTimerRef.current) clearTimeout(trailerRevealTimerRef.current);
-  }, [selectedIndex]);
 
   // ── Pause tracking ─────────────────────────────────────────────────────────
   const pausedAtRef = useRef<number | null>(null);
@@ -311,25 +228,6 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
           .hero-progress-fill.is-paused {
             animation-play-state: paused;
           }
-          /* Full-bleed YouTube iframe — scaled 1.4x so the control bar and
-             watermark at the edges of the 16:9 frame are pushed outside the
-             container's overflow:hidden clip boundary. */
-          .hero-yt-frame {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            /* scale(1.4): control bar ~48px at bottom of 1080p → 1080*1.4=1512px
-               visible window = 550/1.4 ≈ 393px → we see center ±196px → max 736px
-               control bar at 1080px → 1080*1.4=1512 → way outside 736 ✓ */
-            transform: translate(-50%, calc(-50% + 2cm)) scale(1.12);
-            min-width: 100%;
-            min-height: 100%;
-            width: 177.78vh;
-            height: 56.25vw;
-            border: 0;
-            pointer-events: none;
-            transition: opacity 1s ease;
-          }
         `}
       </style>
       <div
@@ -344,12 +242,9 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
           <div className="embla__container flex h-full w-full">
             {items.map((item, idx) => {
               const logoUrl = logoUrls[item.id];
-              const trailerKey = trailerKeys[item.id];
               const year = getYear(item);
               const rating = item.vote_average ? item.vote_average.toFixed(1) : null;
               const isActive = idx === selectedIndex;
-              // Show trailer only for the active, non-frozen slide that has a key
-              const showTrailer = isActive && !frozen && !!trailerKey;
 
               return (
                 <div
@@ -357,54 +252,17 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
                   key={item.id}
                   style={{ userSelect: 'none', flex: '0 0 100%', minWidth: 0 }}
                 >
-                  {/* ── Backdrop image — always present as fallback layer ── */}
+                  {/* ── Backdrop image ── */}
                   <img
                     src={`https://image.tmdb.org/t/p/w1280${item.backdrop_path}`}
                     alt={item.title || item.name}
                     className="absolute inset-0 w-full h-full object-cover z-0"
-                    style={{
-                      objectPosition: 'center 30%',
-                      // Fade out backdrop once trailer is playing
-                      opacity: showTrailer && trailerReady ? 0 : 1,
-                      transition: 'opacity 1s ease',
-                    }}
+                    style={{ objectPosition: 'center 30%' }}
                     draggable={false}
                     loading={isActive ? 'eager' : 'lazy'}
                     decoding="async"
                     fetchPriority={isActive ? 'high' : 'low'}
                   />
-
-                  {/* ── YouTube trailer iframe — full-bleed, no controls ── */}
-                  {showTrailer && (
-                    <>
-                      <iframe
-                        key={`yt-${item.id}-${selectedIndex}`}
-                        className="hero-yt-frame z-[1]"
-                        style={{ opacity: trailerReady ? 1 : 0 }}
-                        src={[
-                          `https://www.youtube-nocookie.com/embed/${trailerKey}`,
-                          `?autoplay=1&mute=1&loop=1&controls=0`,
-                          `&showinfo=0&rel=0&modestbranding=1`,
-                          `&playsinline=1&iv_load_policy=3`,
-                          `&disablekb=1&fs=0`,
-                          `&cc_load_policy=0`,
-                          `&playlist=${trailerKey}`,
-                        ].join('')}
-                        allow="autoplay; encrypted-media"
-                        title={item.title || item.name || 'trailer'}
-                        onLoad={() => {
-                          // 3s delay: ensures autoplay has started before revealing
-                          // (hides the initial YouTube thumbnail/play-button overlay)
-                          trailerRevealTimerRef.current = setTimeout(
-                            () => setTrailerReady(true),
-                            7000
-                          );
-                        }}
-                      />
-                      {/* Transparent shield so iframe doesn't steal pointer events */}
-                      <div className="absolute inset-0 z-[2]" style={{ background: 'transparent' }} />
-                    </>
-                  )}
 
                   {/* ── Gradient overlay ── */}
                   <div

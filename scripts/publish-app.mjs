@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
+// Builds, signs and publishes the Android APK as a GitHub Release asset.
+//
+// Why a release instead of committing the .apk to git: the previous approach
+// (RN app, removed in the `app/` cleanup) committed a 72MB binary straight
+// into the repo history. That bloats every clone forever and is exactly what
+// got "nettoyé" as obsolete. GitHub Releases gives us a stable download URL
+// (releases/latest/download/movix-android.apk, used by AppDownloadPage.tsx)
+// without touching git history per release.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -12,19 +20,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
 const PATHS = {
-  buildGradle: path.join(REPO_ROOT, 'app/android/app/build.gradle'),
-  keystoreProps: path.join(REPO_ROOT, 'app/android/app/keystore.properties'),
-  gradleWrapper: path.join(REPO_ROOT, 'app/android/gradlew'),
+  buildGradle: path.join(REPO_ROOT, 'android/app/build.gradle'),
+  keystoreProps: path.join(REPO_ROOT, 'android/keystore.properties'),
+  gradleWrapper: path.join(REPO_ROOT, 'android/gradlew'),
   apkOutput: path.join(
     REPO_ROOT,
-    'app/android/app/build/outputs/apk/release/app-release.apk',
+    'android/app/build/outputs/apk/release/app-release.apk',
   ),
-  publishedApk: path.join(REPO_ROOT, 'app/movix-android.apk'),
-  manifest: path.join(REPO_ROOT, 'app/version.json'),
+  stagedApk: path.join(REPO_ROOT, 'android/movix-android.apk'),
 };
 
-const APK_URL =
-  'https://github.com/movixcorp/MovixOpenSource/raw/refs/heads/main/app/movix-android.apk';
+const REPO_SLUG = 'movixcorp/MovixOpenSource';
+const ASSET_NAME = 'movix-android.apk';
 
 function die(msg) {
   console.error(`\n[publish-app] ${msg}\n`);
@@ -45,13 +52,12 @@ function readBuildGradle() {
   return { versionCode: Number(vc[1]), versionName: vn[1] };
 }
 
-function readCurrentManifest() {
-  try {
-    const raw = fs.readFileSync(PATHS.manifest, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+function tagExists(tag) {
+  const res = spawnSync('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  });
+  return res.status === 0;
 }
 
 async function promptMultiline(rl, label) {
@@ -117,77 +123,78 @@ function computeSha256(filePath) {
   return hash.digest('hex');
 }
 
+function ghAvailable() {
+  const res = spawnSync('gh', ['--version'], { encoding: 'utf8' });
+  return res.status === 0;
+}
+
 async function main() {
-  log('1/7', 'Vérifications préalables…');
+  log('1/6', 'Vérifications préalables…');
 
   if (!fs.existsSync(PATHS.keystoreProps)) {
     die(
-      'app/android/keystore.properties absent — APK serait debug-signed (install = échec signature).\n' +
-        '  Configure la release keystore avant de publier.',
+      'android/keystore.properties absent — copie android/keystore.properties.example\n' +
+        '  et renseigne ta release keystore avant de publier (sinon APK debug-signed).',
     );
+  }
+  if (!ghAvailable()) {
+    die('GitHub CLI (`gh`) introuvable — requis pour publier la release. Installe-le puis `gh auth login`.');
   }
 
   const { versionCode, versionName } = readBuildGradle();
-  const current = readCurrentManifest();
-  if (current && typeof current.buildNumber === 'number' && versionCode <= current.buildNumber) {
-    die(
-      `versionCode (${versionCode}) doit être > current.buildNumber (${current.buildNumber}).\n` +
-        '  Bump `versionCode` dans app/android/app/build.gradle d\'abord.',
-    );
+  const tag = `v${versionName}`;
+  if (tagExists(tag)) {
+    die(`Le tag git ${tag} existe déjà.\n  Bump \`versionName\`/\`versionCode\` dans android/app/build.gradle d'abord.`);
   }
-  console.log(
-    `  ✓ keystore.properties présent\n` +
-      `  ✓ versionCode=${versionCode}, versionName="${versionName}"` +
-      (current ? ` (current JSON buildNumber=${current.buildNumber})` : ''),
-  );
+  console.log(`  ✓ keystore.properties présent\n  ✓ versionCode=${versionCode}, versionName="${versionName}" (tag ${tag})`);
 
   const rl = readline.createInterface({ input, output });
   try {
-    log('2/7', 'Release notes');
+    log('2/6', 'Release notes');
     const notesFr = await promptMultiline(rl, 'Locale FR (markdown)');
     const notesEn = await promptMultiline(rl, 'Locale EN (markdown)');
 
-    log('3/7', 'Flag mandatory');
-    const mandatory = await promptYesNo(rl, 'Update obligatoire ?', true);
-
-    log('4/7', 'Build APK release (gradle assembleRelease)…');
+    log('3/6', 'Build APK release (gradle assembleRelease)…');
     runGradle();
     if (!fs.existsSync(PATHS.apkOutput)) {
       die(`APK introuvable à ${PATHS.apkOutput}`);
     }
 
-    log('5/7', 'Vérification de la signature APK…');
+    log('4/6', 'Vérification de la signature APK…');
     verifyApkSigned();
 
-    log('6/7', 'Copie de l\'APK + hashes…');
-    fs.mkdirSync(path.dirname(PATHS.publishedApk), { recursive: true });
-    fs.copyFileSync(PATHS.apkOutput, PATHS.publishedApk);
-    const stat = fs.statSync(PATHS.publishedApk);
-    const sha = computeSha256(PATHS.publishedApk);
+    log('5/6', 'Préparation de l\'asset…');
+    fs.copyFileSync(PATHS.apkOutput, PATHS.stagedApk);
+    const stat = fs.statSync(PATHS.stagedApk);
+    const sha = computeSha256(PATHS.stagedApk);
     console.log(
-      `  ✓ ${PATHS.publishedApk} (${(stat.size / (1024 * 1024)).toFixed(2)} MB)\n` +
-        `  ✓ SHA256=${sha}`,
+      `  ✓ ${PATHS.stagedApk} (${(stat.size / (1024 * 1024)).toFixed(2)} MB)\n  ✓ SHA256=${sha}`,
     );
 
-    log('7/7', 'Écriture de app/version.json…');
-    const manifest = {
-      version: versionName,
-      buildNumber: versionCode,
-      apkUrl: APK_URL,
-      apkSizeBytes: stat.size,
-      apkSha256: sha,
-      mandatory,
-      releasedAt: new Date().toISOString(),
-      releaseNotes: { fr: notesFr, en: notesEn },
-    };
-    fs.writeFileSync(PATHS.manifest, JSON.stringify(manifest, null, 2) + '\n');
+    log('6/6', 'Publication de la release GitHub…');
+    const notes =
+      `${notesFr}\n\n---\n\n${notesEn}\n\n---\nSHA256: \`${sha}\`` +
+      (await promptYesNo(rl, 'Update obligatoire ?', true) ? '\n\n⚠️ Mise à jour obligatoire.' : '');
+
+    const createRes = spawnSync(
+      'gh',
+      [
+        'release', 'create', tag,
+        `${PATHS.stagedApk}#${ASSET_NAME}`,
+        '--repo', REPO_SLUG,
+        '--title', `Movix Android ${versionName}`,
+        '--notes', notes,
+      ],
+      { cwd: REPO_ROOT, stdio: 'inherit' },
+    );
+    if (createRes.status !== 0) die('`gh release create` a échoué.');
+
+    fs.rmSync(PATHS.stagedApk, { force: true });
 
     console.log(
       '\n─────────────────────────────────────────────\n' +
-        '✓ Publish ready. Next steps:\n\n' +
-        '  git add app/version.json app/movix-android.apk app/android/app/build.gradle\n' +
-        `  git commit -m "release(app): v${versionName} (build ${versionCode})"\n` +
-        '  git push\n' +
+        `✓ Release ${tag} publiée sur ${REPO_SLUG}.\n` +
+        `  Téléchargement stable : https://github.com/${REPO_SLUG}/releases/latest/download/${ASSET_NAME}\n` +
         '─────────────────────────────────────────────\n',
     );
   } finally {

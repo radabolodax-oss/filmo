@@ -19,7 +19,10 @@ import BlurText from '../components/ui/blur-text';
 import ShinyText from '../components/ui/shiny-text';
 import AnimatedBorderCard from '../components/ui/animated-border-card';
 
-const APK_URL = 'https://github.com/movixcorp/MovixOpenSource/raw/refs/heads/main/app/movix-android.apk';
+// Stable redirect to the latest GitHub Release asset (see scripts/publish-app.mjs).
+// Unlike a raw blob link on main, this keeps working across releases without
+// any code change here.
+const APK_URL = 'https://github.com/movixcorp/MovixOpenSource/releases/latest/download/movix-android.apk';
 
 const features = [
   {

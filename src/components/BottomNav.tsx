@@ -57,7 +57,7 @@ const BottomNav: React.FC = () => {
               key={path}
               to={path}
               aria-current={isActive ? 'page' : undefined}
-              className="flex flex-1 min-w-0 items-center justify-center gap-1 px-1 py-2 text-xs font-medium rounded-xl transition-all duration-200"
+              className="flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] leading-tight font-medium rounded-xl transition-all duration-200"
               style={{
                 background: isActive
                   ? 'linear-gradient(135deg, rgba(0,230,118,0.20) 0%, rgba(168,85,247,0.20) 100%)'
@@ -67,7 +67,7 @@ const BottomNav: React.FC = () => {
                   : 'none',
               }}
             >
-              <Icon size={15} strokeWidth={isActive ? 2.5 : 1.75} className="shrink-0" />
+              <Icon size={18} strokeWidth={isActive ? 2.5 : 1.75} className="shrink-0" />
               <span
                 className="truncate"
                 style={isActive ? {
