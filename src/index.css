@@ -1846,28 +1846,55 @@ body {
   }
 }
 
-/* ── SMART TV (≥ 1921px) ── */
+/* ── nav-mode : navigation clavier active (PC flèches, télécommande TV, manette) ── */
+/* Activé par JS dès qu'une touche directionnelle est pressée, retiré au mouvement souris */
 
-/* Focus Netflix-style — scale + lueur blanche, pas de curseur */
-body.tv-mode *:focus,
-body.tv-mode *:focus-visible {
+/* Focus Netflix-style — scale + lueur blanche */
+body.nav-mode *:focus,
+body.nav-mode *:focus-visible {
   outline: none !important;
   box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 8px 32px rgba(0,0,0,0.6) !important;
   border-radius: 6px;
-  transform: scale(1.08);
+  transform: scale(1.05);
   transition: transform 0.12s ease, box-shadow 0.12s ease !important;
   position: relative;
   z-index: 10;
 }
 
-/* Cards dans les carousels : scale plus prononcé comme Netflix */
-body.tv-mode .embla__slide *:focus,
-body.tv-mode .embla__slide *:focus-visible {
-  transform: scale(1.12) !important;
-  box-shadow: 0 0 0 3px #fff, 0 16px 48px rgba(0,0,0,0.7) !important;
+/* ── Focus dans les cartes EmblaCarousel ──────────────────────────────────────
+   Le box-shadow sur le <a> focalisé est coupé par overflow:hidden du parent.
+   Le transform sur la card-div (overflow:hidden) causait getBoundingClientRect()=0x0
+   sur le lien absolute inset-0 → navigation cassée après focus.
+   Fix : transform sur .embla-slide (hors overflow), box-shadow sur card-div. */
+
+/* 1) Annuler le ring par défaut sur tout enfant focalisé dans une slide */
+body.nav-mode .embla-slide :focus,
+body.nav-mode .embla-slide :focus-visible {
+  box-shadow: none !important;
+  transform: none !important;
+  outline: none !important;
 }
 
-/* Curseur masqué en mode D-pad (réactivé au mouvement souris via JS) */
+/* 2) Scale sur le wrapper de slide — pas d'overflow:hidden ici, getBoundingClientRect correct */
+body.nav-mode .embla-slide:has(:focus) {
+  position: relative;
+  z-index: 25;
+  transform: scale(1.07);
+  transform-origin: center;
+  transition: transform 0.12s ease;
+}
+
+/* 3) Ring sur la card-div — son propre box-shadow n'est pas clippé par son propre overflow:hidden */
+body.nav-mode .embla-slide:has(:focus) > div:first-child {
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.95), 0 0 0 6px rgba(255,255,255,0.18), 0 20px 60px rgba(0,0,0,0.8) !important;
+  transition: box-shadow 0.12s ease;
+  border-radius: 12px;
+}
+
+
+/* ── SMART TV (≥ 1921px ou classe tv-mode) ── */
+
+/* Curseur masqué sur TV (réactivé au mouvement souris via JS) */
 body.tv-mode {
   cursor: none;
 }

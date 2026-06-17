@@ -1011,7 +1011,7 @@ const Home: React.FC = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="w-full overflow-hidden content-wrapper relative z-10 -mt-[302px]"
+        className="w-full overflow-x-clip content-wrapper relative z-10 -mt-[302px]"
       >
         <style dangerouslySetInnerHTML={{ __html: homeStyles }} />
         {loading ? (

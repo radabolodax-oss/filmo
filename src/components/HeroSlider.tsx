@@ -214,6 +214,7 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
       transition={{ duration: 0.6, ease: 'easeOut' }}
       className="embla relative w-full select-none"
       style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      data-carousel
     >
       <style>
         {`
@@ -368,6 +369,23 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
         </div>
       </div>
 
+      {/* Ghost buttons — invisible, non-focusable, only used by keyboard/remote nav hook */}
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-carousel-prev
+        onClick={() => emblaApi?.scrollPrev()}
+        style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0 }}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-hidden="true"
+        data-carousel-next
+        onClick={() => emblaApi?.scrollNext()}
+        style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0 }}
+      />
     </motion.div>
   );
 };

@@ -708,7 +708,7 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
           )}
         </div>
 
-        <div className="relative w-full overflow-visible">
+        <div className="relative w-full overflow-visible" data-carousel>
           <div className="overflow-visible" ref={emblaRef}>
             <div
               className="flex gap-4 pr-4 md:pr-6 pl-4 md:pl-6"
@@ -757,6 +757,7 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
           <button
             type="button"
             aria-label={t('common.previous')}
+            data-carousel-prev
             onClick={handlePrev}
             onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
             className={`hidden md:flex absolute left-6 md:left-8 top-1/2 z-[950]
@@ -775,6 +776,7 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
           <button
             type="button"
             aria-label={t('common.next')}
+            data-carousel-next
             onClick={handleNext}
             onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
             className={`hidden md:flex absolute right-6 md:right-8 top-1/2 z-[950]

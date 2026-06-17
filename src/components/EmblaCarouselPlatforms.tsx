@@ -103,7 +103,7 @@ const EmblaCarouselPlatforms: React.FC<EmblaCarouselPlatformsProps> = ({ title, 
           <h2 className="section-title">{title}</h2>
         </div>
       )}
-      <div className="relative w-full">
+      <div className="relative w-full" data-carousel>
         <div className="overflow-visible" ref={emblaRef}>
           <div className="flex gap-6 pr-8 md:pr-16 py-8 pl-4 md:pl-6">
             {items.map((platform) => (
@@ -185,6 +185,7 @@ const EmblaCarouselPlatforms: React.FC<EmblaCarouselPlatformsProps> = ({ title, 
         <button
           type="button"
           aria-label={t('common.previous')}
+          data-carousel-prev
           onClick={handlePrev}
           onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className={`hidden md:flex absolute left-6 md:left-8 top-1/2 z-20
@@ -203,6 +204,7 @@ const EmblaCarouselPlatforms: React.FC<EmblaCarouselPlatformsProps> = ({ title, 
         <button
           type="button"
           aria-label={t('common.next')}
+          data-carousel-next
           onClick={handleNext}
           onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className={`hidden md:flex absolute right-6 md:right-8 top-1/2 z-20

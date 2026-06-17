@@ -92,7 +92,7 @@ const EmblaCarouselGenres: React.FC<EmblaCarouselGenresProps> = ({ title, items 
           <h2 className="section-title">{title}</h2>
         </div>
       )}
-      <div className="relative w-full">
+      <div className="relative w-full" data-carousel>
         <div className="overflow-visible" ref={emblaRef}>
           <div className="flex gap-4 md:gap-6 pr-4 md:pr-6 py-4 pl-4 md:pl-6">
             {items.map((genre) => (
@@ -125,6 +125,7 @@ const EmblaCarouselGenres: React.FC<EmblaCarouselGenresProps> = ({ title, items 
         <button
           type="button"
           aria-label={t('common.previous')}
+          data-carousel-prev
           onClick={handlePrev}
           onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className={`absolute left-0 inset-y-0 z-[10000] rounded-none bg-black/40 hover:bg-black/50 text-white transition-colors shadow-lg
@@ -136,6 +137,7 @@ const EmblaCarouselGenres: React.FC<EmblaCarouselGenresProps> = ({ title, items 
         <button
           type="button"
           aria-label={t('common.next')}
+          data-carousel-next
           onClick={handleNext}
           onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className={`absolute right-0 inset-y-0 z-[10000] rounded-none bg-black/40 hover:bg-black/50 text-white transition-colors shadow-lg
