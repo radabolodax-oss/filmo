@@ -144,6 +144,11 @@ router.get(/^\/(.*)/, async (req, res) => {
     // Headers spécifiques pour vmwesa/vidmoly et certains CDN (ex: getromes.space)
     const isVmwesa = /vmwesa\.online|vidmoly|getromes\.space/i.test(targetUrl);
 
+    // Proxy PHP webflix (video_proxy.php, tous chemins) requiert Referer webflix.lol
+    const isFastfluxMovie = /fastflux\.xyz\/api\/video_proxy\.php/i.test(targetUrl);
+    // CDN Nakios (cdn.fastflux.xyz direct) requiert Referer nakios.click
+    const isFastflux = !isFastfluxMovie && /fastflux\.xyz/i.test(targetUrl);
+
     // Headers spécifiques pour dropcdn
     const isDropcdn = /dropcdn/i.test(targetUrl);
 
@@ -153,7 +158,29 @@ router.get(/^\/(.*)/, async (req, res) => {
     // Headers spécifiques pour coflix
     const isCoflix = /coflix\.(bet|si|boo|io)/i.test(targetUrl);
 
-    const headers = isCoflix ? {
+    const headers = isFastfluxMovie ? {
+      'Accept': '*/*',
+      'Accept-Encoding': 'identity;q=1, *;q=0',
+      'Accept-Language': 'fr-FR,fr;q=0.9',
+      'Connection': 'keep-alive',
+      'Origin': 'https://webflix.lol',
+      'Referer': 'https://webflix.lol/',
+      'Sec-Fetch-Dest': 'video',
+      'Sec-Fetch-Mode': 'no-cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+    } : isFastflux ? {
+      'Accept': '*/*',
+      'Accept-Encoding': 'gzip, deflate, br, zstd',
+      'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Connection': 'keep-alive',
+      'Origin': 'https://nakios.click',
+      'Referer': 'https://nakios.click/',
+      'Sec-Fetch-Dest': 'video',
+      'Sec-Fetch-Mode': 'no-cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+    } : isCoflix ? {
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'fr-FR,fr;q=0.7',
       'Cache-Control': 'no-cache',

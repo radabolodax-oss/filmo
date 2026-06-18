@@ -416,11 +416,22 @@ async function handleProxy(request, url) {
 
   let upstream;
   try {
-    upstream = await fetch(targetUrl, {
-      method:   request.method === 'HEAD' ? 'HEAD' : 'GET',
-      headers:  proxyHeaders,
-      redirect: 'follow',
-    });
+    // Suivi manuel des redirections pour conserver Referer/Origin à chaque saut.
+    // fetch() avec redirect:'follow' les strip sur les redirects cross-origin,
+    // ce qui provoque des 403 sur les CDN hotlink-protégés (ex: cdn.fastflux.xyz).
+    const method = request.method === 'HEAD' ? 'HEAD' : 'GET';
+    let currentUrl = targetUrl;
+    let hops = 0;
+    while (hops < 5) {
+      upstream = await fetch(currentUrl, { method, headers: proxyHeaders, redirect: 'manual' });
+      const loc = upstream.headers.get('location');
+      if ((upstream.status === 301 || upstream.status === 302 || upstream.status === 307 || upstream.status === 308) && loc) {
+        currentUrl = new URL(loc, currentUrl).href;
+        hops++;
+      } else {
+        break;
+      }
+    }
   } catch (err) {
     return new Response(`Erreur proxy: ${err.message}`, { status: 502, headers: CORS });
   }

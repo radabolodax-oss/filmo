@@ -22,7 +22,7 @@ import AnimatedBorderCard from '../components/ui/animated-border-card';
 // Stable redirect to the latest GitHub Release asset (see scripts/publish-app.mjs).
 // Unlike a raw blob link on main, this keeps working across releases without
 // any code change here.
-const APK_URL = 'https://github.com/movixcorp/MovixOpenSource/releases/latest/download/movix-android.apk';
+const APK_URL = 'https://github.com/movixcorp/MovixOpenSource/releases/latest/download/prowler-android.apk';
 
 const features = [
   {
@@ -55,7 +55,7 @@ const androidSteps = [
   {
     step: 1,
     title: 'Téléchargez le fichier APK',
-    desc: 'Cliquez sur le bouton de téléchargement ci-dessous pour récupérer movix-android.apk.',
+    desc: 'Cliquez sur le bouton de téléchargement ci-dessous pour récupérer prowler-android.apk.',
   },
   {
     step: 2,
@@ -369,11 +369,10 @@ const AppDownloadPage: React.FC = () => {
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 px-6 text-sm sm:text-base font-semibold transition-all duration-200 active:scale-95"
               >
                 <Download className="w-5 h-5 flex-shrink-0" />
-                Télécharger movix-android.apk
+                Télécharger prowler-android.apk
               </a>
               <p className="mt-3 text-xs text-white/30 text-center">
-                Si votre navigateur bloque le téléchargement, autorisez-le manuellement
-                dans les paramètres.
+                Si votre navigateur bloque le téléchargement, autorisez-le manuellement dans les paramètres.
               </p>
             </div>
           </AnimatedBorderCard>

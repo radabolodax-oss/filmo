@@ -13,6 +13,7 @@ const STATIC_ALLOWED_DOMAINS = [
   'movix.rodeo',
   'movix.club',
   'movix.site',
+  'movix.app',
   'movix11.pages.dev',
   'nakios.site',
   'cinezo.site',

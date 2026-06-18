@@ -27,11 +27,11 @@ const PATHS = {
     REPO_ROOT,
     'android/app/build/outputs/apk/release/app-release.apk',
   ),
-  stagedApk: path.join(REPO_ROOT, 'android/movix-android.apk'),
+  stagedApk: path.join(REPO_ROOT, 'android/prowler-android.apk'),
 };
 
 const REPO_SLUG = 'movixcorp/MovixOpenSource';
-const ASSET_NAME = 'movix-android.apk';
+const ASSET_NAME = 'prowler-android.apk';
 
 function die(msg) {
   console.error(`\n[publish-app] ${msg}\n`);
@@ -182,7 +182,7 @@ async function main() {
         'release', 'create', tag,
         `${PATHS.stagedApk}#${ASSET_NAME}`,
         '--repo', REPO_SLUG,
-        '--title', `Movix Android ${versionName}`,
+        '--title', `Prowler Android ${versionName}`,
         '--notes', notes,
       ],
       { cwd: REPO_ROOT, stdio: 'inherit' },

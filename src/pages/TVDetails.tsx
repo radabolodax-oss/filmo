@@ -53,6 +53,11 @@ const _nakiosSeriesPending = new Map<string, Promise<NakiosSource[]>>();
 const NAKIOS_CACHE_TTL = 5 * 60 * 1000;
 
 function _toNakiosProxied(rawUrl: string): string {
+  // fastflux.xyz CDN bloque les Workers Cloudflare (Bot Fight Mode) et nécessite
+  // Referer=nakios.click. On passe par le proxy Node.js local qui peut le fournir.
+  if (rawUrl.includes('fastflux.xyz')) {
+    return `${MAIN_API}/proxy/${encodeURIComponent(rawUrl)}`;
+  }
   return rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
     ? rawUrl
     : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;

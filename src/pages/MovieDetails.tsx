@@ -35,8 +35,15 @@ type NakiosSource = { url: string; name?: string };
 const _nakiosMovieCache = new Map<string, { sources: NakiosSource[]; ts: number }>();
 const _nakiosMoviePending = new Map<string, Promise<NakiosSource[]>>();
 const NAKIOS_CACHE_TTL = 5 * 60 * 1000;
+// Cache URL CDN brute pour conversion Webflix (PHP proxy)
+const _nakiosRawCdnCache = new Map<string, string>();
 
 function _toNakiosProxied(rawUrl: string): string {
+  // fastflux.xyz CDN bloque les Workers Cloudflare (Bot Fight Mode) et nécessite
+  // Referer=nakios.click. On passe par le proxy Node.js local qui peut le fournir.
+  if (rawUrl.includes('fastflux.xyz')) {
+    return `${MAIN_API}/proxy/${encodeURIComponent(rawUrl)}`;
+  }
   return rawUrl.startsWith(NAKIOS_PROXY) || rawUrl.startsWith('https://nakios-proxy')
     ? rawUrl
     : `${NAKIOS_PROXY}/proxy?url=${encodeURIComponent(rawUrl)}`;
@@ -55,7 +62,10 @@ async function resolveNakiosMovieSources(id: string): Promise<NakiosSource[]> {
       const rawUrl = data?.url || data?.stream || data?.link ||
         data?.sources?.[0]?.url || data?.sources?.[0]?.file ||
         data?.data?.url || data?.data?.stream || null;
-      if (rawUrl) all.push({ url: _toNakiosProxied(rawUrl) });
+      if (rawUrl) {
+        _nakiosRawCdnCache.set(id, rawUrl);
+        all.push({ url: _toNakiosProxied(rawUrl) });
+      }
       if (data?._vidmolyUrl) {
         try {
           const vData = await fetch(`${NAKIOS_PROXY}/vidmoly?url=${encodeURIComponent(data._vidmolyUrl)}`).then(r => r.json());
@@ -2199,7 +2209,7 @@ const MovieDetails = (): JSX.Element => {
   // Ajout d'un état pour suivre si le film est sorti
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
 
-  type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'purstream' | 'franime' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
+  type InlineSource = 'webflix' | 'wavewatch' | 'frembed' | 'nakios' | 'purstream' | 'franime' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
   const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
@@ -2224,6 +2234,12 @@ const MovieDetails = (): JSX.Element => {
   const [purstreamStreamLoading, setPurstreamStreamLoading] = useState(false);
   const [purstreamSources, setPurstreamSources] = useState<Array<{url: string; name?: string}>>([]);
   const [purstreamSourceIdx, setPurstreamSourceIdx] = useState(0);
+  const [webflixStreamUrl, setWebflixStreamUrl] = useState<string | null>(null);
+  const [webflixLoading, setWebflixLoading] = useState(false);
+  const [webflixError, setWebflixError] = useState<string | null>(null);
+  const [wavewatchIframeSrc, setWavewatchIframeSrc] = useState<string | null>(null);
+  const [wavewatchLoading, setWavewatchLoading] = useState(false);
+  const [wavewatchError, setWavewatchError] = useState<string | null>(null);
   const [vidmolyEmbedUrl, setVidmolyEmbedUrl] = useState<string | null>(null);
   const [animeSamaMovieEpisode, setAnimeSamaMovieEpisode] = useState<any>(null);
   const [animeSamaMovieLoading, setAnimeSamaMovieLoading] = useState(false);
@@ -2761,6 +2777,54 @@ const MovieDetails = (): JSX.Element => {
       .finally(() => { if (!cancelled) setNakiosStreamLoading(false); });
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id]);
+
+  // Webflix — résout le chemin CDN via Nakios worker, construit l'URL PHP proxy fastflux
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'webflix' || !id) {
+      setWebflixStreamUrl(null);
+      setWebflixError(null);
+      return;
+    }
+    let cancelled = false;
+    setWebflixLoading(true);
+    setWebflixStreamUrl(null);
+    setWebflixError(null);
+    resolveNakiosMovieSources(id)
+      .then(() => {
+        if (cancelled) return;
+        const rawCdn = _nakiosRawCdnCache.get(id);
+        if (!rawCdn) { setWebflixError('Film non disponible sur Webflix'); return; }
+        try {
+          const cdnPath = new URL(rawCdn).pathname;
+          const phpProxy = `https://fastflux.xyz/api/video_proxy.php?file=${cdnPath}`;
+          setWebflixStreamUrl(`${MAIN_API}/proxy/${encodeURIComponent(phpProxy)}`);
+        } catch { setWebflixError('Film non disponible sur Webflix'); }
+      })
+      .catch(() => { if (!cancelled) setWebflixError('Film non disponible sur Webflix'); })
+      .finally(() => { if (!cancelled) setWebflixLoading(false); });
+    return () => { cancelled = true; };
+  }, [showInlinePlayer, inlinePlayerSource, id, MAIN_API]);
+
+  // Wavewatch — vérifie la disponibilité puis charge l'iframe zeus.php
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'wavewatch' || !id) {
+      setWavewatchIframeSrc(null);
+      setWavewatchError(null);
+      return;
+    }
+    let cancelled = false;
+    setWavewatchLoading(true);
+    setWavewatchIframeSrc(null);
+    setWavewatchError(null);
+    const zeusUrl = `https://apis.wavewatch.top/zeus.php?type=movie&id=${id}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    fetch(`${MAIN_API}/proxy/${encodeURIComponent(zeusUrl)}`, { signal: ctrl.signal })
+      .then(r => { if (!cancelled) { if (r.ok) { setWavewatchIframeSrc(zeusUrl); } else { setWavewatchError('Film non disponible sur Wavewatch'); } } })
+      .catch(() => { if (!cancelled) setWavewatchError('Film non disponible sur Wavewatch'); })
+      .finally(() => { clearTimeout(timer); if (!cancelled) setWavewatchLoading(false); });
+    return () => { cancelled = true; ctrl.abort(); clearTimeout(timer); };
+  }, [showInlinePlayer, inlinePlayerSource, id, MAIN_API]);
 
   // Résolution Purstream : récupère purstream_id + flux HLS via le backend
   useEffect(() => {
@@ -4712,28 +4776,46 @@ const MovieDetails = (): JSX.Element => {
                 transition={{ duration: 0.3 }}
               >
               <div className="relative w-full min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
-                {inlinePlayerSource === 'webflix' ? (
-                  <div className="relative w-full">
+                {inlinePlayerSource === 'webflix' ? (() => {
+                  if (webflixLoading) return (
+                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                      <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    </div>
+                  );
+                  if (webflixError || !webflixStreamUrl) return (
+                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                      <span className="text-sm">{webflixError ?? 'Film non disponible sur Webflix'}</span>
+                      <button onClick={() => setInlinePlayerSource('nakios')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                        Essayer Nakios
+                      </button>
+                    </div>
+                  );
+                  return (
                     <video
-                      key={`fastflux-${movie?.title}-${movieLang}`}
-                      src={buildFastfluxUrl(movie?.title || (movie as any)?.original_title || '', 1, 1, movieLang)}
+                      key={webflixStreamUrl}
+                      src={webflixStreamUrl}
                       className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
                       controls
                       autoPlay
                       style={{ display: 'block', background: '#000' }}
                       title={movie?.title || 'Film'}
+                      onError={() => setWebflixError('Erreur de lecture — fichier introuvable')}
                     />
-                  </div>
-                ) : (inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
+                  );
+                })() : (inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
                   const loading       = inlinePlayerSource === 'nakios' ? nakiosStreamLoading : purstreamStreamLoading;
                   const streamUrl     = inlinePlayerSource === 'nakios' ? nakiosStreamUrl    : purstreamStreamUrl;
                   const fallbackLabel = inlinePlayerSource === 'nakios' ? 'Film indisponible sur Nakios' : 'Flux Purstream indisponible';
                   return loading ? (
-                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black gap-3">
                       <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                       </svg>
+                      <span className="text-gray-400 text-sm">Connexion au serveur…</span>
                     </div>
                   ) : streamUrl ? (
                     <HLSPlayer
@@ -4810,6 +4892,34 @@ const MovieDetails = (): JSX.Element => {
                         title={movie?.title || 'FRAnime'}
                       />
                     </div>
+                  );
+                })() : inlinePlayerSource === 'wavewatch' ? (() => {
+                  if (wavewatchLoading) return (
+                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                      <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    </div>
+                  );
+                  if (wavewatchError || !wavewatchIframeSrc) return (
+                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                      <span className="text-sm">{wavewatchError ?? 'Film non disponible sur Wavewatch'}</span>
+                      <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                        Essayer Frembed
+                      </button>
+                    </div>
+                  );
+                  return (
+                    <iframe
+                      key={`wavewatch-${id}`}
+                      src={wavewatchIframeSrc}
+                      className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                      allowFullScreen
+                      allow="autoplay; fullscreen; encrypted-media"
+                      style={{ border: 'none', display: 'block' }}
+                      title={movie?.title || 'Wavewatch'}
+                    />
                   );
                 })() : (
                   <iframe
@@ -4930,6 +5040,8 @@ const MovieDetails = (): JSX.Element => {
                   {(() => {
                     const sources: { src: InlineSource; label: string }[] = [
                       { src: 'nakios',     label: 'Nakios' },
+                      { src: 'webflix',    label: 'Webflix' },
+                      { src: 'wavewatch',  label: 'Wavewatch' },
                       { src: 'purstream',  label: 'Purstream' },
                       { src: 'franime',    label: 'FRAnime' },
                       { src: 'frembed',    label: 'Frembed' },

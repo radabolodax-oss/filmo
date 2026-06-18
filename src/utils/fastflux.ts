@@ -26,6 +26,10 @@ export function buildFastfluxUrl(
   return `https://fastflux.xyz/api/video_proxy.php?file=${file}`;
 }
 
+export function buildFastfluxMovieUrl(title: string, _year?: string | number): string {
+  return buildFastfluxUrl(title, 1, 1, 'VF');
+}
+
 export function toAnicloudSlug(title: string): string {
   return title
     .normalize('NFD')
