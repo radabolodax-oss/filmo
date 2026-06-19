@@ -40,7 +40,7 @@ import i18n from '../i18n';
 import { useProfile } from '../context/ProfileContext';
 import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed } from '../utils/certificationUtils';
 import { getVipHeaders } from '../utils/authUtils';
-import { buildFastfluxUrl } from '../utils/fastflux';
+import { buildFastfluxSeriesCdnUrl } from '../utils/fastflux';
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
@@ -2593,9 +2593,15 @@ const TVDetails: React.FC = () => {
 
   const cinemaMode = true;
 
-  type InlineSource = 'webflix' | 'frembed' | 'nakios' | 'animesama' | 'anicloud' | 'franime' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'embed2' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
+  type InlineSource = 'wavewatch' | 'webflix' | 'frembed' | 'nakios' | 'animesama' | 'anicloud' | 'franime' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'embed2' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
+  const [inlinePlayerSource, setInlinePlayerSourceRaw] = useState<InlineSource>(
+    () => (sessionStorage.getItem('movix_tv_player_source') as InlineSource | null) ?? 'wavewatch'
+  );
+  const setInlinePlayerSource = (src: InlineSource) => { sessionStorage.setItem('movix_tv_player_source', src); setInlinePlayerSourceRaw(src); };
+  const [wavewatchIframeSrc, setWavewatchIframeSrc] = useState<string | null>(null);
+  const [wavewatchLoading, setWavewatchLoading] = useState(false);
+  const [wavewatchError, setWavewatchError] = useState<string | null>(null);
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
 
   // Ferme le dropdown des sources au clic en dehors (même pattern que MovieDetails)
@@ -2634,6 +2640,8 @@ const TVDetails: React.FC = () => {
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
   const [nakiosSources, setNakiosSources] = useState<Array<{url: string; name?: string}>>([]);
   const [nakiosSourceIdx, setNakiosSourceIdx] = useState(0);
+  const [webflixSeriesLoading, setWebflixSeriesLoading] = useState(false);
+  const [webflixSeriesError, setWebflixSeriesError] = useState<string | null>(null);
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
   const [purstreamStreamLoading, setPurstreamStreamLoading] = useState(false);
   const [purstreamEmbedId, setPurstreamEmbedId] = useState<number | null>(null);
@@ -2750,6 +2758,7 @@ const TVDetails: React.FC = () => {
   useEffect(() => {
     resetVipStatus();
     setShowInlinePlayer(false);
+    setInlinePlayerSource(animeMode ? 'anicloud' : ((sessionStorage.getItem('movix_tv_player_source') as InlineSource | null) ?? 'wavewatch'));
     setPanelSeason(null);
   }, [id, resetVipStatus]);
 
@@ -3210,7 +3219,6 @@ const TVDetails: React.FC = () => {
       season: selectedSeason!,
       episode: epNumber
     });
-    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
@@ -3249,10 +3257,9 @@ const TVDetails: React.FC = () => {
     }
   }, [tvShow, selectedSeason, selectedEpisode, updateWatchProgress]);
 
-  // Autoplay : si ?autoplay=true dans l'URL, lancer le lecteur dès que la série charge
+  // Autoplay : lancer le lecteur dès que la série charge
   useEffect(() => {
     if (!tvShow) return;
-    if (searchParams.get('autoplay') !== 'true') return;
     handleContinueWatching();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tvShow?.id]);
@@ -3593,7 +3600,6 @@ const TVDetails: React.FC = () => {
     setSelectedEpisode(episodeToWatch);
 
     // Toujours ouvrir le lecteur inline (anime ou non)
-    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
 
@@ -3622,7 +3628,6 @@ const TVDetails: React.FC = () => {
     setSelectedSeason(season);
     setSelectedEpisode(epNumber);
     setLastWatched({ season, episode: epNumber });
-    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
     // Démarrer le timer Skip Intro (pour sources iframe qui n'exposent pas le temps vidéo)
@@ -3674,7 +3679,6 @@ const TVDetails: React.FC = () => {
     else if (episode.streaming_links.length > 0) setSelectedLanguage(episode.streaming_links[0].language);
     setSelectedPlayer('0');
     setShowInlinePlayer(true);
-    setInlinePlayerSource('animesama');
     scrollToInlinePlayer();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3793,7 +3797,6 @@ const TVDetails: React.FC = () => {
   const handleEpisodeSelect = async (seasonNumber: number, episodeNumber: number) => {
     setSelectedSeason(seasonNumber);
     setSelectedEpisode(episodeNumber);
-    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
     setShowInlinePlayer(true);
     scrollToInlinePlayer();
   };
@@ -4081,9 +4084,9 @@ const TVDetails: React.FC = () => {
     };
   }, [id, isAnime, loadAnimeData]);
 
-  // Source par défaut selon le mode : Nakios pour les séries, AnimeSama pour les animes
+  // Source par défaut selon le mode
   useEffect(() => {
-    setInlinePlayerSource(animeMode ? 'animesama' : 'nakios');
+    setInlinePlayerSource(animeMode ? 'anicloud' : ((sessionStorage.getItem('movix_tv_player_source') as InlineSource | null) ?? 'wavewatch'));
   }, [animeMode]);
 
   useEffect(() => {
@@ -4176,6 +4179,12 @@ const TVDetails: React.FC = () => {
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode]);
 
+  // Reset webflix states on episode/season/lang change
+  useEffect(() => {
+    setWebflixSeriesLoading(false);
+    setWebflixSeriesError(null);
+  }, [selectedSeason, selectedEpisode, inlineLang, inlinePlayerSource]);
+
   // Pré-fetch Nakios depuis URL params dès le montage, sans attendre selectedSeason/selectedEpisode
   useEffect(() => {
     if (!id) return;
@@ -4222,6 +4231,27 @@ const TVDetails: React.FC = () => {
       .catch(() => { if (!cancelled) setVidmolyEmbedUrl(null); });
     return () => { cancelled = true; };
   }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode, animeMode]);
+
+  // Wavewatch — vérifie la disponibilité puis charge l'iframe zeus.php
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'wavewatch' || !id || !selectedSeason || !selectedEpisode) {
+      setWavewatchIframeSrc(null);
+      setWavewatchError(null);
+      return;
+    }
+    let cancelled = false;
+    setWavewatchLoading(true);
+    setWavewatchIframeSrc(null);
+    setWavewatchError(null);
+    const zeusUrl = `https://apis.wavewatch.top/zeus.php?type=tv&id=${id}&season=${selectedSeason}&episode=${selectedEpisode}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    fetch(`${MAIN_API}/proxy/${encodeURIComponent(zeusUrl)}`, { signal: ctrl.signal })
+      .then(r => { if (!cancelled) { if (r.ok) { setWavewatchIframeSrc(zeusUrl); } else { setWavewatchError('Épisode non disponible sur Wavewatch'); } } })
+      .catch(() => { if (!cancelled) setWavewatchError('Épisode non disponible sur Wavewatch'); })
+      .finally(() => { clearTimeout(timer); if (!cancelled) setWavewatchLoading(false); });
+    return () => { cancelled = true; ctrl.abort(); clearTimeout(timer); };
+  }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode, MAIN_API]);
 
   // Reset AniCloud slug/sections quand on change d'anime
   useEffect(() => {
@@ -4286,7 +4316,8 @@ const TVDetails: React.FC = () => {
     const e = selectedEpisode ?? 1;
     const title = tvShow?.name || '';
     switch (inlinePlayerSource) {
-      case 'webflix':    return title ? buildFastfluxUrl(title, s, e, inlineLang) : '';
+      case 'webflix':
+        return title ? `${MAIN_API}/proxy/${encodeURIComponent(buildFastfluxSeriesCdnUrl(title, s, e, inlineLang))}` : '';
       case 'frembed':    return `https://frembed.click/api/serie.php?id=${id}&sa=${s}&epi=${e}`;
       case 'peachify':   return `https://peachify.top/embed/tv/${id}?season=${s}&episode=${e}&sub=French&accent=dc2626`;
       case 'vidsrc':     return `https://vidsrc.to/embed/tv/${id}/${s}/${e}`;
@@ -7476,19 +7507,75 @@ const TVDetails: React.FC = () => {
                   />
                 </div>
               );
-            })() : inlinePlayerSource === 'webflix' ? (() => {
-              const src = getInlinePlayerUrl();
-              return src ? (
-                <video
-                  key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}-${inlineLang}`}
-                  src={src}
+            })() : inlinePlayerSource === 'wavewatch' ? (() => {
+              if (wavewatchLoading) return (
+                <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                  <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                </div>
+              );
+              if (wavewatchError || !wavewatchIframeSrc) return (
+                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                  <span className="text-sm">{wavewatchError ?? 'Épisode non disponible sur Wavewatch'}</span>
+                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                    Essayer Frembed
+                  </button>
+                </div>
+              );
+              return (
+                <iframe
+                  key={`wavewatch-${id}-${selectedSeason}-${selectedEpisode}`}
+                  src={wavewatchIframeSrc}
                   className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                  controls
-                  autoPlay
+                  allowFullScreen
+                  allow="autoplay; fullscreen; encrypted-media"
+                  style={{ border: 'none', display: 'block' }}
                   title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
-                  style={{ display: 'block', background: '#000' }}
                 />
-              ) : null;
+              );
+            })() : inlinePlayerSource === 'webflix' ? (() => {
+              const wfTitle = tvShow?.name || '';
+              if (!wfTitle) return null;
+              const wfS = selectedSeason ?? 1;
+              const wfE = selectedEpisode ?? 1;
+              const wfSrc = `${MAIN_API}/proxy/${encodeURIComponent(buildFastfluxSeriesCdnUrl(wfTitle, wfS, wfE, inlineLang))}`;
+              if (webflixSeriesError) return (
+                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                  <span className="text-sm">{webflixSeriesError}</span>
+                  <button onClick={() => setInlinePlayerSource('nakios')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                    Essayer Nakios
+                  </button>
+                </div>
+              );
+              return (
+                <div className="relative w-full bg-black">
+                  {webflixSeriesLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
+                      <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    </div>
+                  )}
+                  <video
+                    key={`webflix-${selectedSeason}-${selectedEpisode}-${inlineLang}`}
+                    src={wfSrc}
+                    className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
+                    controls
+                    autoPlay
+                    title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
+                    style={{ display: 'block', background: '#000' }}
+                    onLoadStart={() => setWebflixSeriesLoading(true)}
+                    onCanPlay={() => setWebflixSeriesLoading(false)}
+                    onError={() => {
+                      setWebflixSeriesLoading(false);
+                      setWebflixSeriesError('Série non disponible sur Webflix');
+                    }}
+                  />
+                </div>
+              );
             })() : (() => {
               const src = getInlinePlayerUrl();
               return src ? (
@@ -7686,6 +7773,8 @@ const TVDetails: React.FC = () => {
             <div className="p-3 relative source-dropdown">
               {(() => {
                 const sources: { src: InlineSource; label: string }[] = [
+                  { src: 'wavewatch',  label: 'Wavewatch' },
+                  { src: 'webflix',    label: 'Webflix' },
                   { src: 'nakios',     label: 'Nakios' },
                   { src: 'purstream',  label: 'Purstream' },
                   { src: 'anicloud',   label: 'AniCloud' },

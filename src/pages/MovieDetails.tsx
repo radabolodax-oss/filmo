@@ -2211,7 +2211,7 @@ const MovieDetails = (): JSX.Element => {
 
   type InlineSource = 'webflix' | 'wavewatch' | 'frembed' | 'nakios' | 'purstream' | 'franime' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('nakios');
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('wavewatch');
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
 
   // Ferme le dropdown des sources au clic en dehors
@@ -2935,7 +2935,7 @@ const MovieDetails = (): JSX.Element => {
   }, [inlinePlayerSource, movie?.title]);
 
   const handleWatchClick = () => {
-    setInlinePlayerSource('videasy');
+    setInlinePlayerSource('webflix');
     setShowInlinePlayer(true);
     scrollToPlayer();
   };
@@ -5039,9 +5039,9 @@ const MovieDetails = (): JSX.Element => {
                 <div className="p-3 relative source-dropdown">
                   {(() => {
                     const sources: { src: InlineSource; label: string }[] = [
+                      { src: 'wavewatch',  label: 'Wavewatch' },
                       { src: 'nakios',     label: 'Nakios' },
                       { src: 'webflix',    label: 'Webflix' },
-                      { src: 'wavewatch',  label: 'Wavewatch' },
                       { src: 'purstream',  label: 'Purstream' },
                       { src: 'franime',    label: 'FRAnime' },
                       { src: 'frembed',    label: 'Frembed' },
