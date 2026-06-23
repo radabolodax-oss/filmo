@@ -12,18 +12,19 @@ import ShareButtons from '../components/ShareButtons';
 import HLSPlayer from '../components/HLSPlayer';
 import { useAdFreePopup } from '../context/AdFreePopupContext';
 import AdFreePlayerAds from '../components/AdFreePlayerAds';
-import EmblaCarousel from '../components/EmblaCarousel';
+
 import { encodeId, getTmdbId } from '../utils/idEncoder';
 import { useWrappedTracker } from '../hooks/useWrappedTracker';
 import { buildSiteUrl } from '../config/runtime';
 import LazySection from '../components/LazySection';
+import EmblaCarousel from '../components/EmblaCarousel';
 import SEO from '../components/SEO';
 import { getTmdbLanguage } from '../i18n';
 import i18n from '../i18n';
 import { useProfile } from '../context/ProfileContext';
 import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed } from '../utils/certificationUtils';
 import { getVipHeaders } from '../utils/authUtils';
-import { toAnicloudSlug, buildFastfluxUrl } from '../utils/fastflux';
+import { toAnicloudSlug, buildFastfluxUrl, buildFexiniSlug, buildDrinkoflixMovieCdnUrl } from '../utils/fastflux';
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
@@ -1641,9 +1642,9 @@ const VideoPlayer = ({ movieId, backdropPath }: { movieId: string; backdropPath?
         )}
 
       {/* ===== SOURCE PANEL — Liquid Glass ===== */}
-      <div className="my-5 rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="my-5 rounded-2xl bg-white/[0.04] backdrop-blur-sm">
         <div className="flex items-center gap-2.5 px-5 py-3 border-b border-white/[0.06]">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#4ade80', boxShadow: '0 0 8px rgba(74,222,128,0.9)' }} />
           <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
         </div>
         <div className="p-4 space-y-5">
@@ -2209,9 +2210,9 @@ const MovieDetails = (): JSX.Element => {
   // Ajout d'un état pour suivre si le film est sorti
   const [showPlayerAnyway, setShowPlayerAnyway] = useState<boolean>(false);
 
-  type InlineSource = 'webflix' | 'wavewatch' | 'frembed' | 'nakios' | 'purstream' | 'franime' | 'videasy' | 'vidlink' | 'vidmoly' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'embed2' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
+  type InlineSource = string;
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
-  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('wavewatch');
+  const [inlinePlayerSource, setInlinePlayerSource] = useState<InlineSource>('franime');
   const [showSourceDropdown, setShowSourceDropdown] = useState(false);
 
   // Ferme le dropdown des sources au clic en dehors
@@ -2795,9 +2796,15 @@ const MovieDetails = (): JSX.Element => {
         const rawCdn = _nakiosRawCdnCache.get(id);
         if (!rawCdn) { setWebflixError('Film non disponible sur Webflix'); return; }
         try {
-          const cdnPath = new URL(rawCdn).pathname;
-          const phpProxy = `https://fastflux.xyz/api/video_proxy.php?file=${cdnPath}`;
-          setWebflixStreamUrl(`${MAIN_API}/proxy/${encodeURIComponent(phpProxy)}`);
+          if (/drinkoflix\.lol/i.test(rawCdn)) {
+            // Nouveau CDN drinkoflix — proxy direct avec Referer webflix.lol
+            setWebflixStreamUrl(`${MAIN_API}/proxy/${encodeURIComponent(rawCdn)}`);
+          } else {
+            // Ancien CDN fastflux.xyz → PHP proxy
+            const cdnPath = new URL(rawCdn).pathname;
+            const phpProxy = `https://fastflux.xyz/api/video_proxy.php?file=${cdnPath}`;
+            setWebflixStreamUrl(`${MAIN_API}/proxy/${encodeURIComponent(phpProxy)}`);
+          }
         } catch { setWebflixError('Film non disponible sur Webflix'); }
       })
       .catch(() => { if (!cancelled) setWebflixError('Film non disponible sur Webflix'); })
@@ -2919,7 +2926,14 @@ const MovieDetails = (): JSX.Element => {
     let cancelled = false;
     setFranimeLoading(true);
     setFranimeError(null);
-    axios.get(`${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(movie.title)}`)
+    const tryLookup = (q: string) =>
+      axios.get(`${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(q)}`);
+    tryLookup(movie.title)
+      .catch(() => {
+        const orig = movie.original_title;
+        if (orig && orig !== movie.title) return tryLookup(orig);
+        return Promise.reject(new Error('not found'));
+      })
       .then(res => {
         if (cancelled) return;
         const data = res.data as {slug: string; animeId: string; langs: string[]};
@@ -2935,7 +2949,7 @@ const MovieDetails = (): JSX.Element => {
   }, [inlinePlayerSource, movie?.title]);
 
   const handleWatchClick = () => {
-    setInlinePlayerSource('webflix');
+    setInlinePlayerSource('franime');
     setShowInlinePlayer(true);
     scrollToPlayer();
   };
@@ -3019,22 +3033,9 @@ const MovieDetails = (): JSX.Element => {
 
   const getInlinePlayerUrl = () => {
     switch (inlinePlayerSource) {
-      case 'frembed':    return `https://frembed.click/api/film.php?id=${id}`;
-      case 'peachify':   return `https://peachify.top/embed/movie/${id}?sub=French&accent=dc2626`;
-      case 'vidsrc':     return `https://vidsrc.to/embed/movie/${id}`;
-      case 'vidsrc_su':  return `https://vidsrc.su/embed/movie/${id}`;
-      case 'vidsrc_io':  return `https://vidsrc.io/embed/movie?tmdb=${id}`;
-      case 'vidsrcwtf1': return `https://vidsrc.wtf/api/1/movie/?id=${id}`;
-      case 'vidsrcwtf3': return `https://vidsrc.wtf/api/3/movie/?id=${id}`;
-      case 'vidsrcwtf5': return `https://vidsrc.wtf/api/5/movie/?id=${id}`;
-      case 'vidlink':    return `https://vidlink.pro/movie/${id}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
-      case 'videasy':    return `https://player.videasy.net/movie/${id}?autoplay=1`;
-      case 'embed2':     return `https://www.2embed.skin/embed/${id}`;
-      case 'autoembed':  return `https://autoembed.co/movie/tmdb/${id}`;
-      case 'multiembed': return `https://multiembed.mov/?video_id=${id}&tmdb=1`;
-      case 'vidsrc_nl':  return `https://vidsrc.nl/embed/movie/${id}`;
-      case 'vidmoly':    return vidmolyEmbedUrl || '';
-      default:           return `https://frembed.click/api/film.php?id=${id}`;
+      case 'vidlink':  return `https://vidlink.pro/movie/${id}?primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
+      case 'videasy':  return `https://player.videasy.net/movie/${id}?autoplay=1`;
+      default:         return '';
     }
   };
 
@@ -3314,16 +3315,12 @@ const MovieDetails = (): JSX.Element => {
           }
           /* Fin des styles copiés de Home.tsx pour le hover */
 
-          /* Styles existants pour section-title et no-scroll (vérifier s'ils sont nécessaires) */
           .section-title {
             font-size: 1.5rem;
             font-weight: 700;
             position: relative;
-            background: linear-gradient(90deg, #ffffff, #e2e2e2);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            text-shadow: 0px 2px 4px rgba(0, 0, 0, 0.3);
+            color: #ffffff;
+            text-shadow: 0 2px 16px rgba(22,101,52,0.55), 0 1px 4px rgba(0,0,0,0.7);
             letter-spacing: 0.5px;
             padding-bottom: 0.5rem;
             text-transform: uppercase;
@@ -3332,36 +3329,113 @@ const MovieDetails = (): JSX.Element => {
             transition: all 0.3s ease;
           }
           .section-title:hover {
-            background: linear-gradient(90deg, #4ade80, #a855f7);
-            -webkit-background-clip: text;
-            background-clip: text;
+            text-shadow: 0 2px 24px rgba(74,222,128,0.5), 0 1px 4px rgba(0,0,0,0.7);
             transform: translateY(-2px);
-            text-shadow: 0px 4px 8px rgba(168, 85, 247, 0.4);
           }
           .section-title::after {
             content: '';
             position: absolute;
-            left: 0;
+            left: 50%;
+            transform: translateX(-50%);
             bottom: 0;
-            width: 40px;
-            height: 3px;
-            background: linear-gradient(90deg, #4ade80 0%, #a855f7 100%);
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #166534, #4ade80, #166534, transparent);
             border-radius: 3px;
-            animation: expandWidth 0.6s ease-out forwards 0.3s;
-            transform-origin: left;
-            transition: all 0.3s ease;
-          }
-          .section-title:hover::after {
-            width: 100%;
-            background: linear-gradient(90deg, #4ade80, #a855f7);
           }
           @keyframes fadeInTitle {
             0% { opacity: 0; transform: translateY(10px); }
             100% { opacity: 1; transform: translateY(0); }
           }
-          @keyframes expandWidth {
-            0% { width: 0; }
-            100% { width: 40px; }
+          .movie-hero-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 16px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: rgba(22,101,52,0.25);
+            color: #4ade80;
+            border: 1px solid rgba(74,222,128,0.4);
+            box-shadow: 0 0 12px rgba(74,222,128,0.25), inset 0 0 8px rgba(74,222,128,0.05);
+          }
+          .movie-hero-badge-upcoming {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 16px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: rgba(113,63,18,0.3);
+            color: #fbbf24;
+            border: 1px solid rgba(251,191,36,0.35);
+            box-shadow: 0 0 10px rgba(251,191,36,0.15);
+          }
+          .movie-player-block {
+            border-radius: 14px;
+            overflow: hidden;
+          }
+          .genre-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 0.8125rem;
+            color: #4ade80;
+            background: rgba(22,101,52,0.2);
+            border: 1px solid rgba(22,101,52,0.35);
+            transition: background 0.15s, border-color 0.15s;
+          }
+          .genre-badge:hover {
+            background: rgba(22,101,52,0.35);
+            border-color: rgba(74,222,128,0.4);
+          }
+          .rec-card {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            aspect-ratio: 2/3;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: border-color 0.2s, box-shadow 0.2s;
+          }
+          .rec-card:hover {
+            border-color: rgba(74,222,128,0.35);
+            box-shadow: 0 0 16px rgba(74,222,128,0.15);
+          }
+          .rec-card-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(5,46,22,0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+          }
+          .rec-card:hover .rec-card-overlay {
+            background: rgba(5,46,22,0.55);
+          }
+          .rec-card-play {
+            opacity: 0;
+            transform: scale(0.8);
+            transition: opacity 0.2s, transform 0.2s;
+            width: 44px;
+            height: 44px;
+            border-radius: 9999px;
+            background: linear-gradient(135deg, #166534, #4a1d96);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(74,222,128,0.4);
+          }
+          .rec-card:hover .rec-card-play {
+            opacity: 1;
+            transform: scale(1);
           }
           .no-scroll {
             overflow: hidden !important; /* Cache TOUT overflow, pas seulement horizontal */
@@ -3378,57 +3452,261 @@ const MovieDetails = (): JSX.Element => {
       </style>
 
 
-      {/* Page backdrop — own compositing layer (position:fixed) instead of
-          backgroundAttachment:fixed, which forces full-page re-rasterization
-          on every scroll frame and tanks FPS on heavy details pages. */}
-      <div
-        aria-hidden="true"
-        className="fixed inset-0 z-0 pointer-events-none bg-black"
-        style={backdropImage ? {
-          backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url(${backdropImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        } : undefined}
-      />
+      <div aria-hidden="true" className="fixed inset-0 z-0 pointer-events-none" style={{ background: '#080808' }} />
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
         className="relative z-10 min-h-screen text-white px-4 md:px-8 lg:px-16 py-6 overflow-x-hidden"
       >
-        {/* Header avec titre et année */}
+        {/* Hero — titre centré + métadonnées + badge */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="mb-8"
+          className="mb-10 flex flex-col items-center text-center gap-4"
         >
           <h1 className="section-title text-4xl md:text-5xl font-bold">
-            {movie.title} ({movie.release_date && !isNaN(new Date(movie.release_date).getTime()) ? new Date(movie.release_date).getFullYear() : ''})
-            {movie.release_date && !isNaN(new Date(movie.release_date).getTime()) ? (
-              new Date(movie.release_date) > new Date() ?
-                <span className="ml-2 text-sm font-medium bg-yellow-600 text-white px-2 py-1 rounded-md">{t('details.upcomingBadge')}</span> :
-                <span className="ml-2 text-sm font-medium bg-green-600 text-white px-2 py-1 rounded-md">{t('details.releasedBadge')}</span>
-            ) : (
-              <span className="ml-2 text-sm font-medium bg-yellow-600 text-white px-2 py-1 rounded-md">{t('details.notReleasedBadge')}</span>
-            )}
+            {movie.title}
           </h1>
+          {/* Métadonnées + badge */}
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {movie.release_date && !isNaN(new Date(movie.release_date).getTime()) && (
+              <span className="flex items-center gap-1.5 text-white/60 text-sm">
+                <span>📅</span>
+                <span>{new Date(movie.release_date).getFullYear()}</span>
+              </span>
+            )}
+            {(certifications['FR'] || certifications['US']) && (
+              <span className="px-2 py-0.5 rounded text-xs font-bold bg-gradient-to-r from-green-400 to-purple-500 text-white">
+                {getClassificationLabel(certifications['FR'] || certifications['US'], t)}
+              </span>
+            )}
+            {movie.vote_average > 0 && (
+              <span className="flex items-center gap-1 text-white/60 text-sm">
+                <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
+                <span className="font-bold text-white/80">{movie.vote_average.toFixed(1)}</span>
+                <span className="text-xs">/10</span>
+              </span>
+            )}
+            {movie.runtime > 0 && (
+              <span className="flex items-center gap-1.5 text-white/60 text-sm">
+                <span>🕐</span>
+                <span>{Math.floor(movie.runtime / 60)}h{String(movie.runtime % 60).padStart(2, '0')}</span>
+              </span>
+            )}
+            {movie.release_date && !isNaN(new Date(movie.release_date).getTime()) ? (
+              new Date(movie.release_date) > new Date()
+                ? <span className="movie-hero-badge-upcoming">{t('details.upcomingBadge')}</span>
+                : <span className="movie-hero-badge">{t('details.releasedBadge')}</span>
+            ) : (
+              <span className="movie-hero-badge-upcoming">{t('details.notReleasedBadge')}</span>
+            )}
+          </div>
         </motion.div>
 
-        {/* Contenu principal - poster à gauche, infos à droite */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Lecteur vidéo */}
+        <motion.div
+          id="video-player-section"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          className="mt-12 space-y-6"
+        >
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+            className="aspect-w-16 aspect-h-9 relative movie-player-block"
+          >
+            {!isAvailable ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center justify-center h-[500px] bg-black rounded-lg"
+              >
+                <motion.p
+                  className="text-gray-400"
+                  animate={{
+                    opacity: [0.5, 1, 0.5],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity
+                  }}
+                >
+                  {t('details.movieNotYetAvailable')}
+                </motion.p>
+              </motion.div>
+            ) : !isReleased && !showPlayerAnyway ? (
+              <motion.div
+                className="h-[500px] flex flex-col items-center justify-center bg-black/70 rounded-lg p-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+              >
+                <Film className="w-16 h-16 text-[#4ade80] mb-4" style={{ filter: 'drop-shadow(0 0 12px rgba(74,222,128,0.5))' }} />
+                <motion.h3
+                  className="text-2xl font-bold text-white mb-2"
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  {t('details.movieNotYetReleased')}
+                </motion.h3>
+                <motion.p
+                  className="text-gray-300 text-center max-w-md mb-6"
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  {t('details.movieNotYetReleasedDesc')}
+                </motion.p>
+                <motion.button
+                  className="px-6 py-3 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  initial={{ y: 10, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  onClick={() => setShowPlayerAnyway(true)}
+                >
+                  {t('details.continueAnyway')}
+                </motion.button>
+              </motion.div>
+            ) : (
+              // Lecteur + barre de sources en dessous
+              <motion.div
+                className="mt-6 flex flex-col gap-2 max-w-5xl mx-auto w-full"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+              <div className="relative w-full min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
+                {inlinePlayerSource === 'franime' ? (() => {
+                  if (franimeLoading) return (
+                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                      <svg className="animate-spin h-10 w-10 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    </div>
+                  );
+                  if (franimeError || !franimeLookup) return (
+                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                      <span className="text-sm">{franimeError ?? 'Anime non trouvé sur FRAnime'}</span>
+                      <button onClick={() => setShowInlinePlayer(false)} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
+                        Fermer
+                      </button>
+                    </div>
+                  );
+                  const franimeSrc = `https://franime.fr/anime/${franimeLookup.slug}?anime_id=${franimeLookup.animeId}&lang=${franimeLang}&ep=1`;
+                  return (
+                    <div className="w-full h-[40vw] min-h-[140px] sm:h-[220px] md:h-[360px] lg:h-[420px] 2xl:h-[560px] overflow-hidden relative">
+                      <iframe
+                        key={`franime-movie-${franimeLang}`}
+                        src={franimeSrc}
+                        allowFullScreen
+                        allow="autoplay; fullscreen; encrypted-media"
+                        scrolling="no"
+                        style={{ border: 'none', display: 'block', position: 'absolute', top: '-140px', left: 0, width: '100%', height: 'calc(100% + 140px)' }}
+                        title={movie?.title || 'FRAnime'}
+                      />
+                    </div>
+                  );
+                })() : null}
+                {/* Langue — FRAnime */}
+                {inlinePlayerSource === 'franime' && !franimeLoading && franimeLookup && franimeLookup.langs.length > 1 && (() => {
+                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
+                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
+                  return (
+                    <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
+                      <div className="flex gap-1.5 flex-wrap items-center">
+                        <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Langue :</span>
+                        {franimeLookup.langs.map(lang => (
+                          <button key={lang} onClick={() => setFranimeLang(lang)}
+                            className={franimeLang === lang ? btnOn : btnOff}>
+                            {lang.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* ===== SOURCE PANEL — Liquid Glass ===== */}
+              <div className="rounded-2xl bg-white/[0.04] backdrop-blur-sm">
+                <div className="flex items-center gap-2.5 px-5 py-3 border-b border-white/[0.06]">
+                  <span className="w-1.5 h-1.5 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.9)]" style={{ background: '#4ade80' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
+                </div>
+                <div className="p-3 relative source-dropdown">
+                  {(() => {
+                    const sources: { src: InlineSource; label: string }[] = [
+                      { src: 'franime', label: 'FRAnime' },
+                    ];
+                    const activeLabel = sources.find(s => s.src === inlinePlayerSource)?.label ?? inlinePlayerSource;
+                    return (
+                      <>
+                        <button
+                          onClick={() => setShowSourceDropdown(v => !v)}
+                          className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl border text-white text-sm font-medium transition-all duration-200 hover:border-white/[0.18]"
+                          style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.1)' }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#4ade80', boxShadow: '0 0 8px rgba(74,222,128,0.7)' }} />
+                            <span>{activeLabel}</span>
+                          </div>
+                          <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-200 ${showSourceDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showSourceDropdown && (
+                          <div className="absolute left-3 right-3 bottom-full mb-1 z-50 rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl shadow-2xl overflow-y-auto max-h-64">
+                            {sources.map(({ src, label }) => (
+                              <button
+                                key={src}
+                                onClick={() => { setInlinePlayerSource(src); setShowSourceDropdown(false); }}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-150 ${
+                                  inlinePlayerSource === src
+                                    ? 'bg-emerald-500/15 text-emerald-300'
+                                    : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${inlinePlayerSource === src ? 'bg-emerald-400' : 'bg-white/20'}`} />
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-[11px] mt-2 px-1" style={{ color: 'rgba(255,255,255,0.28)' }}>Changez de source si la lecture ne démarre pas</p>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              </motion.div>
+            )}
+          </motion.div>
+        </motion.div>
+
+
+        {false && (<><div className="mt-6 p-6"><div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Colonne gauche - Poster */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
+            className="rounded-xl overflow-hidden"
+            style={{ background: 'linear-gradient(to bottom, #052e16, #3b0764)', aspectRatio: '2/3', border: '1px solid rgba(22,101,52,0.25)' }}
           >
             <motion.img
               whileHover={{ scale: 1.03 }}
               transition={{ type: "spring", stiffness: 300, damping: 10 }}
               src={movie.poster_path ? `https://image.tmdb.org/t/p/original${movie.poster_path}` : DEFAULT_IMAGE}
               alt={movie.title}
-              className="w-full rounded-lg shadow-lg"
+              className="w-full rounded-xl shadow-lg"
             />
 
           </motion.div>
@@ -3438,13 +3716,13 @@ const MovieDetails = (): JSX.Element => {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.4 }}
-            className="md:col-span-2"
+            className="md:col-span-3"
           >
             {/* Tabs */}
             <div className="relative">
               <div
                 ref={tabsContainerRef}
-                className="flex overflow-x-auto scrollbar-hide touch-pan-x border-b border-gray-700 mb-6"
+                className="flex overflow-x-auto scrollbar-hide touch-pan-x border-b border-white/10 mb-6"
                 style={{
                   scrollbarWidth: 'none',
                   msOverflowStyle: 'none',
@@ -3520,7 +3798,7 @@ const MovieDetails = (): JSX.Element => {
                   {t('details.imagesTab')}
                   {activeTab === 'images' && (
                     <motion.div
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-400 to-purple-500"
                       layoutId="activeTab"
                       transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     />
@@ -3625,104 +3903,69 @@ const MovieDetails = (): JSX.Element => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.1 }}
                   >
-                    {/* TMDB Info Box */}
-                    <div className="mb-6 p-4 border border-white/20 bg-red-500/10 rounded-lg flex gap-3 items-start">
-                      <AlertTriangle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-gray-300">
-                        <p>
-                          {t('details.tmdbInfoNote')}{' '}
-                          <a
-                            href={`https://www.themoviedb.org/movie/${id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-green-400 hover:text-red-300 underline"
-                          >
-                            TMDB
-                          </a>
-                          . {t('details.tmdbInfoDiffNote')}
-                        </p>
-                      </div>
-                    </div>
 
                     <h2 className="text-xl font-bold mb-2">{t('details.synopsisTitle')}</h2>
-                    <p className="text-gray-300">{movie.overview || t('details.noSynopsis')}</p>
+                    <p className="text-white/50 leading-relaxed">{movie.overview || t('details.noSynopsis')}</p>
                   </motion.div>
 
-                  {/* Info basiques */}
+                  {/* Info basiques + Genres — scroll horizontal */}
                   <motion.div
-                    className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"
+                    className="flex overflow-x-auto gap-3 mb-6 pb-1"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
                   >
-                    {/* Durée */}
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">{t('details.durationLabel')}</h3>
-                      <p className="text-gray-300">{movie.runtime} {t('details.minutesLabel')}</p>
-                    </div>
-
-                    {/* Note */}
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">{t('details.ratingLabel')}</h3>
-                      <div className="flex items-center gap-2">
-                        <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                        <p className="text-gray-300 text-lg font-bold">{movie.vote_average.toFixed(1)}<span className="text-sm font-normal text-gray-400">/10</span></p>
-                      </div>
-                    </div>
-
-                    {/* Classification par âge */}
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">{t('details.classificationLabel')}</h3>
-                      <div className="flex items-center gap-2">
-                        {certifications['FR'] ? (
-                          <span className="bg-gradient-to-r from-green-400 to-purple-500 text-white px-3 py-1 rounded-md font-bold">
-                            {getClassificationLabel(certifications['FR'], t)}
-                          </span>
-                        ) : certifications['US'] ? (
-                          <span className="bg-gradient-to-r from-green-400 to-purple-500 text-white px-3 py-1 rounded-md font-bold">
-                            {getClassificationLabel(certifications['US'], t)}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">{t('details.notClassified')}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Réalisateur */}
-                    {director && (
-                      <div>
-                        <h3 className="text-lg font-semibold mb-2">{t('details.directorLabel')}</h3>
-                        <p className="text-gray-300">{director.name}</p>
+                    {movie.runtime > 0 && (
+                      <div className="flex-shrink-0 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-center min-w-[90px]">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{t('details.durationLabel')}</p>
+                        <p className="text-sm text-gray-200 font-medium">{movie.runtime} {t('details.minutesLabel')}</p>
                       </div>
                     )}
-                  </motion.div>
 
-                  {/* Genres */}
-                  <motion.div
-                    className="mb-6"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                  >
-                    <h3 className="text-lg font-semibold mb-2">{t('details.genresLabel')}</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {movie.genres.map((genre, index) => (
-                        <motion.div
-                          key={genre.id}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 + index * 0.05 }}
-                        >
-                          <Link
-                            to={`/genre/movie/${genre.id}`}
-                            className="flex items-center gap-1 px-3 py-2 bg-gray-800 rounded-lg text-sm hover:bg-gray-700 transition-colors inline-block border border-gray-700 hover:border-gray-600"
-                          >
-                            <span className="w-2 h-2 rounded-full bg-gradient-to-r from-green-400 to-purple-500"></span>
-                            {genre.name}
-                          </Link>
-                        </motion.div>
-                      ))}
+                    {movie.vote_average > 0 && (
+                      <div className="flex-shrink-0 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-center min-w-[90px]">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{t('details.ratingLabel')}</p>
+                        <div className="flex items-center justify-center gap-1">
+                          <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                          <p className="text-sm text-gray-200 font-bold">{movie.vote_average.toFixed(1)}<span className="text-xs font-normal text-gray-400">/10</span></p>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex-shrink-0 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-center min-w-[90px]">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{t('details.classificationLabel')}</p>
+                      {certifications['FR'] ? (
+                        <span className="text-sm font-bold bg-gradient-to-r from-green-400 to-purple-500 bg-clip-text text-transparent">
+                          {getClassificationLabel(certifications['FR'], t)}
+                        </span>
+                      ) : certifications['US'] ? (
+                        <span className="text-sm font-bold bg-gradient-to-r from-green-400 to-purple-500 bg-clip-text text-transparent">
+                          {getClassificationLabel(certifications['US'], t)}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">—</span>
+                      )}
                     </div>
+
+                    {director && (
+                      <div className="flex-shrink-0 px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-center min-w-[110px]">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{t('details.directorLabel')}</p>
+                        <p className="text-sm text-gray-200 font-medium">{director.name}</p>
+                      </div>
+                    )}
+
+                    {movie.genres.map((genre) => (
+                      <Link
+                        key={genre.id}
+                        to={`/genre/movie/${genre.id}`}
+                        className="flex-shrink-0 px-3 py-2 rounded-lg border text-center min-w-[80px]"
+                        style={{ background: 'rgba(22,101,52,0.12)', borderColor: 'rgba(22,101,52,0.32)' }}
+                      >
+                        <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-0.5">{t('details.genresLabel')}</p>
+                        <p className="text-sm text-[#4ade80] font-medium">{genre.name}</p>
+                      </Link>
+                    ))}
                   </motion.div>
 
                 </motion.div>
@@ -4695,457 +4938,10 @@ const MovieDetails = (): JSX.Element => {
             </AnimatePresence>
           </motion.div>
         </div>
+        </div></>)}
 
-        {/* Lecteur vidéo */}
-        <motion.div
-          id="video-player-section"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="mt-12 space-y-6"
-        >
-          <h2 className="text-2xl font-bold mb-4">{t('details.watchBtn')}</h2>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="aspect-w-16 aspect-h-9 relative"
-          >
-            {!isAvailable ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex items-center justify-center h-[500px] bg-black rounded-lg"
-              >
-                <motion.p
-                  className="text-gray-400"
-                  animate={{
-                    opacity: [0.5, 1, 0.5],
-                  }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity
-                  }}
-                >
-                  {t('details.movieNotYetAvailable')}
-                </motion.p>
-              </motion.div>
-            ) : !isReleased && !showPlayerAnyway ? (
-              <motion.div
-                className="h-[500px] flex flex-col items-center justify-center bg-black/70 rounded-lg p-6"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
-              >
-                <Film className="w-16 h-16 text-yellow-500 mb-4" />
-                <motion.h3
-                  className="text-2xl font-bold text-white mb-2"
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  {t('details.movieNotYetReleased')}
-                </motion.h3>
-                <motion.p
-                  className="text-gray-300 text-center max-w-md mb-6"
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  {t('details.movieNotYetReleasedDesc')}
-                </motion.p>
-                <motion.button
-                  className="px-6 py-3 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.4 }}
-                  onClick={() => setShowPlayerAnyway(true)}
-                >
-                  {t('details.continueAnyway')}
-                </motion.button>
-              </motion.div>
-            ) : showInlinePlayer ? (
-              // Lecteur + barre de sources en dessous
-              <motion.div
-                className="mt-6 flex flex-col gap-2 max-w-5xl mx-auto w-full"
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3 }}
-              >
-              <div className="relative w-full min-w-0 rounded-lg overflow-hidden bg-black flex flex-col">
-                {inlinePlayerSource === 'webflix' ? (() => {
-                  if (webflixLoading) return (
-                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
-                      <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                    </div>
-                  );
-                  if (webflixError || !webflixStreamUrl) return (
-                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                      <span className="text-sm">{webflixError ?? 'Film non disponible sur Webflix'}</span>
-                      <button onClick={() => setInlinePlayerSource('nakios')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
-                        Essayer Nakios
-                      </button>
-                    </div>
-                  );
-                  return (
-                    <video
-                      key={webflixStreamUrl}
-                      src={webflixStreamUrl}
-                      className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                      controls
-                      autoPlay
-                      style={{ display: 'block', background: '#000' }}
-                      title={movie?.title || 'Film'}
-                      onError={() => setWebflixError('Erreur de lecture — fichier introuvable')}
-                    />
-                  );
-                })() : (inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
-                  const loading       = inlinePlayerSource === 'nakios' ? nakiosStreamLoading : purstreamStreamLoading;
-                  const streamUrl     = inlinePlayerSource === 'nakios' ? nakiosStreamUrl    : purstreamStreamUrl;
-                  const fallbackLabel = inlinePlayerSource === 'nakios' ? 'Film indisponible sur Nakios' : 'Flux Purstream indisponible';
-                  return loading ? (
-                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black gap-3">
-                      <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                      <span className="text-gray-400 text-sm">Connexion au serveur…</span>
-                    </div>
-                  ) : streamUrl ? (
-                    <HLSPlayer
-                      key={streamUrl}
-                      src={streamUrl}
-                      className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                      autoPlay={true}
-                      controls={true}
-                      poster={movie?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}` : undefined}
-                    />
-                  ) : (
-                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                      <span>{fallbackLabel}</span>
-                      <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
-                        Essayer Frembed
-                      </button>
-                    </div>
-                  );
-                })() : inlinePlayerSource === 'animesama' ? (() => {
-                  if (animeSamaMovieLoading) return (
-                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
-                      <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                    </div>
-                  );
-                  if (!animeSamaMovieEpisode) return (
-                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                      <span>Film indisponible sur Anime-Sama</span>
-                      <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
-                        Essayer Frembed
-                      </button>
-                    </div>
-                  );
-                  const animeLink = animeSamaMovieEpisode.streaming_links?.find((l: any) => l.language === animeSamaMovieLang)
-                    ?? animeSamaMovieEpisode.streaming_links?.[0];
-                  const playerUrl: string = animeLink?.players?.[parseInt(animeSamaMoviePlayer)] ?? '';
-                  return playerUrl ? (
-                    <iframe key={`as-${animeSamaMovieLang}-${animeSamaMoviePlayer}`} src={playerUrl}
-                      className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                      allowFullScreen allow="autoplay; fullscreen; encrypted-media" style={{ border: 'none', display: 'block' }}
-                      title={movie?.title || 'Anime-Sama'} />
-                  ) : (
-                    <div className="w-full h-[360px] flex items-center justify-center bg-black text-gray-400 text-sm">Sélectionne une langue et un lecteur</div>
-                  );
-                })() : inlinePlayerSource === 'franime' ? (() => {
-                  if (franimeLoading) return (
-                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
-                      <svg className="animate-spin h-10 w-10 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                    </div>
-                  );
-                  if (franimeError || !franimeLookup) return (
-                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                      <span className="text-sm">{franimeError ?? 'Anime non trouvé sur FRAnime'}</span>
-                      <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
-                        Essayer Frembed
-                      </button>
-                    </div>
-                  );
-                  const franimeSrc = `https://franime.fr/anime/${franimeLookup.slug}?anime_id=${franimeLookup.animeId}&lang=${franimeLang}&ep=1`;
-                  return (
-                    <div className="w-full h-[40vw] min-h-[140px] sm:h-[220px] md:h-[360px] lg:h-[420px] 2xl:h-[560px] overflow-hidden relative">
-                      <iframe
-                        key={`franime-movie-${franimeLang}`}
-                        src={franimeSrc}
-                        allowFullScreen
-                        allow="autoplay; fullscreen; encrypted-media"
-                        scrolling="no"
-                        style={{ border: 'none', display: 'block', position: 'absolute', top: '-140px', left: 0, width: '100%', height: 'calc(100% + 140px)' }}
-                        title={movie?.title || 'FRAnime'}
-                      />
-                    </div>
-                  );
-                })() : inlinePlayerSource === 'wavewatch' ? (() => {
-                  if (wavewatchLoading) return (
-                    <div className="w-full h-[360px] flex items-center justify-center bg-black">
-                      <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                    </div>
-                  );
-                  if (wavewatchError || !wavewatchIframeSrc) return (
-                    <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                      <span className="text-sm">{wavewatchError ?? 'Film non disponible sur Wavewatch'}</span>
-                      <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
-                        Essayer Frembed
-                      </button>
-                    </div>
-                  );
-                  return (
-                    <iframe
-                      key={`wavewatch-${id}`}
-                      src={wavewatchIframeSrc}
-                      className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                      allowFullScreen
-                      allow="autoplay; fullscreen; encrypted-media"
-                      style={{ border: 'none', display: 'block' }}
-                      title={movie?.title || 'Wavewatch'}
-                    />
-                  );
-                })() : (
-                  <iframe
-                    key={inlinePlayerSource}
-                    src={getInlinePlayerUrl()}
-                    className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                    width="100%"
-                    height="100%"
-                    frameBorder={0}
-                    allowFullScreen
-                    allow="autoplay; fullscreen"
-                    style={{ display: 'block' }}
-                    title={movie?.title || 'Player'}
-                  />
-                )}
-                {/* Source — Purstream */}
-                {inlinePlayerSource === 'purstream' && !purstreamStreamLoading && purstreamSources.length > 1 && (() => {
-                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
-                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
-                  return (
-                    <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
-                      <div className="flex gap-1.5 flex-wrap items-center">
-                        <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Source :</span>
-                        {purstreamSources.map((src, idx) => (
-                          <button key={idx}
-                            onClick={() => { setPurstreamSourceIdx(idx); setPurstreamStreamUrl(src.url); }}
-                            className={purstreamSourceIdx === idx ? btnOn : btnOff}>
-                            <Play className="w-3 h-3" />
-                            {src.name || `Source ${idx + 1}`}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-                {/* Source — Nakios */}
-                {inlinePlayerSource === 'nakios' && !nakiosStreamLoading && nakiosSources.length > 1 && (() => {
-                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
-                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
-                  return (
-                    <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
-                      <div className="flex gap-1.5 flex-wrap items-center">
-                        <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Source :</span>
-                        {nakiosSources.map((src, idx) => (
-                          <button key={idx}
-                            onClick={() => { setNakiosSourceIdx(idx); setNakiosStreamUrl(src.url); }}
-                            className={nakiosSourceIdx === idx ? btnOn : btnOff}>
-                            <Play className="w-3 h-3" />
-                            {src.name || `Source ${idx + 1}`}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-                {/* Langue + Lecteurs — uniquement pour Anime-Sama */}
-                {inlinePlayerSource === 'animesama' && !animeSamaMovieLoading && animeSamaMovieEpisode && (() => {
-                  const animeLink = animeSamaMovieEpisode.streaming_links?.find((l: any) => l.language === animeSamaMovieLang)
-                    ?? animeSamaMovieEpisode.streaming_links?.[0];
-                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
-                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
-                  return (
-                    <>
-                      <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
-                        <div className="flex gap-1.5 flex-wrap items-center">
-                          <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Langue :</span>
-                          {animeSamaMovieEpisode.streaming_links?.map((link: any, i: number) => (
-                            <button key={i} onClick={() => { setAnimeSamaMovieLang(link.language); setAnimeSamaMoviePlayer('0'); }}
-                              className={animeSamaMovieLang === link.language ? btnOn : btnOff}>
-                              {link.language.toUpperCase()}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      {animeLink?.players?.length > 0 && (
-                        <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
-                          <div className="flex gap-1.5 flex-wrap items-center">
-                            <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Lecteur :</span>
-                            {animeLink.players.map((_p: string, idx: number) => (
-                              <button key={idx} onClick={() => setAnimeSamaMoviePlayer(idx.toString())}
-                                className={animeSamaMoviePlayer === idx.toString() ? btnOn : btnOff}>
-                                <Play className="w-3 h-3" /> Lecteur {idx + 1}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-                {/* Langue — FRAnime */}
-                {inlinePlayerSource === 'franime' && !franimeLoading && franimeLookup && franimeLookup.langs.length > 1 && (() => {
-                  const btnOn  = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 bg-gradient-to-r from-green-400 to-purple-500 text-white';
-                  const btnOff = 'flex-shrink-0 px-2.5 py-1.5 rounded text-xs font-medium transition-colors bg-gray-800 text-gray-300 hover:bg-gray-700';
-                  return (
-                    <div className="bg-gray-900 border-t border-gray-800 px-3 py-2.5">
-                      <div className="flex gap-1.5 flex-wrap items-center">
-                        <span className="text-xs text-gray-400 font-medium flex-shrink-0 self-center mr-0.5">Langue :</span>
-                        {franimeLookup.langs.map(lang => (
-                          <button key={lang} onClick={() => setFranimeLang(lang)}
-                            className={franimeLang === lang ? btnOn : btnOff}>
-                            {lang.toUpperCase()}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* ===== SOURCE PANEL — Liquid Glass ===== */}
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <div className="flex items-center gap-2.5 px-5 py-3 border-b border-white/[0.06]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Lecteurs</span>
-                </div>
-                <div className="p-3 relative source-dropdown">
-                  {(() => {
-                    const sources: { src: InlineSource; label: string }[] = [
-                      { src: 'wavewatch',  label: 'Wavewatch' },
-                      { src: 'nakios',     label: 'Nakios' },
-                      { src: 'webflix',    label: 'Webflix' },
-                      { src: 'purstream',  label: 'Purstream' },
-                      { src: 'franime',    label: 'FRAnime' },
-                      { src: 'frembed',    label: 'Frembed' },
-                      { src: 'peachify',   label: 'Peachify' },
-                      { src: 'vidsrc',     label: 'VidSrc' },
-                      { src: 'vidsrc_su',  label: 'VidSrc.su' },
-                      { src: 'vidsrc_io',  label: 'VidSrc.io' },
-                      { src: 'vidsrcwtf1', label: 'VidSrc.wtf 1' },
-                      { src: 'vidsrcwtf3', label: 'VidSrc.wtf 3' },
-                      { src: 'vidsrcwtf5', label: 'VidSrc.wtf 5' },
-                      { src: 'vidlink',    label: 'VidLink' },
-                      { src: 'videasy',    label: 'Videasy' },
-                      { src: 'embed2',     label: '2Embed' },
-                      { src: 'autoembed',  label: 'AutoEmbed' },
-                      { src: 'multiembed', label: 'MultiEmbed' },
-                      { src: 'vidsrc_nl',  label: 'VidSrc.nl' },
-                    ];
-                    const activeLabel = sources.find(s => s.src === inlinePlayerSource)?.label ?? inlinePlayerSource;
-                    return (
-                      <>
-                        <button
-                          onClick={() => setShowSourceDropdown(v => !v)}
-                          className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/[0.06] border border-white/10 text-white text-sm font-medium hover:bg-white/10 hover:border-white/[0.18] transition-all duration-200"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-                            <span>{activeLabel}</span>
-                          </div>
-                          <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-200 ${showSourceDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showSourceDropdown && (
-                          <div className="absolute left-3 right-3 bottom-full mb-1 z-50 rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl shadow-2xl overflow-y-auto max-h-64">
-                            {sources.map(({ src, label }) => (
-                              <button
-                                key={src}
-                                onClick={() => { setInlinePlayerSource(src); setShowSourceDropdown(false); }}
-                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-150 ${
-                                  inlinePlayerSource === src
-                                    ? 'bg-emerald-500/15 text-emerald-300'
-                                    : 'text-white/70 hover:bg-white/[0.08] hover:text-white'
-                                }`}
-                              >
-                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${inlinePlayerSource === src ? 'bg-emerald-400' : 'bg-white/20'}`} />
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              </motion.div>
-            ) : (
-              // Bouton Lecture — cinéma style (sans source picker)
-              <motion.div
-                className="h-[500px] flex flex-col items-center justify-center bg-gradient-to-b from-black/40 to-black/80 rounded-lg p-6"
-                style={{
-                  backgroundImage: movie?.backdrop_path
-                    ? `linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0.8)), url(https://image.tmdb.org/t/p/original${movie.backdrop_path})`
-                    : undefined,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
-              >
-                <motion.div
-                  className="w-24 h-24 rounded-full bg-gradient-to-r from-green-400 to-purple-500 flex items-center justify-center mb-6 cursor-pointer"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleWatchClick}
-                >
-                  <Play className="w-12 h-12 text-white ml-2" />
-                </motion.div>
-                <motion.h3
-                  className="text-2xl font-bold text-white mb-2"
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  {movie?.title || t('details.clickToPlayTitle')}
-                </motion.h3>
-                <motion.p
-                  className="text-gray-300 text-center max-w-md"
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  {t('details.clickToPlayDesc')}
-                </motion.p>
-              </motion.div>
-            )}
-          </motion.div>
-        </motion.div>
-
-        {/* Section Films Similaires — pas de break-out : on laisse le wrapper
-            page (px-4 md:px-8 lg:px-16) gérer le padding gauche/droit, comme
-            le reste du contenu de la page. Le pattern visuel reste celui d'une
-            content row Home (EmblaCarousel applique son propre -mx-3 md:-mx-4
-            interne). */}
+        {/* Section Films Similaires */}
         {recommendations.length > 0 && (
           <LazySection
             index={0}
@@ -5154,20 +4950,39 @@ const MovieDetails = (): JSX.Element => {
             minHeight="320px"
             className="mt-12"
           >
-            <EmblaCarousel
-              title={<span><span className="text-green-400 mr-2">🔥</span>{t('details.similarMovies')}</span>}
-              items={recommendations.map(movie => ({
-                id: movie.id,
-                title: movie.title,
-                poster_path: movie.poster_path,
-                backdrop_path: movie.backdrop_path,
-                overview: movie.overview,
-                vote_average: movie.vote_average,
-                release_date: movie.release_date,
-                media_type: 'movie',
-              }))}
-              mediaType="movie-similar"
-            />
+            <div className="mb-4 flex items-center justify-center gap-2">
+              <span className="text-[#4ade80] text-xl">🔥</span>
+              <h3 className="text-xl font-bold text-white">{t('details.similarMovies')}</h3>
+            </div>
+            <div
+              className="flex gap-3 justify-center"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+            >
+              {recommendations.slice(0, 4).map((rec: any) => (
+                <Link
+                  key={rec.id}
+                  to={`/movie/${encodeId(rec.id)}`}
+                  className="rec-card block flex-shrink-0"
+                  style={{ minWidth: 'calc(12.5% - 9px)', maxWidth: 'calc(12.5% - 9px)' }}
+                >
+                  <img
+                    src={rec.poster_path ? `https://image.tmdb.org/t/p/w342${rec.poster_path}` : DEFAULT_IMAGE}
+                    alt={rec.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="rec-card-overlay">
+                    <div className="rec-card-play">
+                      <Play className="w-5 h-5 text-white ml-0.5" />
+                    </div>
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent">
+                    <p className="text-white text-xs font-medium line-clamp-1">{rec.title}</p>
+                    {rec.release_date && <p className="text-white/40 text-[10px]">{new Date(rec.release_date).getFullYear()}</p>}
+                  </div>
+                </Link>
+              ))}
+            </div>
           </LazySection>
         )}
 

@@ -27,7 +27,7 @@ import {
   collectTmdbNames,
   type AnimeSamaCandidate,
 } from '../utils/animeMatcher';
-import EmblaCarousel from '../components/EmblaCarousel';
+
 import { encodeId, getTmdbId } from '../utils/idEncoder';
 import AntiSpoilerSettingsModal from '../components/AntiSpoilerSettings';
 import { useAntiSpoilerSettings } from '../hooks/useAntiSpoilerSettings';
@@ -40,7 +40,7 @@ import i18n from '../i18n';
 import { useProfile } from '../context/ProfileContext';
 import { getClassificationLabel as getClassificationLabelUtil, isContentAllowed } from '../utils/certificationUtils';
 import { getVipHeaders } from '../utils/authUtils';
-import { buildFastfluxSeriesCdnUrl } from '../utils/fastflux';
+import { buildFastfluxSeriesCdnUrl, buildFastfluxSeriesCdnUrlAlt, buildFexiniSlug, buildDrinkoflixSeriesCdnUrl, buildDrinkoflixSeriesCdnUrlAlt } from '../utils/fastflux';
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
@@ -2593,12 +2593,15 @@ const TVDetails: React.FC = () => {
 
   const cinemaMode = true;
 
-  type InlineSource = 'wavewatch' | 'webflix' | 'frembed' | 'nakios' | 'animesama' | 'anicloud' | 'franime' | 'purstream' | 'videasy' | 'vidlink' | 'vidmoly' | 'vidsrc' | 'peachify' | 'vidsrc_su' | 'embed2' | 'autoembed' | 'multiembed' | 'vidsrc_nl' | 'vidsrc_io' | 'vidsrcwtf1' | 'vidsrcwtf3' | 'vidsrcwtf5';
+  type InlineSource = string;
   const [showInlinePlayer, setShowInlinePlayer] = useState(true);
   const [inlinePlayerSource, setInlinePlayerSourceRaw] = useState<InlineSource>(
-    () => (sessionStorage.getItem('movix_tv_player_source') as InlineSource | null) ?? 'wavewatch'
+    () => (sessionStorage.getItem('movix_tv_player_source') as InlineSource | null) ?? 'anicloud'
   );
-  const setInlinePlayerSource = (src: InlineSource) => { sessionStorage.setItem('movix_tv_player_source', src); setInlinePlayerSourceRaw(src); };
+  const setInlinePlayerSource = (src: InlineSource) => {
+    sessionStorage.setItem(animeMode ? 'movix_anime_player_source' : 'movix_tv_player_source', src);
+    setInlinePlayerSourceRaw(src);
+  };
   const [wavewatchIframeSrc, setWavewatchIframeSrc] = useState<string | null>(null);
   const [wavewatchLoading, setWavewatchLoading] = useState(false);
   const [wavewatchError, setWavewatchError] = useState<string | null>(null);
@@ -2640,8 +2643,10 @@ const TVDetails: React.FC = () => {
   const [nakiosStreamLoading, setNakiosStreamLoading] = useState(false);
   const [nakiosSources, setNakiosSources] = useState<Array<{url: string; name?: string}>>([]);
   const [nakiosSourceIdx, setNakiosSourceIdx] = useState(0);
+  const [webflixSeriesStreamUrl, setWebflixSeriesStreamUrl] = useState<string | null>(null);
   const [webflixSeriesLoading, setWebflixSeriesLoading] = useState(false);
   const [webflixSeriesError, setWebflixSeriesError] = useState<string | null>(null);
+  const [webflixAltTried, setWebflixAltTried] = useState(false);
   const [purstreamStreamUrl, setPurstreamStreamUrl] = useState<string | null>(null);
   const [purstreamStreamLoading, setPurstreamStreamLoading] = useState(false);
   const [purstreamEmbedId, setPurstreamEmbedId] = useState<number | null>(null);
@@ -2758,7 +2763,7 @@ const TVDetails: React.FC = () => {
   useEffect(() => {
     resetVipStatus();
     setShowInlinePlayer(false);
-    setInlinePlayerSource(animeMode ? 'anicloud' : ((sessionStorage.getItem('movix_tv_player_source') as InlineSource | null) ?? 'wavewatch'));
+    setInlinePlayerSource((sessionStorage.getItem(animeMode ? 'movix_anime_player_source' : 'movix_tv_player_source') as InlineSource | null) ?? 'anicloud');
     setPanelSeason(null);
   }, [id, resetVipStatus]);
 
@@ -4086,7 +4091,7 @@ const TVDetails: React.FC = () => {
 
   // Source par défaut selon le mode
   useEffect(() => {
-    setInlinePlayerSource(animeMode ? 'anicloud' : ((sessionStorage.getItem('movix_tv_player_source') as InlineSource | null) ?? 'wavewatch'));
+    setInlinePlayerSource((sessionStorage.getItem(animeMode ? 'movix_anime_player_source' : 'movix_tv_player_source') as InlineSource | null) ?? 'anicloud');
   }, [animeMode]);
 
   useEffect(() => {
@@ -4181,9 +4186,27 @@ const TVDetails: React.FC = () => {
 
   // Reset webflix states on episode/season/lang change
   useEffect(() => {
+    setWebflixSeriesStreamUrl(null);
     setWebflixSeriesLoading(false);
     setWebflixSeriesError(null);
+    setWebflixAltTried(false);
   }, [selectedSeason, selectedEpisode, inlineLang, inlinePlayerSource]);
+
+  // Webflix — construit l'URL CDN drinkoflix.lol depuis le titre TMDB
+  useEffect(() => {
+    if (!showInlinePlayer || inlinePlayerSource !== 'webflix' || !id || !selectedSeason || !selectedEpisode) {
+      setWebflixSeriesStreamUrl(null);
+      setWebflixSeriesError(null);
+      return;
+    }
+    const title = tvShow?.name;
+    if (!title) { setWebflixSeriesError('Titre introuvable'); return; }
+    setWebflixSeriesLoading(false);
+    setWebflixSeriesError(null);
+    setWebflixAltTried(false);
+    const cdnUrl = buildDrinkoflixSeriesCdnUrl(title, selectedSeason, selectedEpisode, inlineLang);
+    setWebflixSeriesStreamUrl(`${MAIN_API}/proxy/${encodeURIComponent(cdnUrl)}`);
+  }, [showInlinePlayer, inlinePlayerSource, id, selectedSeason, selectedEpisode, inlineLang, tvShow?.name, MAIN_API]);
 
   // Pré-fetch Nakios depuis URL params dès le montage, sans attendre selectedSeason/selectedEpisode
   useEffect(() => {
@@ -4282,7 +4305,14 @@ const TVDetails: React.FC = () => {
     let cancelled = false;
     setFranimeLoading(true);
     setFranimeError(null);
-    axios.get(`${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(tvShow.name)}`)
+    const tryLookup = (q: string) =>
+      axios.get(`${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(q)}`);
+    tryLookup(tvShow.name)
+      .catch(() => {
+        const en = tmdbEnglishName;
+        if (en && en !== tvShow.name) return tryLookup(en);
+        return Promise.reject(new Error('not found'));
+      })
       .then(res => {
         if (cancelled) return;
         const data = res.data as {slug: string; animeId: string; langs: string[]};
@@ -4314,26 +4344,10 @@ const TVDetails: React.FC = () => {
   const getInlinePlayerUrl = () => {
     const s = selectedSeason ?? 1;
     const e = selectedEpisode ?? 1;
-    const title = tvShow?.name || '';
     switch (inlinePlayerSource) {
-      case 'webflix':
-        return title ? `${MAIN_API}/proxy/${encodeURIComponent(buildFastfluxSeriesCdnUrl(title, s, e, inlineLang))}` : '';
-      case 'frembed':    return `https://frembed.click/api/serie.php?id=${id}&sa=${s}&epi=${e}`;
-      case 'peachify':   return `https://peachify.top/embed/tv/${id}?season=${s}&episode=${e}&sub=French&accent=dc2626`;
-      case 'vidsrc':     return `https://vidsrc.to/embed/tv/${id}/${s}/${e}`;
-      case 'vidsrc_su':  return `https://vidsrc.su/embed/tv/${id}/${s}/${e}`;
-      case 'vidsrc_io':  return `https://vidsrc.io/embed/tv?tmdb=${id}&season=${s}&episode=${e}`;
-      case 'vidsrcwtf1': return `https://vidsrc.wtf/api/1/tv/?id=${id}&s=${s}&e=${e}`;
-      case 'vidsrcwtf3': return `https://vidsrc.wtf/api/3/tv/?id=${id}&s=${s}&e=${e}`;
-      case 'vidsrcwtf5': return `https://vidsrc.wtf/api/5/tv/?id=${id}&s=${s}&e=${e}`;
-      case 'vidlink':    return `https://vidlink.pro/tv/${id}?s=${s}&e=${e}&primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
-      case 'videasy':    return `https://player.videasy.net/tv/${id}/${s}/${e}?autoplay=1`;
-      case 'embed2':     return `https://www.2embed.skin/embedtv/${id}&s=${s}&e=${e}`;
-      case 'autoembed':  return `https://autoembed.co/tv/tmdb/${id}-${s}-${e}`;
-      case 'multiembed': return `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`;
-      case 'vidsrc_nl':  return `https://vidsrc.nl/embed/tv/${id}?s=${s}&e=${e}`;
-      case 'vidmoly':    return vidmolyEmbedUrl || '';
-      default:           return `https://frembed.click/api/serie.php?id=${id}&sa=${s}&epi=${e}`;
+      case 'vidlink':  return `https://vidlink.pro/tv/${id}?s=${s}&e=${e}&primaryColor=0278fd&secondaryColor=a2a2a2&iconColor=eefdec&icons=default&player=default&title=true&poster=true&autoplay=true&nextbutton=false`;
+      case 'videasy':  return `https://player.videasy.net/tv/${id}/${s}/${e}?autoplay=1`;
+      default:         return '';
     }
   };
 
@@ -4995,18 +5009,7 @@ const TVDetails: React.FC = () => {
         }
         .src-btn:hover { background: rgba(255,255,255,0.07); }
       `}} />
-      {/* Page backdrop — own compositing layer (position:fixed) instead of
-          backgroundAttachment:fixed, which forces full-page re-rasterization
-          on every scroll frame and tanks FPS on heavy details pages. */}
-      <div
-        aria-hidden="true"
-        className="fixed inset-0 z-0 pointer-events-none bg-black"
-        style={backdropImage ? {
-          backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url(${backdropImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        } : undefined}
-      />
+      <div aria-hidden="true" className="fixed inset-0 z-0 pointer-events-none" style={{ background: '#080808' }} />
       <div className="relative z-10 min-h-screen overflow-x-hidden">
         <style>{`
         /* Netflix-style poster hover effects - COPIED FROM MovieDetails.tsx */
@@ -5101,11 +5104,8 @@ const TVDetails: React.FC = () => {
           font-size: 1.5rem;
           font-weight: 700;
           position: relative;
-          background: linear-gradient(90deg, #ffffff, #e2e2e2);
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
-          text-shadow: 0px 2px 4px rgba(0, 0, 0, 0.3);
+          color: #ffffff;
+          text-shadow: 0 2px 16px rgba(22,101,52,0.55), 0 1px 4px rgba(0,0,0,0.7);
           letter-spacing: 0.5px;
           padding-bottom: 0.5rem;
           text-transform: uppercase;
@@ -5114,39 +5114,72 @@ const TVDetails: React.FC = () => {
           transition: all 0.3s ease;
         }
         .section-title:hover {
-          background: linear-gradient(90deg, #4ade80, #a855f7);
-          -webkit-background-clip: text;
-          background-clip: text;
+          text-shadow: 0 2px 24px rgba(74,222,128,0.5), 0 1px 4px rgba(0,0,0,0.7);
           transform: translateY(-2px);
-          text-shadow: 0px 4px 8px rgba(168, 85, 247, 0.4);
         }
         .section-title::after {
           content: '';
           position: absolute;
-          left: 0;
+          left: 50%;
+          transform: translateX(-50%);
           bottom: 0;
-          width: 40px;
-          height: 3px;
-          background: linear-gradient(90deg, #4ade80 0%, #a855f7 100%);
+          width: 60px;
+          height: 2px;
+          background: linear-gradient(90deg, transparent, #166534, #4ade80, #166534, transparent);
           border-radius: 3px;
-          animation: expandWidth 0.6s ease-out forwards 0.3s;
-          transform-origin: left;
-          transition: all 0.3s ease;
-        }
-        .section-title:hover::after {
-          width: 100%;
-          background: linear-gradient(90deg, #4ade80, #a855f7);
         }
         @keyframes fadeInTitle {
           0% { opacity: 0; transform: translateY(10px); }
           100% { opacity: 1; transform: translateY(0); }
         }
-        @keyframes expandWidth {
-          0% { width: 0; }
-          100% { width: 40px; }
+        .movie-hero-badge {
+          display: inline-flex; align-items: center; padding: 4px 16px;
+          border-radius: 9999px; font-size: 0.75rem; font-weight: 600;
+          letter-spacing: 0.08em; text-transform: uppercase;
+          background: rgba(22,101,52,0.25); color: #4ade80;
+          border: 1px solid rgba(74,222,128,0.4);
+          box-shadow: 0 0 12px rgba(74,222,128,0.25), inset 0 0 8px rgba(74,222,128,0.05);
         }
-        
-        /* Styles pour no-scroll (copié de MovieDetails) */
+        .movie-hero-badge-upcoming {
+          display: inline-flex; align-items: center; padding: 4px 16px;
+          border-radius: 9999px; font-size: 0.75rem; font-weight: 600;
+          letter-spacing: 0.08em; text-transform: uppercase;
+          background: rgba(113,63,18,0.3); color: #fbbf24;
+          border: 1px solid rgba(251,191,36,0.35);
+          box-shadow: 0 0 10px rgba(251,191,36,0.15);
+        }
+        .movie-player-block {
+          border-radius: 14px;
+          border: 1px solid rgba(22,101,52,0.35);
+          box-shadow: 0 0 40px rgba(22,101,52,0.18), 0 0 80px rgba(22,101,52,0.08), inset 0 0 60px rgba(22,101,52,0.04);
+          overflow: hidden;
+        }
+        .genre-badge {
+          display: inline-flex; align-items: center; gap: 4px;
+          padding: 4px 12px; border-radius: 6px; font-size: 0.8125rem;
+          color: #4ade80; background: rgba(22,101,52,0.2);
+          border: 1px solid rgba(22,101,52,0.35); transition: background 0.15s, border-color 0.15s;
+        }
+        .genre-badge:hover { background: rgba(22,101,52,0.35); border-color: rgba(74,222,128,0.4); }
+        .rec-card {
+          position: relative; border-radius: 10px; overflow: hidden; aspect-ratio: 2/3;
+          cursor: pointer; border: 1px solid transparent; transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .rec-card:hover { border-color: rgba(74,222,128,0.35); box-shadow: 0 0 16px rgba(74,222,128,0.15); }
+        .rec-card-overlay {
+          position: absolute; inset: 0; background: rgba(5,46,22,0);
+          display: flex; align-items: center; justify-content: center; transition: background 0.2s;
+        }
+        .rec-card:hover .rec-card-overlay { background: rgba(5,46,22,0.55); }
+        .rec-card-play {
+          opacity: 0; transform: scale(0.8); transition: opacity 0.2s, transform 0.2s;
+          width: 44px; height: 44px; border-radius: 9999px;
+          background: linear-gradient(135deg, #166534, #4a1d96);
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 0 20px rgba(74,222,128,0.4);
+        }
+        .rec-card:hover .rec-card-play { opacity: 1; transform: scale(1); }
+        /* Styles pour no-scroll */
         .no-scroll {
           overflow: hidden !important; /* Cache TOUT overflow, pas seulement horizontal */
           pointer-events: none !important; /* Désactive TOUS les événements de souris sur le conteneur */
@@ -5167,41 +5200,65 @@ const TVDetails: React.FC = () => {
         transition={{ duration: 0.5 }}
         className="text-white px-4 md:px-8 lg:px-16 py-6"
       >
-        {/* Header avec titre et année */}
+        {/* Hero — titre centré + métadonnées + badge */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="mb-8"
+          className="mb-10 flex flex-col items-center text-center gap-4"
         >
           <h1 className="section-title text-4xl md:text-5xl font-bold">
-            {tvShow.name} {tvShow.first_air_date && !isNaN(new Date(tvShow.first_air_date).getTime()) ? (
-              <>({new Date(tvShow.first_air_date).getFullYear()}){' '}
-                {new Date(tvShow.first_air_date) > new Date() ? (
-                  <span className="ml-2 text-sm font-medium bg-yellow-600 text-white px-2 py-1 rounded-md">{t('details.upcomingBadge')}</span>
-                ) : (
-                  <span className="ml-2 text-sm font-medium bg-green-600 text-white px-2 py-1 rounded-md">{t('details.releasedBadge')}</span>
-                )}
-              </>
-            ) : (
-              <span className="ml-2 text-sm font-medium bg-yellow-600 text-white px-2 py-1 rounded-md">{t('details.notReleasedBadge')}</span>
-            )}
+            {tvShow.name}
           </h1>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {tvShow.first_air_date && !isNaN(new Date(tvShow.first_air_date).getTime()) && (
+              <span className="flex items-center gap-1.5 text-white/60 text-sm">
+                <span>📅</span>
+                <span>{new Date(tvShow.first_air_date).getFullYear()}</span>
+              </span>
+            )}
+            {(certifications['FR'] || certifications['US']) && (
+              <span className="px-2 py-0.5 rounded text-xs font-bold bg-gradient-to-r from-green-400 to-purple-500 text-white">
+                {getClassificationLabel(certifications['FR'] || certifications['US'], t)}
+              </span>
+            )}
+            {tvShow.vote_average > 0 && (
+              <span className="flex items-center gap-1 text-white/60 text-sm">
+                <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
+                <span className="font-bold text-white/80">{tvShow.vote_average.toFixed(1)}</span>
+                <span className="text-xs">/10</span>
+              </span>
+            )}
+            {tvShow.number_of_seasons && (
+              <span className="flex items-center gap-1.5 text-white/60 text-sm">
+                <span>🎬</span>
+                <span>{tvShow.number_of_seasons} {tvShow.number_of_seasons > 1 ? 'saisons' : 'saison'}</span>
+              </span>
+            )}
+            {tvShow.first_air_date && !isNaN(new Date(tvShow.first_air_date).getTime()) ? (
+              new Date(tvShow.first_air_date) > new Date()
+                ? <span className="movie-hero-badge-upcoming">{t('details.upcomingBadge')}</span>
+                : <span className="movie-hero-badge">{t('details.releasedBadge')}</span>
+            ) : (
+              <span className="movie-hero-badge-upcoming">{t('details.notReleasedBadge')}</span>
+            )}
+          </div>
         </motion.div>
-        {/* Contenu principal - poster à gauche, infos à droite */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {false && (<><div className="rounded-2xl border border-white/5 p-6"><div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Colonne gauche - Poster */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
+            className="rounded-xl overflow-hidden"
+            style={{ background: 'linear-gradient(to bottom, #052e16, #3b0764)' }}
           >
             <motion.img
               whileHover={{ scale: 1.03 }}
               transition={{ type: "spring", stiffness: 300, damping: 10 }}
               src={tvShow.poster_path ? `https://image.tmdb.org/t/p/original${tvShow.poster_path}` : DEFAULT_IMAGE}
               alt={tvShow.name}
-              className="w-full rounded-lg shadow-lg"
+              className="w-full rounded-xl shadow-lg"
             />
             {/* Boutons d'action en-dessous du poster */}
             <WatchButtons />
@@ -5382,24 +5439,6 @@ const TVDetails: React.FC = () => {
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.1 }}
                   >
-                    {/* TMDB Info Box */}
-                    <div className="mb-6 p-4 border border-white/20 bg-red-500/10 rounded-lg flex gap-3 items-start">
-                      <AlertTriangle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm text-gray-300">
-                        <p>
-                          {t('details.tmdbInfoNote')}{' '}
-                          <a
-                            href={`https://www.themoviedb.org/tv/${id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-green-400 hover:text-red-300 underline"
-                          >
-                            TMDB
-                          </a>
-                          . {t('details.tmdbInfoDiffNote')}
-                        </p>
-                      </div>
-                    </div>
 
                     <h2 className="text-xl font-bold mb-2">{t('details.synopsisTitle')}</h2>
                     <p className="text-gray-300">
@@ -5447,9 +5486,9 @@ const TVDetails: React.FC = () => {
                           >
                             <Link
                               to={`/genre/tv/${genre.id}`}
-                              className="flex items-center gap-1 px-3 py-2 bg-gray-800 rounded-lg text-sm hover:bg-gray-700 transition-colors inline-block border border-gray-700 hover:border-gray-600"
+                              className="genre-badge"
                             >
-                              <span className="w-2 h-2 rounded-full bg-gradient-to-r from-green-400 to-purple-500"></span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] opacity-70 flex-shrink-0"></span>
                               {genre.name}
                             </Link>
                           </motion.div>
@@ -7189,6 +7228,7 @@ const TVDetails: React.FC = () => {
             </AnimatePresence>
           </motion.div>
         </div>
+        </div></>)}
       </motion.div>
 
       {/* Modal pour les vidéos */}
@@ -7379,43 +7419,7 @@ const TVDetails: React.FC = () => {
                 </button>
               </div>
             )}
-            {(inlinePlayerSource === 'nakios' || inlinePlayerSource === 'purstream') ? (() => {
-              const loading   = inlinePlayerSource === 'nakios' ? nakiosStreamLoading : purstreamStreamLoading;
-              const streamUrl = inlinePlayerSource === 'nakios' ? nakiosStreamUrl    : purstreamStreamUrl;
-              const label     = inlinePlayerSource === 'nakios' ? 'Épisode indisponible sur Nakios' : 'Flux Purstream indisponible';
-              if (inlinePlayerSource === 'purstream' && !loading && !streamUrl && purstreamEmbedId && selectedSeason && selectedEpisode) {
-                const embedUrl = `https://purstream.ch/watch/${btoa(JSON.stringify({ type: 'tv', id: purstreamEmbedId, season: selectedSeason, episode: selectedEpisode }))}`;
-                return <iframe key={embedUrl} src={embedUrl} className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]" allowFullScreen allow="autoplay; fullscreen; encrypted-media" style={{ border: 'none', display: 'block' }} title="Purstream" />;
-              }
-              return loading ? (
-                <div className="w-full h-[360px] flex items-center justify-center bg-black">
-                  <svg className="animate-spin h-10 w-10 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                  </svg>
-                </div>
-              ) : streamUrl ? (
-                <HLSPlayer
-                  key={`${inlinePlayerSource}-${streamUrl}`}
-                  src={streamUrl}
-                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                  autoPlay={true}
-                  controls={true}
-                  poster={tvShow?.backdrop_path ? `https://image.tmdb.org/t/p/w1280${tvShow.backdrop_path}` : undefined}
-                  onPlayerTimeUpdate={(t) => {
-                    tvPlayerCurrentTimeRef.current = t;
-                    setTvShowSkipIntro(t >= 90 && t <= 150);
-                  }}
-                />
-              ) : (
-                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                  <span>{label}</span>
-                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white">
-                    Essayer Frembed
-                  </button>
-                </div>
-              );
-            })() : inlinePlayerSource === 'animesama' ? (() => {
+            {inlinePlayerSource === 'animesama' ? (() => {
               if (animeSamaDirectLoading) return (
                 <div className="w-full h-[360px] flex items-center justify-center bg-black">
                   <svg className="animate-spin h-10 w-10 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -7427,8 +7431,8 @@ const TVDetails: React.FC = () => {
               if (animeSamaDirectError || !animeSamaDirectPlayers.length) return (
                 <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
                   <span className="text-sm">{animeSamaDirectError ?? 'Épisode indisponible sur Anime-Sama'}</span>
-                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
-                    Essayer Frembed
+                  <button onClick={() => setInlinePlayerSource('vidlink')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                    Essayer VidLink
                   </button>
                 </div>
               );
@@ -7455,8 +7459,8 @@ const TVDetails: React.FC = () => {
               if (anicloudError) return (
                 <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
                   <span className="text-sm">{anicloudError}</span>
-                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
-                    Essayer Frembed
+                  <button onClick={() => setInlinePlayerSource('vidlink')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                    Essayer VidLink
                   </button>
                 </div>
               );
@@ -7488,8 +7492,8 @@ const TVDetails: React.FC = () => {
               if (franimeError || !franimeLookup) return (
                 <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
                   <span className="text-sm">{franimeError ?? 'Anime non trouvé sur FRAnime'}</span>
-                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
-                    Essayer Frembed
+                  <button onClick={() => setInlinePlayerSource('vidlink')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
+                    Essayer VidLink
                   </button>
                 </div>
               );
@@ -7507,146 +7511,7 @@ const TVDetails: React.FC = () => {
                   />
                 </div>
               );
-            })() : inlinePlayerSource === 'wavewatch' ? (() => {
-              if (wavewatchLoading) return (
-                <div className="w-full h-[360px] flex items-center justify-center bg-black">
-                  <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                  </svg>
-                </div>
-              );
-              if (wavewatchError || !wavewatchIframeSrc) return (
-                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                  <span className="text-sm">{wavewatchError ?? 'Épisode non disponible sur Wavewatch'}</span>
-                  <button onClick={() => setInlinePlayerSource('frembed')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
-                    Essayer Frembed
-                  </button>
-                </div>
-              );
-              return (
-                <iframe
-                  key={`wavewatch-${id}-${selectedSeason}-${selectedEpisode}`}
-                  src={wavewatchIframeSrc}
-                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                  allowFullScreen
-                  allow="autoplay; fullscreen; encrypted-media"
-                  style={{ border: 'none', display: 'block' }}
-                  title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
-                />
-              );
-            })() : inlinePlayerSource === 'webflix' ? (() => {
-              const wfTitle = tvShow?.name || '';
-              if (!wfTitle) return null;
-              const wfS = selectedSeason ?? 1;
-              const wfE = selectedEpisode ?? 1;
-              const wfSrc = `${MAIN_API}/proxy/${encodeURIComponent(buildFastfluxSeriesCdnUrl(wfTitle, wfS, wfE, inlineLang))}`;
-              if (webflixSeriesError) return (
-                <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
-                  <span className="text-sm">{webflixSeriesError}</span>
-                  <button onClick={() => setInlinePlayerSource('nakios')} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm text-white transition-all">
-                    Essayer Nakios
-                  </button>
-                </div>
-              );
-              return (
-                <div className="relative w-full bg-black">
-                  {webflixSeriesLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black z-10">
-                      <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                    </div>
-                  )}
-                  <video
-                    key={`webflix-${selectedSeason}-${selectedEpisode}-${inlineLang}`}
-                    src={wfSrc}
-                    className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                    controls
-                    autoPlay
-                    title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
-                    style={{ display: 'block', background: '#000' }}
-                    onLoadStart={() => setWebflixSeriesLoading(true)}
-                    onCanPlay={() => setWebflixSeriesLoading(false)}
-                    onError={() => {
-                      setWebflixSeriesLoading(false);
-                      setWebflixSeriesError('Série non disponible sur Webflix');
-                    }}
-                  />
-                </div>
-              );
-            })() : (() => {
-              const src = getInlinePlayerUrl();
-              return src ? (
-                <iframe
-                  key={`${inlinePlayerSource}-${selectedSeason}-${selectedEpisode}`}
-                  src={src}
-                  className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px]"
-                  width="100%"
-                  height="100%"
-                  frameBorder={0}
-                  allowFullScreen
-                  allow="autoplay; fullscreen; encrypted-media"
-                  style={{ border: 'none', display: 'block' }}
-                  title={`${tvShow?.name} S${selectedSeason}E${selectedEpisode}`}
-                />
-              ) : null;
-            })()}
-            {/* Source — Purstream */}
-            {inlinePlayerSource === 'purstream' && !purstreamStreamLoading && purstreamSources.length > 1 && (() => {
-              const glassStyle = {
-                background: 'rgba(255,255,255,0.03)',
-                backdropFilter: 'blur(20px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                borderColor: 'rgba(255,255,255,0.08)',
-              };
-              const btnOn  = { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' } as const;
-              const btnOff = { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' } as const;
-              return (
-                <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
-                  <div className="flex gap-1.5 flex-wrap items-center">
-                    <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
-                    {purstreamSources.map((src, idx) => (
-                      <button key={idx}
-                        onClick={() => { setPurstreamSourceIdx(idx); setPurstreamStreamUrl(src.url); }}
-                        className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
-                        style={purstreamSourceIdx === idx ? btnOn : btnOff}>
-                        <Play className="w-3 h-3" />
-                        {src.name || `Source ${idx + 1}`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-            {/* Source — Nakios */}
-            {inlinePlayerSource === 'nakios' && !nakiosStreamLoading && nakiosSources.length > 1 && (() => {
-              const glassStyle = {
-                background: 'rgba(255,255,255,0.03)',
-                backdropFilter: 'blur(20px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                borderColor: 'rgba(255,255,255,0.08)',
-              };
-              const btnOn  = { background: 'linear-gradient(135deg, #22c55e 0%, #7c3aed 100%)', color: '#fff', borderRadius: '10px', border: 'none' } as const;
-              const btnOff = { background: 'rgba(255,255,255,0.03)', color: '#d1d5db', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' } as const;
-              return (
-                <div className="border-t px-3 py-2.5 flex-shrink-0" style={glassStyle}>
-                  <div className="flex gap-1.5 flex-wrap items-center">
-                    <span className="text-xs font-medium flex-shrink-0 self-center mr-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Source :</span>
-                    {nakiosSources.map((src, idx) => (
-                      <button key={idx}
-                        onClick={() => { setNakiosSourceIdx(idx); setNakiosStreamUrl(src.url); }}
-                        className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium transition-all duration-200 flex items-center gap-1"
-                        style={nakiosSourceIdx === idx ? btnOn : btnOff}>
-                        <Play className="w-3 h-3" />
-                        {src.name || `Source ${idx + 1}`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+            })() : null}
             {/* Langue + Lecteurs — Anime-Sama direct */}
             {inlinePlayerSource === 'animesama' && !animeSamaDirectLoading && animeSamaDirectPlayers.length > 0 && (() => {
               const getHostLabel = (url: string, idx: number): string => {
@@ -7773,27 +7638,9 @@ const TVDetails: React.FC = () => {
             <div className="p-3 relative source-dropdown">
               {(() => {
                 const sources: { src: InlineSource; label: string }[] = [
-                  { src: 'wavewatch',  label: 'Wavewatch' },
-                  { src: 'webflix',    label: 'Webflix' },
-                  { src: 'nakios',     label: 'Nakios' },
-                  { src: 'purstream',  label: 'Purstream' },
-                  { src: 'anicloud',   label: 'AniCloud' },
-                  { src: 'animesama',  label: 'Anime-Sama' },
-                  { src: 'franime',    label: 'FRAnime' },
-                  { src: 'frembed',    label: 'Frembed' },
-                  { src: 'peachify',   label: 'Peachify' },
-                  { src: 'vidsrc',     label: 'VidSrc' },
-                  { src: 'vidsrc_su',  label: 'VidSrc.su' },
-                  { src: 'vidsrc_io',  label: 'VidSrc.io' },
-                  { src: 'vidsrcwtf1', label: 'VidSrc.wtf 1' },
-                  { src: 'vidsrcwtf3', label: 'VidSrc.wtf 3' },
-                  { src: 'vidsrcwtf5', label: 'VidSrc.wtf 5' },
-                  { src: 'vidlink',    label: 'VidLink' },
-                  { src: 'videasy',    label: 'Videasy' },
-                  { src: 'embed2',     label: '2Embed' },
-                  { src: 'autoembed',  label: 'AutoEmbed' },
-                  { src: 'multiembed', label: 'MultiEmbed' },
-                  { src: 'vidsrc_nl',  label: 'VidSrc.nl' },
+                  { src: 'anicloud',  label: 'AniCloud' },
+                  { src: 'animesama', label: 'Anime-Sama' },
+                  { src: 'franime',   label: 'FRAnime' },
                 ];
                 const activeLabel = sources.find(s => s.src === inlinePlayerSource)?.label ?? inlinePlayerSource;
                 return (
@@ -8121,66 +7968,42 @@ const TVDetails: React.FC = () => {
           </motion.div>
         );
       })()}
-      {/* Séries similaires — la section est rendue HORS du wrapper page
-          (qui ferme à la ligne ~6686), donc on doit appliquer le padding
-          gauche/droit ici directement pour s'aligner sur le reste du contenu. */}
-      <LazySection
-        index={0}
-        immediateLoadCount={0}
-        rootMargin="300px"
-        minHeight="320px"
-        className="px-4 md:px-8 lg:px-16 mt-20 mb-20"
-      >
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+      {/* Séries similaires */}
+      {recommendations.length > 0 && (
+        <LazySection
+          index={0}
+          immediateLoadCount={0}
+          rootMargin="300px"
+          minHeight="320px"
+          className="px-4 md:px-8 lg:px-16 mt-16 mb-20"
         >
-          {loadingSimilar ? (
-            <motion.div
-              className="flex items-center justify-center h-64 space-y-4 bg-black/50"
-              animate={{
-                backgroundColor: ["rgba(0,0,0,0.5)", "rgba(0,0,0,0.3)", "rgba(0,0,0,0.5)"]
-              }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              <motion.div
-                animate={{
-                  rotate: 360,
-                  transition: { duration: 1, repeat: Infinity, ease: "linear" }
-                }}
-              >
-                <Loader className="h-8 w-8" />
-              </motion.div>
-            </motion.div>
-          ) : recommendations.length > 0 ? (
-            <EmblaCarousel
-              title={<span><span className="text-green-400 mr-2">🔥</span>{t('details.similarSeries')}</span>}
-              items={recommendations.map(show => ({
-                id: Number(show.id),
-                title: show.name,
-                name: show.name,
-                poster_path: show.poster_path,
-                backdrop_path: show.backdrop_path || '',
-                overview: show.overview,
-                vote_average: show.vote_average,
-                first_air_date: show.first_air_date,
-                media_type: 'tv',
-              }))}
-              mediaType="tv-similar"
-            />
-          ) : (
-            <motion.p
-              className="text-center text-gray-400"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              {t('details.noSimilarSeriesAvailable')}
-            </motion.p>
-          )}
-        </motion.div>
-      </LazySection>
+          <div className="mb-4 flex items-center justify-center gap-2">
+            <span className="text-[#4ade80] text-xl">🔥</span>
+            <h3 className="text-xl font-bold text-white">{t('details.similarSeries')}</h3>
+          </div>
+          <div className="flex gap-3 justify-center">
+            {recommendations.slice(0, 4).map((rec) => (
+              <Link key={rec.id} to={`/tv/${encodeId(rec.id || '')}`} className="rec-card block flex-shrink-0" style={{ minWidth: 'calc(12.5% - 9px)', maxWidth: 'calc(12.5% - 9px)' }}>
+                <img
+                  src={rec.poster_path ? `https://image.tmdb.org/t/p/w342${rec.poster_path}` : DEFAULT_IMAGE}
+                  alt={rec.name}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+                <div className="rec-card-overlay">
+                  <div className="rec-card-play">
+                    <Play className="w-5 h-5 text-white ml-0.5" />
+                  </div>
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent">
+                  <p className="text-white text-xs font-medium line-clamp-1">{rec.name}</p>
+                  {rec.first_air_date && <p className="text-white/40 text-[10px]">{new Date(rec.first_air_date).getFullYear()}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </LazySection>
+      )}
 
 
       {showUpcomingModal && (
