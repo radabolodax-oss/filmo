@@ -17,11 +17,8 @@ import {
   Puzzle,
   Smartphone,
   Github,
-  Crown,
-  Unlock,
   HardDriveDownload,
   Globe,
-  Tv,
   Filter,
   ListOrdered,
   Palette,
@@ -44,11 +41,8 @@ import ExtensionPage from './ExtensionPage';
 import PremidPage from './PremidPage';
 import AppMobilePage from './AppMobilePage';
 import OpenSourcePage from './OpenSourcePage';
-import VipHelpPage from './VipHelpPage';
-import DebridHelpPage from './DebridHelpPage';
 import TelechargementPage from './TelechargementPage';
 import MiroirsPage from './MiroirsPage';
-import LiveTvHelpPage from './LiveTvHelpPage';
 import ExtractionPage from './ExtractionPage';
 import PrioriteSourcesPage from './PrioriteSourcesPage';
 import DernierLecteurPage from './DernierLecteurPage';
@@ -411,51 +405,6 @@ export const TUTO_REGISTRY: TutoMeta[] = [
     ],
   },
   {
-    slug: 'vip',
-    component: VipHelpPage,
-    titleKey: 'help.hub.cardVipTitle',
-    subKey: 'help.hub.cardVipSub',
-    icon: <Crown className="w-8 h-8" />,
-    accent: 'orange',
-    searchKeys: [
-      'help.vip.title',
-      'help.vip.heroSub',
-      'help.vip.introBody',
-      'help.vip.perksBody',
-      'help.vip.packsIntro',
-      'help.vip.paymentBody',
-      'help.vip.step1',
-      'help.vip.step2',
-      'help.vip.step3',
-      'help.vip.step4',
-      'help.vip.giftBody',
-      'help.vip.invoicesBody',
-      'help.vip.limitsBody',
-    ],
-  },
-  {
-    slug: 'debrid',
-    component: DebridHelpPage,
-    titleKey: 'help.hub.cardDebridTitle',
-    subKey: 'help.hub.cardDebridSub',
-    icon: <Unlock className="w-8 h-8" />,
-    accent: 'orange',
-    searchKeys: [
-      'help.debrid.title',
-      'help.debrid.heroSub',
-      'help.debrid.introBody',
-      'help.debrid.vipBody',
-      'help.debrid.supportedBody',
-      'help.debrid.providersBody',
-      'help.debrid.step1',
-      'help.debrid.step2',
-      'help.debrid.step3',
-      'help.debrid.step4',
-      'help.debrid.historyBody',
-      'help.debrid.limitsBody',
-    ],
-  },
-  {
     slug: 'telechargement',
     component: TelechargementPage,
     titleKey: 'help.hub.cardTelechargementTitle',
@@ -492,32 +441,6 @@ export const TUTO_REGISTRY: TutoMeta[] = [
       'help.miroirs.newDeviceBody',
       'help.miroirs.reliabilityBody',
       'help.miroirs.limitsBody',
-    ],
-  },
-  {
-    slug: 'live-tv',
-    component: LiveTvHelpPage,
-    titleKey: 'help.hub.cardLiveTvTitle',
-    subKey: 'help.hub.cardLiveTvSub',
-    icon: <Tv className="w-8 h-8" />,
-    accent: 'purple',
-    searchKeys: [
-      'help.liveTv.title',
-      'help.liveTv.heroSub',
-      'help.liveTv.introBody',
-      'help.liveTv.sourcesBody',
-      'help.liveTv.categoriesIntro',
-      'help.liveTv.catGeneralisteExample',
-      'help.liveTv.catCinemaExample',
-      'help.liveTv.catInfoExample',
-      'help.liveTv.catSportExample',
-      'help.liveTv.catEnfantsExample',
-      'help.liveTv.catMusiqueExample',
-      'help.liveTv.catDocuExample',
-      'help.liveTv.matchesBody',
-      'help.liveTv.favoritesBody',
-      'help.liveTv.extensionBody',
-      'help.liveTv.limitsBody',
     ],
   },
   {

@@ -21,7 +21,6 @@ import { isExtensionAvailable } from '../../utils/extensionProxy';
 import { RIVESTREAM_PROXIES } from '../../config/rivestreamProxy';
 import { buildProxyUrl } from '../../config/runtime';
 import { getTmdbLanguage } from '../../i18n';
-import { useProfile } from '../../context/ProfileContext';
 import { isContentAllowed, getClassificationLabel } from '../../utils/certificationUtils';
 import { getCoflixPreferredUrl } from '../../utils/coflix';
 import { isLikelyAnime, type TmdbKeywordsResponse } from '../../utils/animeSignals';
@@ -349,7 +348,8 @@ const WatchMovie: React.FC = () => {
 
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { currentProfile } = useProfile();
+  // Compte/profils supprimés — plus de restriction d'âge par profil (toujours 0).
+  const currentProfile: { ageRestriction: number } | null = null;
 
   const id = encodedId ? getTmdbId(encodedId) : null;
   const [isLoading, setIsLoading] = useState(true);

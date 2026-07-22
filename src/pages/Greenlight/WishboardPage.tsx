@@ -9,8 +9,6 @@ import WishboardDetailsModal, { WishboardRequest } from '../../components/Greenl
 import { Button } from '../../components/ui/button';
 import AnimatedBorderCard from '../../components/ui/animated-border-card';
 import ReusableModal from '../../components/ui/reusable-modal';
-import { googleAuth } from '../../services/googleAuth';
-import { discordAuth } from '../../services/discordAuth';
 
 import { WishboardStats } from '../../components/Greenlight/WishboardStats';
 import ShinyText from '../../components/ui/shiny-text';
@@ -94,14 +92,6 @@ const WishboardPage: React.FC = () => {
         pageData: { pageName: 'wishboard' },
         isActive: true,
     });
-
-    const handleLogin = () => {
-        discordAuth.login();
-    };
-
-    const handleGoogleLogin = () => {
-        googleAuth.login();
-    };
 
     useEffect(() => {
         const checkAuth = () => {
@@ -602,60 +592,6 @@ const WishboardPage: React.FC = () => {
                 </div>
             </ReusableModal>
 
-            <ReusableModal
-                isOpen={isLoginModalOpen}
-                onClose={() => setIsLoginModalOpen(false)}
-                title={t('greenlight.joinCommunity')}
-                className="max-w-md"
-            >
-                <div className="space-y-6">
-                    <div className="text-center">
-                        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-white/5 mb-4">
-                            <Popcorn className="h-8 w-8 text-white opacity-50" />
-                        </div>
-                        <p className="text-white/70 text-sm">
-                            {t('greenlight.loginPrompt')}
-                        </p>
-                    </div>
-
-                    <div className="space-y-3">
-                        <button
-                            onClick={handleLogin}
-                            className="relative flex items-center justify-center gap-3 w-full px-4 py-3.5 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-xl transition-all shadow-lg hover:shadow-xl font-medium overflow-hidden group"
-                        >
-                            <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform" />
-                            <img
-                                src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png"
-                                alt="Discord"
-                                className="w-5 h-5 object-contain bg-white rounded-full p-0.5 relative z-10"
-                            />
-                            <span className="relative z-10">{t('greenlight.continueDiscord')}</span>
-                        </button>
-
-                        <button
-                            onClick={handleGoogleLogin}
-                            className="relative flex items-center justify-center gap-3 w-full px-4 py-3.5 bg-white hover:bg-gray-100 text-gray-900 rounded-xl transition-all shadow-lg hover:shadow-xl font-medium overflow-hidden"
-                        >
-                            <img
-                                src="https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png"
-                                alt="Google"
-                                className="w-5 h-5 object-contain"
-                            />
-                            <span>{t('greenlight.continueGoogle')}</span>
-                        </button>
-
-                        <button
-                            onClick={() => window.location.href = '/login-bip39'}
-                            className="relative flex items-center justify-center gap-3 w-full px-4 py-3.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl transition-all font-medium"
-                        >
-                            <svg className="w-5 h-5 text-white/60" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" />
-                            </svg>
-                            <span>{t('greenlight.secretPhrase')}</span>
-                        </button>
-                    </div>
-                </div>
-            </ReusableModal>
         </div>
     );
 };

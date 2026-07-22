@@ -5,7 +5,6 @@ const path = require("path");
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
 const { getPool } = require("./mysqlPool");
-const { verifyAccessKey } = require("./checkVip");
 // Réutiliser l'instance Redis partagée au lieu d'en créer une nouvelle (évite les fuites mémoire)
 const { redis } = require("./config/redis");
 const { verifyTurnstileFromRequest } = require("./utils/turnstile");
@@ -487,32 +486,6 @@ async function _fetchUserData(userId, userType, profileId = null) {
       }
     } catch (err) {
       // Fichier utilisateur introuvable — on garde les valeurs par défaut
-    }
-
-    // Vérifier le statut VIP en lisant l'access_code depuis les données du profil
-    // puis en le vérifiant contre la table MySQL access_keys
-    if (safeProfileId && safeUserId) {
-      try {
-        const profileDataPath = path.join(
-          __dirname,
-          "data",
-          "users",
-          "profiles",
-          safeUserType,
-          safeUserId,
-          `${safeProfileId}.json`,
-        );
-        const profileData = JSON.parse(
-          await fs.readFile(profileDataPath, "utf8"),
-        );
-        const storedAccessCode = profileData.access_code || null;
-        if (storedAccessCode) {
-          const vipStatus = await verifyAccessKey(storedAccessCode);
-          userData.isVip = vipStatus.vip;
-        }
-      } catch (err) {
-        // Pas de données de profil ou pas d'access_code — isVip reste false
-      }
     }
 
     // Vérifier si Admin (en utilisant MySQL)

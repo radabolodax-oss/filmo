@@ -29,7 +29,6 @@ import {
 import { PinButton } from '../../components/ui/PinButton';
 import { useWrappedTracker } from '../../hooks/useWrappedTracker';
 import { getTmdbLanguage } from '../../i18n';
-import { useProfile } from '../../context/ProfileContext';
 import { isContentAllowed, getClassificationLabel } from '../../utils/certificationUtils';
 
 const MAIN_API = import.meta.env.VITE_MAIN_API;
@@ -217,7 +216,8 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
   const [episode, setEpisode] = useState(initialEpisode);
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { currentProfile } = useProfile();
+  // Compte/profils supprimés — plus de restriction d'âge par profil (toujours 0).
+  const currentProfile: { ageRestriction: number } | null = null;
   const playerRef = useRef<HTMLDivElement>(null);
   // Clé de l'épisode le plus récemment demandé (id-saison-episode). processVideoSources
   // est asynchrone (extraction Vidmoly/Sibnet/etc, plusieurs secondes) ; si l'utilisateur

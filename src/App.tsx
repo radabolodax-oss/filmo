@@ -7,14 +7,12 @@ import { TooltipProvider } from './components/ui/tooltip';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Home from './pages/Home';
-import { useTVMode } from './hooks/useTVMode';
+// import { useTVMode } from './hooks/useTVMode'; // Désactivé temporairement : navigation D-pad/télécommande suspendue
+import { useSpaceToPlayIframe } from './hooks/useSpaceToPlayIframe';
 import DnsBlockBanner from './components/DnsBlockBanner';
 import { AdFreePopupProvider } from './context/AdFreePopupContext';
 import { SearchProvider } from './context/SearchContext';
-import { AuthProvider } from './context/AuthContext';
 import { AdWarningProvider } from './context/AdWarningContext';
-import { VipModalProvider } from './context/VipModalContext';
-import { ProfileProvider, useProfile } from './context/ProfileContext';
 import { TurnstileProvider } from './context/TurnstileContext';
 import { LightModeProvider, useLightMode } from './context/LightModeContext';
 
@@ -22,22 +20,19 @@ import NotFound from './pages/NotFound';
 import 'video.js/dist/video-js.css';
 import './styles/videojs-custom.css';
 import axios from 'axios';
-import CreateAccount from './pages/CreateAccount';
-import LoginBip39 from './pages/LoginBip39';
 import { AlertService } from './services/alertService';
 import NotificationToast from './components/NotificationToast';
 import { NotificationData } from './types/alerts';
 import RedirectPopup from './components/RedirectPopup';
 import { TopProgressBar } from './components/TopProgressBar';
 import SmoothScroll from './components/SmoothScroll';
-import AprilFoolsAdminPage from './pages/AprilFoolsAdminPage';
-import ProfileSelection from './pages/ProfileSelection';
 import { ROUTES, type RouteEntry } from './routing/registry';
 import { DelayedSuspense } from './components/DelayedSuspense';
 import { RouteProgressBar } from './components/RouteProgressBar';
 import ScreenSaver from './components/ScreenSaver';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import { startVipVerification } from './utils/vipUtils';
+import { useAutoTabDetection } from './hooks/useAutoTabDetection';
 import { broadcastAuthChange, clearStoredAuthSession, getResolvedAccountContext } from './utils/accountAuth';
 import { isSyncableStorageKey, SYNC_OUTBOX_STORAGE_KEY } from './utils/syncStorage';
 import i18n, { detectInitialLanguage } from './i18n';
@@ -45,7 +40,6 @@ import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import IntroAnimation from './components/IntroAnimation';
 import { IntroProvider, useIntro } from './context/IntroContext';
-import { APRIL_FOOLS_ADMIN_PATH, isAprilFoolsAdminEnabled } from './utils/aprilFools';
 import {
   pushPriorityToExtension,
   subscribeToPriorityChanges,
@@ -449,28 +443,6 @@ const IOSHomeScreenHandler = () => {
   return null;
 };
 
-const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
-  const isDiscordAuth = localStorage.getItem('discord_auth') === 'true';
-  const isGoogleAuth = localStorage.getItem('google_auth') === 'true';
-  const isBip39Auth = localStorage.getItem('bip39_auth') === 'true';
-  const isVipUser = localStorage.getItem('is_vip') === 'true';
-
-  // Vérifier l'ancienne méthode d'authentification VIP (pour compatibilité)
-  let isVipAuth = false;
-  const authStr = localStorage.getItem('auth');
-  if (authStr) {
-    try {
-      const authObj = JSON.parse(authStr);
-      if (authObj.userProfile && authObj.userProfile.provider === 'access_code') {
-        isVipAuth = true;
-      }
-    } catch { }
-  }
-
-  const isAuthenticated = isDiscordAuth || isGoogleAuth || isBip39Auth || isVipAuth || isVipUser;
-  return isAuthenticated ? children : <Navigate to="/login" />;
-};
-
 // Cache module-level des composants Lazy par path. Sans ça, chaque appel à
 // renderRouteEntry (ROUTES.map à chaque render d'App) créerait une nouvelle
 // instance lazy() avec son propre cache de chunk → instabilité d'identité.
@@ -512,9 +484,6 @@ const renderRouteEntry = (entry: RouteEntry) => {
       fallback={entry.fallback ?? <RouteProgressBar />}
     />
   );
-  if (entry.guard === 'private') {
-    element = <PrivateRoute>{element}</PrivateRoute>;
-  }
   return <Route key={entry.path} path={entry.path} element={element} />;
 };
 
@@ -1456,198 +1425,22 @@ const PersistenceManager = () => {
 
 
 // Nudge popup when user still has the default profile
-const DefaultProfileNudge: React.FC = () => {
-  let currentProfile = null;
-  let profiles: any[] = [];
-  try {
-    const ctx = useProfile();
-    currentProfile = ctx.currentProfile;
-    profiles = ctx.profiles;
-  } catch {
-    // ProfileProvider might not be available
-  }
-  const navigate = useNavigate();
-  const { t } = useTranslation();
-  const [visible, setVisible] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-
-  // Show nudge when user still has the default name AND default avatar
-  const defaultNames = [t('nav.profile').toLowerCase(), 'profil', 'profile'];
-  const isDefault =
-    currentProfile &&
-    profiles.length === 1 &&
-    defaultNames.includes(currentProfile.name?.toLowerCase().trim()) &&
-    currentProfile.avatar === '/avatars/disney/disney_avatar_1.png';
-
-  useEffect(() => {
-    if (!isDefault || dismissed) { setVisible(false); return; }
-    // Don't show if already dismissed
-    if (sessionStorage.getItem('profile_nudge_dismissed')) { return; }
-    const timer = setTimeout(() => setVisible(true), 2500);
-    return () => clearTimeout(timer);
-  }, [isDefault, dismissed]);
-
-  const handleDismiss = () => {
-    setDismissed(true);
-    setVisible(false);
-    sessionStorage.setItem('profile_nudge_dismissed', 'true');
-  };
-
-  const handleCustomize = () => {
-    handleDismiss();
-    navigate('/profile');
-  };
-
-  return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ opacity: 0, y: 40, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 40, scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-          className="fixed bottom-6 right-4 sm:right-6 z-[10000] max-w-xs w-[calc(100vw-32px)] sm:w-80"
-        >
-          <div className="bg-gray-900/95 backdrop-blur-md border border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden">
-            <div className="p-4">
-              <div className="flex items-start gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-red-500/50 flex-shrink-0">
-                  <img
-                    src="/avatars/disney/disney_avatar_1.png"
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white">{t('profile.defaultProfileNudgeTitle')}</p>
-                  <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{t('profile.defaultProfileNudgeMessage')}</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={handleCustomize}
-                  className="flex-1 px-3 py-2 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors"
-                >
-                  {t('profile.defaultProfileNudgeCta')}
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={handleDismiss}
-                  className="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium rounded-lg transition-colors"
-                >
-                  {t('profile.defaultProfileNudgeDismiss')}
-                </motion.button>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
-
 // Profile Gate Component - checks if user needs to select a profile
-const ProfileGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentProfile, profiles, isLoading } = useProfile();
-  const location = useLocation();
-  const [loadingTimedOut, setLoadingTimedOut] = React.useState(false);
-
-  // Skip profile gate on BIP39 link flows
-  const isWatchRoute = false;
-  const isBip39LinkRoute = location.pathname.startsWith('/link-bip39');
-  const isOauthAuthorizeRoute = location.pathname.startsWith('/oauth/authorize');
-
-  // Check if user is authenticated
-  const isDiscordAuth = localStorage.getItem('discord_auth') === 'true';
-  const isGoogleAuth = localStorage.getItem('google_auth') === 'true';
-  const isBip39Auth = localStorage.getItem('bip39_auth') === 'true';
-  const isVipUser = localStorage.getItem('is_vip') === 'true';
-
-  // Vérifier l'ancienne méthode d'authentification VIP (pour compatibilité)
-  let isVipAuth = false;
-  const authStr = localStorage.getItem('auth');
-  if (authStr) {
-    try {
-      const authObj = JSON.parse(authStr);
-      if (authObj.userProfile && authObj.userProfile.provider === 'access_code') {
-        isVipAuth = true;
-      }
-    } catch { }
-  }
-
-  const isAuthenticated = isDiscordAuth || isGoogleAuth || isBip39Auth || isVipAuth || isVipUser;
-
-  // Timeout mechanism: if loading takes more than 5 seconds, continue without profiles
-  React.useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    if (isLoading || (profiles.length === 0 && isAuthenticated && !loadingTimedOut)) {
-      timeoutId = setTimeout(() => {
-        console.warn('ProfileGate: Loading timeout reached (5s), continuing without profile data');
-        setLoadingTimedOut(true);
-      }, 5000);
-    }
-
-    // Reset timeout state when loading completes successfully
-    if (!isLoading && profiles.length > 0) {
-      setLoadingTimedOut(false);
-    }
-
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [isLoading, profiles.length, isAuthenticated, loadingTimedOut]);
-
-  // Don't show profile gate for non-authenticated users, VIP users, watch routes, or BIP39 link flows
-  if (!isAuthenticated || isVipUser || isVipAuth || isWatchRoute || isBip39LinkRoute || isOauthAuthorizeRoute) {
-    if (isWatchRoute || isBip39LinkRoute || isOauthAuthorizeRoute) {
-      debugAppLog('ProfileGate: Skipping profile gate for route:', location.pathname);
-    }
-    return <>{children}</>;
-  }
-
-  // If loading timed out, continue without profile data
-  if (loadingTimedOut) {
-    debugAppLog('ProfileGate: Timeout reached, skipping profile gate');
-    return <>{children}</>;
-  }
-
-  // Show loading while profiles are being loaded or created
-  if (isLoading || (profiles.length === 0 && isAuthenticated)) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white/20 mx-auto mb-4"></div>
-          <p className="text-white">{i18n.t('profile.loadingProfiles')}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // If no profiles exist or no profile is selected, show profile selection
-  if (profiles.length === 0 || !currentProfile) {
-    return <ProfileSelection />;
-  }
-
-  // User has selected a profile, show the app
-  return <>{children}</>;
-};
+// Compte/profils supprimés — plus de gating à faire, juste un passthrough.
+const ProfileGate: React.FC<{ children: React.ReactNode }> = ({ children }) => <>{children}</>;
 
 const AppWithIntro: React.FC = () => {
   const location = useLocation();
   const [showRedirectPopup, setShowRedirectPopup] = useState(false);
   const { showIntro, completeIntro } = useIntro();
-  useTVMode();
+  // useTVMode(); // Désactivé temporairement : navigation D-pad/télécommande suspendue
+  useSpaceToPlayIframe();
+  useAutoTabDetection();
 
   // Détecter si on est sur une route /watch ou la page 404
   const isWatchRoute = location.pathname.startsWith('/watchparty/room/') ||
     location.pathname.startsWith('/ftv/watch/');
-  const isScreensaverDisabledRoute = isWatchRoute || location.pathname.startsWith('/live-tv');
+  const isScreensaverDisabledRoute = isWatchRoute;
 
   // Screensaver logic
   const [screensaverEnabled, setScreensaverEnabled] = useState(() => localStorage.getItem('screensaver_enabled') === 'true');
@@ -1679,7 +1472,6 @@ const AppWithIntro: React.FC = () => {
     currentPath.startsWith('/provider/');
   const isWrappedRoute = currentPath === '/wrapped' || currentPath.startsWith('/wrapped/');
   const shouldShowHeader = !isWatchRoute && !isWrappedRoute;
-  const isAprilFoolsAdminRouteEnabled = isAprilFoolsAdminEnabled(location.search);
   const isNoFooterPage = isWatchRoute;
   React.useEffect(() => {
     // Masquer le footer uniquement sur les routes lecteur
@@ -1794,25 +1586,13 @@ const AppWithIntro: React.FC = () => {
         !isWatchRoute && !isWrappedRoute ? 'pb-16 md:pb-0' : '',
       ].filter(Boolean).join(' ')}>
         <AlertNotificationManager />
-        <DefaultProfileNudge />
         <ProfileGate>
           <Routes>
             {/* Eager — landing page, kept in main bundle */}
             <Route path="/" element={<Home />} />
 
             {/* Routes spéciales avec props ou logique conditionnelle */}
-            <Route path="/login-bip39" element={<LoginBip39 />} />
-            <Route path="/create-account" element={<CreateAccount />} />
-{/* Prowler: removed - {/* Prowler: removed - <Route path="/link-bip39" element={<Lo */}
-            <Route path="/link-bip39/create" element={<CreateAccount mode="link" />} />
             <Route path="/terms" element={<Navigate to="/terms-of-service" replace />} />
-            <Route path="/profile-selection" element={<ProfileSelection />} />
-            <Route
-              path={APRIL_FOOLS_ADMIN_PATH}
-              element={isAprilFoolsAdminRouteEnabled
-                ? <AprilFoolsAdminPage />
-                : <Navigate to="/" replace />}
-            />
 
             {/* Toutes les autres routes — depuis le registry */}
             {ROUTES.map(renderRouteEntry)}
@@ -1918,23 +1698,17 @@ function App() {
       <AnimationMotionConfig>
       <SearchProvider>
         <AdFreePopupProvider>
-          <AuthProvider>
-            <AdWarningProvider>
-              <VipModalProvider>
-                <ProfileProvider>
-                  <TurnstileProvider>
-                    <IntroProvider>
-                      <IOSHomeScreenHandler />
-                      <AppWithIntro />
-                      <TopProgressBar />
-                      <Toaster position="bottom-right" richColors />
-                      <DnsBlockBanner />
-                    </IntroProvider>
-                  </TurnstileProvider>
-                </ProfileProvider>
-              </VipModalProvider>
-            </AdWarningProvider>
-          </AuthProvider>
+          <AdWarningProvider>
+            <TurnstileProvider>
+              <IntroProvider>
+                <IOSHomeScreenHandler />
+                <AppWithIntro />
+                <TopProgressBar />
+                <Toaster position="bottom-right" richColors />
+                <DnsBlockBanner />
+              </IntroProvider>
+            </TurnstileProvider>
+          </AdWarningProvider>
         </AdFreePopupProvider>
       </SearchProvider>
       </AnimationMotionConfig>

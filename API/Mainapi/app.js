@@ -260,20 +260,6 @@ app.use(jsonParseErrorHandler);
 
 app.use(express.urlencoded({ extended: true, limit: "5mb" })); // Reduced from 1000mb to prevent abuse
 
-// 8. Serve uploaded OAuth app icons (`public/oauth-icons/<filename>`).
-//    Le panel admin upload ici, OAuthAuthorizePage lit `/oauth-icons/<filename>`.
-const { ICON_DIR: OAUTH_ICON_DIR } = require('./utils/oauthClientsDb');
-app.use(
-  '/oauth-icons',
-  express.static(OAUTH_ICON_DIR, {
-    fallthrough: false,
-    maxAge: '7d',
-    setHeaders: (res) => {
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-    },
-  }),
-);
-
 // ==========================================================================
 // Configure route modules with dependencies from extracted utilities
 // ==========================================================================
@@ -442,13 +428,6 @@ francetvRouter.configure({
   saveToCache,
 });
 
-const {
-  router: vipDonationsRouter,
-  ensureVipDonationsTables
-} = require('./routes/vipDonations');
-const { router: vipPayblisRouter } = require('./routes/vipPayblis');
-const oauthRouter = require('./routes/oauth');
-
 // ==========================================================================
 // Mount all route modules
 // ==========================================================================
@@ -458,7 +437,6 @@ const sharedListsRouter = require("./sharedListsRoutes");
 app.use("/api/comments", require("./commentsRoutes"));
 app.use("/api/likes", require("./likesRoutes"));
 app.use("/api/shared-lists", sharedListsRouter);
-app.use("/api/livetv", require("./liveTvRoutes"));
 
 // New modular routes
 app.use('/api/cpasmal', cpasmalRouter);
@@ -468,21 +446,13 @@ app.use('/api', tmdbRouter);
 app.use('/', searchRouter);
 app.use('/api', downloadRouter);
 app.use('/api/fstream', require('./routes/fstream'));
+app.use('/api/vidzy', require('./routes/vidzy'));
 app.use('/api/wiflix', require('./routes/wiflix'));
+app.use('/api/j1f', require('./routes/j1f'));
 app.use('/api/frembed', require('./routes/frembed'));
 app.use('/api/vidmoly', require('./routes/vidmoly'));
 app.use('/api', require('./routes/sync'));
-app.use('/api/profiles', require('./routes/profiles'));
 app.use('/api/help', require('./routes/helpFeedback'));
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/oauth', oauthRouter);
-app.use('/api/admin/oauth-apps', require('./routes/adminOauthApps'));
-app.use('/api/sessions', require('./routes/sessions'));
-app.use('/api', require('./routes/debrid'));
-app.use('/proxy', require('./routes/proxy'));
-app.use('/api', require('./routes/admin'));
-app.use('/api', vipDonationsRouter);
-app.use('/api', vipPayblisRouter);
 app.use('/api/darkiworld', darkiworldRouter);
 app.use('/api/drama', voirdramaRouter);
 app.use('/api/ftv', francetvRouter);
@@ -491,7 +461,6 @@ purstreamRouter.configure({
   TMDB_API_KEY,
   TMDB_API_URL,
   PROXY_SERVER_URL: process.env.PROXY_SERVER_URL,
-  verifyAccessKey: require("./checkVip").verifyAccessKey,
   getFromCacheNoExpiration,
   saveToCache,
   shouldUpdateCache,
@@ -500,6 +469,25 @@ app.use("/api/purstream", purstreamRouter);
 
 const proxyRouter = require('./routes/proxyRouter');
 app.use('/proxy', proxyRouter);
+app.use('/proxy', require('./routes/proxy'));
+
+// Next.js construit parfois des URL d'assets comme localhost:25565/_next/...
+// quand l'iframe fexini tourne depuis ce domaine. On forward vers fexini.net.
+app.get(/^\/_next\//, (req, res) => {
+  const referer = req.headers.referer || '';
+  if (!referer.includes('/proxy/fexini')) return res.status(403).end();
+  axios.get(`https://fexini.net${req.path}`, { responseType: 'stream', timeout: 15000 })
+    .then(upstream => {
+      Object.entries(upstream.headers).forEach(([k, v]) => {
+        if (!['transfer-encoding', 'connection'].includes(k.toLowerCase())) {
+          try { res.setHeader(k, v); } catch (_) {}
+        }
+      });
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      upstream.data.pipe(res);
+    })
+    .catch(() => res.status(502).end());
+});
 
 const downloadLinksLeaderboardRouter = require('./routes/downloadLinksLeaderboard');
 app.use('/api/download-links', downloadLinksLeaderboardRouter);
@@ -532,9 +520,7 @@ const {
   SCHEMA_BOOTSTRAP_LOCK_NAME,
   withMysqlAdvisoryLock
 } = require('./mysqlPool');
-const { ensureAccountLinksStorage } = require('./utils/accountLinks');
 const { ensureCloneLinksStorage } = require('./utils/cloneLinks');
-const { ensureOAuthStorage } = require('./utils/oauthStorage');
 
 const appReady = (async () => {
   try {
@@ -545,42 +531,8 @@ const appReady = (async () => {
         `[Bootstrap] Worker ${process.pid} acquired MySQL schema lock`,
       );
 
-      // Créer la table user_sessions si elle n'existe pas
-      await pool.execute(`
-      CREATE TABLE IF NOT EXISTS user_sessions (
-        id VARCHAR(255) PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
-        user_type ENUM('oauth', 'bip39') NOT NULL,
-        user_agent TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX idx_user_sessions_user (user_id, user_type),
-        INDEX idx_user_sessions_accessed (accessed_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-      console.log("Table user_sessions initialized successfully");
-
-      await ensureAccountLinksStorage();
-      console.log("Table account_links initialized successfully");
-
       await ensureCloneLinksStorage();
       console.log("Table clone_links initialized successfully");
-
-    await ensureVipDonationsTables(pool);
-    console.log('VIP donations tables initialized successfully');
-
-    await ensureOAuthStorage(pool);
-    console.log('OAuth tables initialized successfully');
-
-      // OAuth client config (table oauth_clients + stats + grants VIP).
-      // ensureTables et migrateLegacyJsonIfNeeded sont protégés par le lock
-      // mais idempotents — sûr sur restart cluster. reloadCache hydrate
-      // le cache in-process de CE worker (chaque worker a le sien).
-      const oauthClientsDb = require('./utils/oauthClientsDb');
-      await oauthClientsDb.ensureTables();
-      await oauthClientsDb.migrateLegacyJsonIfNeeded();
-      await oauthClientsDb.reloadCache();
-      console.log('OAuth client tables initialized successfully');
 
       // Initialize Wishboard routes
       const { createWishboardRouter } = require("./wishboardRoutes");

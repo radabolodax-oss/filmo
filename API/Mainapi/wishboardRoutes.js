@@ -9,7 +9,6 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const fs = require('fs').promises;
 const path = require('path');
-const { verifyAccessKey } = require('./checkVip');
 const { searchTmdb } = require('./utils/tmdbCache');
 const { verifyTurnstileFromRequest } = require('./utils/turnstile');
 const { resolveAdminIdentity } = require('./utils/adminIdentity');
@@ -150,22 +149,6 @@ function createWishboardRouter(mysqlPool, redis) {
                 console.error('Error reading user file:', err.message);
             }
 
-            // Vérifier le statut VIP en lisant l'access_code depuis les données du profil
-            if (profileId && safeUserId) {
-                try {
-                    const safeProfileId = String(profileId).replace(/[^a-zA-Z0-9_\-]/g, '');
-                    const profileDataPath = path.join(__dirname, 'data', 'users', 'profiles', safeUserType, safeUserId, `${safeProfileId}.json`);
-                    const profileData = JSON.parse(await fs.readFile(profileDataPath, 'utf8'));
-                    const storedAccessCode = profileData.access_code || null;
-                    if (storedAccessCode) {
-                        const vipStatus = await verifyAccessKey(storedAccessCode);
-                        userData.isVip = vipStatus.vip;
-                    }
-                } catch (err) {
-                    // Pas de données de profil ou pas d'access_code — isVip reste false
-                }
-            }
-
             return userData;
         } catch (error) {
             console.error('Error getUserData:', error);
@@ -186,25 +169,7 @@ function createWishboardRouter(mysqlPool, redis) {
 
         const count = recentRequests[0].count;
 
-        // Vérifier le statut VIP en lisant l'access_code depuis les données du profil
-        let isVip = false;
-        if (profileId && userId) {
-            try {
-                const safeUserId = String(userId).replace(/[^a-zA-Z0-9_\-]/g, '');
-                const safeUserType = ['oauth', 'bip39'].includes(userType) ? userType : 'oauth';
-                const safeProfileId = String(profileId).replace(/[^a-zA-Z0-9_\-]/g, '');
-                const profileDataPath = path.join(__dirname, 'data', 'users', 'profiles', safeUserType, safeUserId, `${safeProfileId}.json`);
-                const profileData = JSON.parse(await fs.readFile(profileDataPath, 'utf8'));
-                const storedAccessCode = profileData.access_code || null;
-                if (storedAccessCode) {
-                    const vipStatus = await verifyAccessKey(storedAccessCode);
-                    isVip = vipStatus.vip;
-                }
-            } catch (err) {
-                // Pas de données de profil — isVip reste false
-            }
-        }
-
+        const isVip = false;
         const limit = isVip ? 3 : 1;
         const remaining = Math.max(0, limit - count);
 

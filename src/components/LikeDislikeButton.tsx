@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { useProfile } from '../context/ProfileContext';
 import { useTurnstile } from '../context/TurnstileContext';
 import Counter from './ui/counter';
 
@@ -24,7 +23,9 @@ const getPlacesForValue = (value: number): number[] => {
 };
 
 const LikeDislikeButton: React.FC<LikeDislikeButtonProps> = ({ contentType, contentId }) => {
-  const { currentProfile } = useProfile();
+  // Compte/profils supprimés — voter reste défini mais toujours désactivé
+  // plus bas (nécessitait déjà un authToken avant, qui n'existera plus jamais).
+  const currentProfile: { id: string } | null = null;
   const { isVerifying: verifying, resetToken: resetTurnstile, getValidToken } = useTurnstile();
   const [likes, setLikes] = useState(0);
   const [dislikes, setDislikes] = useState(0);

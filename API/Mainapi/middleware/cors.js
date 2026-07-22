@@ -4,7 +4,6 @@
  */
 
 const cors = require("cors");
-const { getOAuthAllowedCorsOrigins } = require('../utils/oauthClients');
 
 const STATIC_ALLOWED_DOMAINS = [
   'movix.tax',
@@ -33,10 +32,6 @@ function isAllowedStaticOrigin(origin) {
   }
 }
 
-function isAllowedOAuthOrigin(origin) {
-  return getOAuthAllowedCorsOrigins().includes(origin);
-}
-
 const corsMiddleware = cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -47,7 +42,7 @@ const corsMiddleware = cors({
       return callback(null, true);
     }
 
-    if (isAllowedStaticOrigin(origin) || isAllowedOAuthOrigin(origin)) {
+    if (isAllowedStaticOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));

@@ -10,10 +10,6 @@ import {
   Zap, RefreshCw, ChevronDown, ListOrdered, Gauge
 } from 'lucide-react';
 import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
-
-import { discordAuth } from '../services/discordAuth';
-import { googleAuth } from '../services/googleAuth';
 import {
   getExtractionPrefs,
   setExtractionPrefs,
@@ -21,15 +17,14 @@ import {
   subscribeToPrefsChanges,
   pushPrefsToExtension,
   M3U8_EXTRACTOR_KEYS,
-  LIVETV_SOURCE_KEYS,
   EXTRACTION_METHOD_KEYS,
   type ExtractionPrefs,
   type M3u8ExtractorKey,
-  type LiveTvSourceKey,
   type ExtractionMethod,
 } from '../utils/extractionPrefs';
 import { isExtensionAvailable, fetchFromExtension } from '../utils/extensionProxy';
 import { isUserVip } from '../utils/authUtils';
+import { isLowLatencyEnabled, setLowLatencyEnabled } from '../utils/lowLatencyPref';
 import { unsubscribeFromPush } from '../services/pushNotificationService';
 import { clearStoredAuthSession, getResolvedAccountContext, setPendingAuthLink } from '../utils/accountAuth';
 import {
@@ -501,11 +496,6 @@ const SettingsPage: React.FC = () => {
   // ─── VIP state ───────────────────────────────────────────────────────────
 
   const [vipStatus, setVipStatus] = useState<VipStatus>({ isVip: false, features: [] });
-  const [premiumKey, setPremiumKey] = useState('');
-  const [vipKeyError, setVipKeyError] = useState<string | null>(null);
-  const [isActivatingKey, setIsActivatingKey] = useState(false);
-  const [isVipKeyHovered, setIsVipKeyHovered] = useState(false);
-  const { checkAccessCode, error: authError, lastAttempt } = useAuth();
 
   // ─── Sessions state ──────────────────────────────────────────────────────
 
@@ -595,7 +585,6 @@ const SettingsPage: React.FC = () => {
   const [showResetExtractionsConfirm, setShowResetExtractionsConfirm] = useState(false);
   const [isClosingResetExtractionsConfirm, setIsClosingResetExtractionsConfirm] = useState(false);
   const [m3u8SectionExpanded, setM3u8SectionExpanded] = useState(false);
-  const [livetvSectionExpanded, setLivetvSectionExpanded] = useState(false);
   const extensionPresent = isExtensionAvailable();
 
   const visibleSections = React.useMemo(() => {
@@ -1066,6 +1055,15 @@ const SettingsPage: React.FC = () => {
     window.dispatchEvent(new CustomEvent('hero_visibility_changed'));
   };
 
+  // Streaming basse latence (LL-HLS) — opt-in, s'applique à la prochaine
+  // lecture (lu au montage du lecteur). Voir utils/lowLatencyPref.ts.
+  const [lowLatencyMovies, setLowLatencyMovies] = useState<boolean>(() => isLowLatencyEnabled('movies'));
+  const handleLowLatencyToggle = () => {
+    const next = !lowLatencyMovies;
+    setLowLatencyEnabled('movies', next);
+    setLowLatencyMovies(next);
+  };
+
   const handleRecommendationsToggle = () => {
     const newValue = !recommendationsDisabled;
     setRecommendationsDisabled(newValue);
@@ -1149,55 +1147,6 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleActivatePremiumKey = async () => {
-    if (!premiumKey.trim()) return;
-    if (lastAttempt) {
-      const elapsed = Date.now() - lastAttempt;
-      if (elapsed < 30000) {
-        const remaining = Math.ceil((30000 - elapsed) / 1000);
-        setVipKeyError(t('settings.waitBeforeRetry', { seconds: remaining }));
-        return;
-      }
-    }
-    setIsActivatingKey(true);
-    setVipKeyError(null);
-    try {
-      const discordAuth = localStorage.getItem('discord_auth') === 'true';
-      const googleAuth = localStorage.getItem('google_auth') === 'true';
-      const alreadyAuthenticated = discordAuth || googleAuth;
-      const success = await checkAccessCode(premiumKey.trim(), alreadyAuthenticated);
-      if (success) {
-        const accessCodeExpires = localStorage.getItem('access_code_expires');
-        let expiration = undefined;
-        if (accessCodeExpires && accessCodeExpires !== 'never') expiration = accessCodeExpires;
-        setVipStatus({ isVip: true, expiresAt: expiration, features: [t('settings.noAds')] });
-        setPremiumKey('');
-        setVipKeyError(null);
-        window.dispatchEvent(new Event('storage'));
-        window.dispatchEvent(new CustomEvent('authStateChanged'));
-      } else {
-        setVipKeyError(authError || t('vip.invalidKey'));
-      }
-    } catch {
-      setVipKeyError(t('vip.activationError'));
-    } finally {
-      setIsActivatingKey(false);
-    }
-  };
-
-  const handleRemovePremiumKey = () => {
-    localStorage.removeItem('is_vip');
-    localStorage.removeItem('access_code');
-    localStorage.removeItem('access_code_expires');
-    setVipStatus({ isVip: false, features: [] });
-    window.dispatchEvent(new Event('storage'));
-  };
-
-  const copyPremiumKey = () => {
-    const accessCode = localStorage.getItem('access_code');
-    if (accessCode) navigator.clipboard.writeText(accessCode);
-  };
-
   const getProviderLabel = (provider: LinkProvider) => {
     if (provider === 'discord') return 'Discord';
     if (provider === 'google') return 'Google';
@@ -1234,13 +1183,8 @@ const SettingsPage: React.FC = () => {
 
     try {
       if (linkModal.action === 'link') {
-        if (linkModal.provider === 'google') {
-          googleAuth.login({ mode: 'link', returnTo: '/settings#accounts' });
-          return;
-        }
-
-        if (linkModal.provider === 'discord') {
-          discordAuth.login({ mode: 'link', returnTo: '/settings#accounts' });
+        if (linkModal.provider === 'google' || linkModal.provider === 'discord') {
+          // Login/account-linking system removed — no-op.
           return;
         }
 
@@ -1309,13 +1253,6 @@ const SettingsPage: React.FC = () => {
     });
   }, [extractionPrefs, handleUpdateExtractionPrefs]);
 
-  const handleToggleLiveTvSource = useCallback((key: LiveTvSourceKey, value: boolean) => {
-    handleUpdateExtractionPrefs({
-      ...extractionPrefs,
-      livetv: { ...extractionPrefs.livetv, [key]: value },
-    });
-  }, [extractionPrefs, handleUpdateExtractionPrefs]);
-
   const handleSetExtractionMethod = useCallback((method: ExtractionMethod) => {
     if (extractionPrefs.method === method) return;
     handleUpdateExtractionPrefs({ ...extractionPrefs, method });
@@ -1325,12 +1262,6 @@ const SettingsPage: React.FC = () => {
     const next = { ...extractionPrefs.m3u8 };
     M3U8_EXTRACTOR_KEYS.forEach((k) => { next[k] = value; });
     handleUpdateExtractionPrefs({ ...extractionPrefs, m3u8: next });
-  }, [extractionPrefs, handleUpdateExtractionPrefs]);
-
-  const handleToggleAllLiveTv = useCallback((value: boolean) => {
-    const next = { ...extractionPrefs.livetv };
-    LIVETV_SOURCE_KEYS.forEach((k) => { next[k] = value; });
-    handleUpdateExtractionPrefs({ ...extractionPrefs, livetv: next });
   }, [extractionPrefs, handleUpdateExtractionPrefs]);
 
   // handleClearExtractionCache vit maintenant dans <ExtensionCacheStatsBlock />
@@ -2212,6 +2143,34 @@ const SettingsPage: React.FC = () => {
                 {renderToggle(heroHidden, handleHeroToggle)}
               </motion.div>
 
+              {/* Streaming basse latence (LL-HLS) — opt-in. */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.075 }}
+                className="p-4 bg-gray-800/30 rounded-xl border border-gray-700/40 mb-3"
+              >
+                <div className="flex items-center gap-2 mb-0.5">
+                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                  <h4 className="font-medium text-white text-sm">{t('settings.lowLatency')}</h4>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  {t('settings.lowLatencyDesc')}
+                </p>
+
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-amber-100/80 leading-relaxed">
+                    {t('settings.lowLatencyWarning')}
+                  </p>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between p-3 bg-gray-800/30 rounded-lg border border-gray-700/40">
+                  <span className="font-medium text-white text-xs">{t('settings.lowLatencyMovies')}</span>
+                  {renderToggle(lowLatencyMovies, handleLowLatencyToggle, 'green')}
+                </div>
+              </motion.div>
+
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2383,118 +2342,6 @@ const SettingsPage: React.FC = () => {
                     );
                   })}
                 </div>
-              </motion.div>
-            </section>
-
-            {/* ════════════════════════════════════════════════════════ */}
-            {/* SECTION: VIP                                            */}
-            {/* ════════════════════════════════════════════════════════ */}
-            <section id="vip" className="scroll-mt-24">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-yellow-600/20 to-amber-600/20 border border-yellow-500/20">
-                  <Crown className="w-5 h-5 text-yellow-400" />
-                </div>
-                <div>
-            <h2 className="text-xl font-semibold text-white">{t('vip.title')}</h2>
-                  <p className="text-sm text-gray-500">{t('settings.vipDesc')}</p>
-                </div>
-              </div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-gray-800/30 rounded-xl border border-gray-700/40 p-6"
-              >
-                {!vipStatus.isVip ? (
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3 p-4 bg-yellow-500/5 rounded-xl border border-yellow-500/10">
-                      <Key className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <h4 className="text-sm font-medium text-yellow-300">{t('settings.activateVipKey')}</h4>
-                        <p className="text-xs text-gray-400 mt-1">{t('settings.activateVipKeyDesc')}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col md:flex-row gap-3">
-                      <input
-                        className="flex h-11 w-full rounded-lg pr-3 pl-4 py-2 text-sm bg-gray-900/60 border border-gray-700/50 focus:border-yellow-500/50 focus:bg-gray-900/80 text-white placeholder:text-gray-600 outline-none transition-colors"
-                        placeholder={t('settings.enterVipKey')}
-                        value={premiumKey}
-                        onChange={(e) => setPremiumKey(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleActivatePremiumKey()}
-                      />
-                      <button
-                        className={`flex items-center justify-center font-medium h-11 text-sm px-6 rounded-lg bg-yellow-500 text-black hover:bg-yellow-400 transition-colors whitespace-nowrap flex-shrink-0 ${!premiumKey.trim() || isActivatingKey ? 'opacity-30 pointer-events-none' : ''
-                          }`}
-                        onClick={handleActivatePremiumKey}
-                        disabled={!premiumKey.trim() || isActivatingKey}
-                      >
-                        {isActivatingKey ? t('settings.activating') : t('settings.activate')}
-                      </button>
-                    </div>
-                    {vipKeyError && (
-                      <motion.p
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="text-green-400 text-xs bg-red-500/10 p-3 rounded-lg border border-white/20"
-                      >
-                        {vipKeyError}
-                      </motion.p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3 p-4 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
-                      <Crown className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-                      <div>
-                        <h4 className="text-sm font-semibold text-yellow-300">{t('settings.youAreVip')}</h4>
-                        <p className="text-xs text-gray-400 mt-0.5">{t('settings.vipDescription')}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 p-4 bg-gray-800/30 rounded-xl border border-gray-700/40">
-                      <CalendarClock className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-                      <div>
-                        <span className="text-xs text-gray-500">{t('settings.vipExpiresOn')}</span>
-                        <p className="text-sm text-white font-medium">
-                          {vipStatus.expiresAt
-                            ? (() => {
-                                const d = new Date(isNaN(Number(vipStatus.expiresAt)) ? vipStatus.expiresAt : Number(vipStatus.expiresAt));
-                                return isNaN(d.getTime()) ? t('settings.vipNoExpiration') : d.toLocaleDateString(i18n.language, { year: 'numeric', month: 'long', day: 'numeric' });
-                              })()
-                            : t('settings.vipNoExpiration')
-                          }
-                        </p>
-                      </div>
-                    </div>
-
-                    <div
-                      className="flex flex-col gap-2 border border-gray-700/40 rounded-xl px-4 pt-4 pb-3 cursor-pointer hover:border-gray-600/50 transition-colors"
-                      onMouseEnter={() => setIsVipKeyHovered(true)}
-                      onMouseLeave={() => setIsVipKeyHovered(false)}
-                    >
-                      <span className="text-xs text-gray-500">{t('settings.yourVipKey')}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-white text-sm font-mono transition-opacity duration-200" style={{ opacity: isVipKeyHovered ? 0 : 1, display: isVipKeyHovered ? 'none' : 'block' }}>
-                          {localStorage.getItem('access_code')?.replace(/./g, '•') || '••••••••••••'}
-                        </span>
-                        <span className="text-white text-sm font-mono transition-opacity duration-200" style={{ opacity: isVipKeyHovered ? 1 : 0, display: isVipKeyHovered ? 'block' : 'none' }}>
-                          {localStorage.getItem('access_code') || ''}
-                        </span>
-                        <button onClick={copyPremiumKey} className="ml-auto p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-500 hover:text-white transition-colors">
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      className="text-sm text-green-400 hover:text-red-300 hover:bg-red-500/10 px-4 py-2 rounded-lg transition-colors"
-                      onClick={handleRemovePremiumKey}
-                    >
-                      {t('settings.removeVipKey')}
-                    </button>
-                  </div>
-                )}
               </motion.div>
             </section>
 
@@ -3125,63 +2972,6 @@ const SettingsPage: React.FC = () => {
                             </div>
                           );
                         })}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Live TV sources card */}
-              <div className="mb-6 rounded-xl border border-white/10 bg-white/5 p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setLivetvSectionExpanded((v) => !v)}
-                    aria-expanded={livetvSectionExpanded}
-                    className="group flex items-center gap-2 -ml-1 px-1 py-0.5 rounded-md hover:bg-white/5 transition-colors"
-                  >
-                    <motion.span
-                      animate={{ rotate: livetvSectionExpanded ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="inline-flex"
-                    >
-                      <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
-                    </motion.span>
-                    <h3 className="font-semibold text-white">{t('settings.extractions.livetv.title')}</h3>
-                    <span className="text-xs text-gray-500 font-normal ml-1">
-                      ({LIVETV_SOURCE_KEYS.filter((k) => extractionPrefs.livetv[k]).length}/{LIVETV_SOURCE_KEYS.length})
-                    </span>
-                  </button>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-400">{t('settings.extractions.livetv.master')}</span>
-                    {renderToggle(
-                      LIVETV_SOURCE_KEYS.some((k) => extractionPrefs.livetv[k]),
-                      () => handleToggleAllLiveTv(!LIVETV_SOURCE_KEYS.some((k) => extractionPrefs.livetv[k])),
-                      'indigo'
-                    )}
-                  </div>
-                </div>
-                <AnimatePresence initial={false}>
-                  {livetvSectionExpanded && (
-                    <motion.div
-                      key="livetv-details"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25, ease: 'easeInOut' }}
-                      className="overflow-hidden"
-                    >
-                      <div className="divide-y divide-white/5 border-t border-white/5 pt-1">
-                        {LIVETV_SOURCE_KEYS.map((key) => (
-                          <div key={key} className="flex items-center justify-between py-3">
-                            <div className="font-medium text-white">{t(`settings.extractions.livetv.${key}`)}</div>
-                            {renderToggle(
-                              extractionPrefs.livetv[key],
-                              () => handleToggleLiveTvSource(key, !extractionPrefs.livetv[key]),
-                              'indigo'
-                            )}
-                          </div>
-                        ))}
                       </div>
                     </motion.div>
                   )}

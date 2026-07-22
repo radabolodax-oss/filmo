@@ -12,7 +12,6 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const fs = require('fs').promises;
 const path = require('path');
-const { verifyAccessKey } = require('./checkVip');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 

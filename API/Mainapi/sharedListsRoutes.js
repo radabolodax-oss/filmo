@@ -10,7 +10,6 @@ const {
   SCHEMA_BOOTSTRAP_LOCK_NAME,
   withMysqlAdvisoryLock
 } = require('./mysqlPool');
-const { verifyAccessKey } = require('./checkVip');
 const { verifyTurnstileFromRequest } = require('./utils/turnstile');
 // Réutiliser l'instance Redis partagée au lieu d'en créer une nouvelle (évite les fuites mémoire)
 const { redis } = require('./config/redis');
@@ -313,17 +312,6 @@ async function getUserProfileData(userId, userType, profileId) {
         }
       }
     } catch { /* fichier utilisateur introuvable */ }
-
-    // Vérifier le statut VIP en lisant l'access_code depuis les données du profil
-    try {
-      const profileDataPath = path.join(USERS_DIR, 'profiles', safeUserType, safeUserId, `${safeProfileId}.json`);
-      const profileData = JSON.parse(await fs.readFile(profileDataPath, 'utf8'));
-      const storedAccessCode = profileData.access_code || null;
-      if (storedAccessCode) {
-        const vipStatus = await verifyAccessKey(storedAccessCode);
-        isVip = vipStatus.vip;
-      }
-    } catch { /* pas de données de profil ou pas d'access_code */ }
 
     return { username, avatar, isVip };
   } catch {
