@@ -66,6 +66,12 @@ dependencies {
 
 apply from: 'capacitor.build.gradle'
 
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        outputFileName = "prowler.apk"
+    }
+}
+
 try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {
