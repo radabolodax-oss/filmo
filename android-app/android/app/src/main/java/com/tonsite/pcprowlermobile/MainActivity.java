@@ -43,6 +43,11 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // Same lockdown as pc-app/main.js's will-navigate/setWindowOpenHandler:
+        // ads/redirects can't carry the user out of the app to Chrome/Play Store/etc.
+        getBridge().setWebViewClient(new AppLockedWebViewClient(getBridge()));
+        getBridge().getWebView().setWebChromeClient(new AppLockedWebChromeClient(getBridge()));
+
         if (!startedNodeAlready) {
             startedNodeAlready = true;
             new Thread(new Runnable() {
