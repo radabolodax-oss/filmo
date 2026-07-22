@@ -7,6 +7,9 @@ import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.webkit.WebView;
+
+import androidx.activity.OnBackPressedCallback;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -15,6 +18,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /**
  * Boots the real Movix Mainapi backend via an embedded modern Node.js
@@ -48,6 +53,25 @@ public class MainActivity extends BridgeActivity {
         getBridge().setWebViewClient(new AppLockedWebViewClient(getBridge()));
         getBridge().getWebView().setWebChromeClient(new AppLockedWebChromeClient(getBridge()));
 
+        // Nothing was consuming the system back button/gesture (Capacitor
+        // doesn't wire this up for us here), so it did nothing inside the
+        // SPA. Go back through the WebView's own history first (React
+        // Router pushState entries land in it), only falling through to
+        // backgrounding the app once there's nowhere left to go back to.
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                WebView webView = getBridge().getWebView();
+                if (webView != null && webView.canGoBack()) {
+                    webView.goBack();
+                } else {
+                    setEnabled(false);
+                    getOnBackPressedDispatcher().onBackPressed();
+                    setEnabled(true);
+                }
+            }
+        });
+
         if (!startedNodeAlready) {
             startedNodeAlready = true;
             new Thread(new Runnable() {
@@ -59,7 +83,10 @@ public class MainActivity extends BridgeActivity {
                         if (nodeDirReference.exists()) {
                             deleteFolderRecursively(nodeDirReference);
                         }
-                        copyAssetFolder(getApplicationContext().getAssets(), "nodejs-project", nodeDir);
+                        Log.i(TAG, "Extracting nodejs-project.zip to " + nodeDir);
+                        long t0 = System.currentTimeMillis();
+                        extractZipAsset(getApplicationContext().getAssets(), "nodejs-project.zip", nodeDir);
+                        Log.i(TAG, "Extraction done in " + (System.currentTimeMillis() - t0) + "ms");
                         saveLastUpdateTime();
                     }
                     Log.i(TAG, "Starting embedded Node from " + nodeDir + "/main.js");
@@ -119,42 +146,32 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    private static boolean copyAssetFolder(AssetManager assetManager, String fromAssetPath, String toPath) {
-        try {
-            String[] files = assetManager.list(fromAssetPath);
-            boolean res = true;
-
-            if (files == null || files.length == 0) {
-                res &= copyAsset(assetManager, fromAssetPath, toPath);
-            } else {
-                new File(toPath).mkdirs();
-                for (String file : files) {
-                    res &= copyAssetFolder(assetManager, fromAssetPath + "/" + file, toPath + "/" + file);
+    /**
+     * Extracts a zip asset in one streamed pass instead of the ~3000
+     * individual AssetManager.open() calls a plain recursive folder copy
+     * needed -- each of those has real fixed overhead reading a compressed
+     * APK entry, so on a real device the old approach took minutes on first
+     * launch (looked like the backend never loads). See
+     * android-app/scripts/zip_node_backend.py.
+     */
+    private static boolean extractZipAsset(AssetManager assetManager, String zipAssetName, String toPath) {
+        try (ZipInputStream zin = new ZipInputStream(assetManager.open(zipAssetName))) {
+            ZipEntry entry;
+            while ((entry = zin.getNextEntry()) != null) {
+                File outFile = new File(toPath, entry.getName());
+                if (entry.isDirectory()) {
+                    outFile.mkdirs();
+                    continue;
+                }
+                File parent = outFile.getParentFile();
+                if (parent != null) parent.mkdirs();
+                try (OutputStream out = new FileOutputStream(outFile)) {
+                    copyFile(zin, out);
                 }
             }
-            return res;
-        } catch (Exception e) {
-            Log.e(TAG, "copyAssetFolder " + fromAssetPath, e);
-            return false;
-        }
-    }
-
-    private static boolean copyAsset(AssetManager assetManager, String fromAssetPath, String toPath) {
-        InputStream in = null;
-        OutputStream out = null;
-        try {
-            in = assetManager.open(fromAssetPath);
-            new File(toPath).createNewFile();
-            out = new FileOutputStream(toPath);
-            copyFile(in, out);
-            in.close();
-            in = null;
-            out.flush();
-            out.close();
-            out = null;
             return true;
         } catch (Exception e) {
-            Log.e(TAG, "copyAsset " + fromAssetPath, e);
+            Log.e(TAG, "extractZipAsset " + zipAssetName, e);
             return false;
         }
     }

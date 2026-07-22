@@ -90,6 +90,7 @@ API/BOT/
 android-app/www/
 android-app/android/app/src/main/assets/public/
 android-app/android/app/src/main/assets/nodejs-project/
+android-app/android/app/src/main/assets/nodejs-project.zip
 android-app/android/app/libnode/
 android-app/android/app/.cxx/
 android-app/android/.gradle/
