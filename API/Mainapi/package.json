@@ -2,6 +2,9 @@
   "name": "movix-api",
   "private": true,
   "type": "commonjs",
+  "engines": {
+    "node": ">=24.15.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",

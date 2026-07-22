@@ -59,6 +59,11 @@ dist
 node_modules
 .env
 
+# Local DB/cache backups (mysqldump, Memurai/Redis RDB snapshots) — contain
+# real user data/secrets, never commit. See backups/README.md.
+backups/*.sql
+backups/*.rdb
+
 # Project runtime caches and local data
 API/cache/
 API/data/
@@ -76,3 +81,4 @@ API/BOT/
 **/__pycache__/
 *.pyc
 *.pyo
+**/.venv/

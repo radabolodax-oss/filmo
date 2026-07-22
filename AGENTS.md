@@ -45,7 +45,7 @@ src/                        # React frontend
   pages/                    # 58 page components
   components/               # 118+ components
     ui/                     # Primitives (shadcn/ui + Radix)
-    *Player.tsx             # Video players (HLS, VideoJS, LiveTV, etc.)
+    *Player.tsx             # Video players (HLS, VideoJS, etc.)
     skeletons/              # Loading placeholders
   context/                  # 12 React Context providers
   hooks/                    # Custom hooks
@@ -150,6 +150,10 @@ Frontend: `.env` with `VITE_*` prefix (see `.env.example`)
 Backend: separate `.env` per service (see `API/*/. env.example`)
 
 Key frontend vars: `VITE_MAIN_API`, `VITE_TMDB_API_KEY`, `VITE_SITE_URL`, `VITE_WATCHPARTY_API`, `VITE_PROXY_BASE_URL`, `VITE_PROXIES_EMBED_API`, `VITE_TURNSTILE_SITE_KEY`
+
+## Local Environment Requirements
+
+Outside this repo, a working checkout needs: Node.js (version in `.nvmrc`), Python (version in `API/proxiesembed/.python-version`), MySQL 8 (schema: `API/Mainapi/exportscripts/schema_full_init.sql`), and a Redis-compatible cache — **Memurai** on Windows (Redis itself has no first-class Windows build), native `redis-server` elsewhere. Docker alternative: `docker-compose.yml`, but exclude the `watchparty` service until `API/watchpartyAPI/` (currently missing from this checkout) is restored. `.env` files are gitignored — copy each `.env.example` and fill in real values per machine, there's no way to version secrets.
 
 ## Security Rules
 

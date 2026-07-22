@@ -2,7 +2,7 @@ aiohttp==3.11.18
 aiohttp-socks==0.9.1
 aiofiles==24.1.0
 beautifulsoup4==4.12.2
-lxml==5.3.0
+lxml==6.1.1  # 5.3.0 has no cp314 wheel (build needs a C compiler); 6.1.1+ does — bump if you also bump .python-version
 requests==2.31.0
 requests[socks]
 cloudscraper==1.2.71

@@ -1,6 +1,8 @@
-version: '3.9'
-
 services:
+  # NOTE: if MySQL/Redis are already running natively on the host (Windows
+  # service "MySQL80", standalone Memurai on 6379), stop them first or remap
+  # the ports below — both default to the same ports and the container will
+  # fail to bind otherwise.
   mysql:
     image: mysql:8
     restart: unless-stopped
@@ -11,6 +13,10 @@ services:
       MYSQL_PASSWORD: movix_pass
     volumes:
       - mysql_data:/var/lib/mysql
+      # Alphabetical order = execution order: full schema first, then the
+      # (now redundant but harmless — CREATE TABLE IF NOT EXISTS) wrapped-only
+      # script kept for anyone still relying on it standalone.
+      - ./API/Mainapi/exportscripts/schema_full_init.sql:/docker-entrypoint-initdb.d/00_schema_full_init.sql
       - ./API/Mainapi/wrapped_tables.sql:/docker-entrypoint-initdb.d/01_wrapped.sql
     ports:
       - "3306:3306"
@@ -45,7 +51,13 @@ services:
       - mysql
       - redis
 
+  # API/watchpartyAPI/ is currently missing from this checkout — this service
+  # will fail to build until that folder is restored. Gated behind a profile
+  # so plain `docker compose up` (or `up mysql redis api proxiesembed
+  # bypass403`) skips it instead of failing the whole stack. Run it
+  # explicitly once the folder exists: `docker compose --profile watchparty up`.
   watchparty:
+    profiles: ["watchparty"]
     build:
       context: ./API/watchpartyAPI
       dockerfile: Dockerfile.watchparty

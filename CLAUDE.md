@@ -110,6 +110,22 @@ Frontend (`.env`):
 
 Backend: see `API/Mainapi/.env.example` (~100 variables), `API/proxiesembed/.env.example`, `API/miscs/.env.example`
 
+## Local Development Environment
+
+System-level dependencies that live outside this repo but are required to run everything locally — install these before `npm install`:
+
+| Dependency | Windows | macOS/Linux | Notes |
+|---|---|---|---|
+| Node.js | version pinned in `.nvmrc` | same | `npm install` at repo root and in `API/Mainapi/` |
+| Python | version pinned in `API/proxiesembed/.python-version` | same | `pip install -r API/proxiesembed/requirements.txt`; `API/miscs/bypass403.py` only needs `flask`+`requests` (no dedicated requirements.txt) |
+| MySQL 8 | native install **or** `docker compose up mysql` | same | Schema: run `API/Mainapi/exportscripts/schema_full_init.sql` against an empty `movix` database (also auto-mounted by `docker-entrypoint-initdb.d` if you go the Docker route). Most tables additionally self-create via `CREATE TABLE IF NOT EXISTS` at API boot, so a first run against a bare DB still mostly works — the script just avoids depending on route order. |
+| Redis-compatible cache | **[Memurai](https://www.memurai.com/)** (Redis has no first-class Windows build) — native install **or** `docker compose up redis` | native `redis-server` **or** `docker compose up redis` | Default local target: `127.0.0.1:6379`, no password |
+| Docker Desktop | only if using `docker-compose.yml` | only if using it | `API/watchpartyAPI/` is currently **missing from this checkout** — the `watchparty` service in `docker-compose.yml` will fail to build until that folder is restored; skip it with `docker compose up mysql redis api proxiesembed bypass403` |
+
+Port conflict warning: if MySQL/Memurai are already running natively (Windows services / standalone `memurai.exe`), stop them (or remap ports in `docker-compose.yml`) before running the Dockerized equivalents — both bind the same default ports (3306, 6379) and the container will fail to start otherwise.
+
+`.env` files are gitignored on purpose (real secrets) — only the `.env.example` templates are versioned. There is no way around manually filling in `.env` per machine; see each `.env.example` for the full variable list.
+
 ## Code Conventions
 
 ### Naming
@@ -178,7 +194,6 @@ Main API  -> MySQL, Redis, TMDB, 30+ scraping sources
 Multiple player implementations depending on source type:
 - `HLSPlayer.tsx` (433KB) - Primary HLS player with extensive settings
 - `VideoJSPlayer.tsx` - Video.js wrapper
-- `LiveTVPlayer.tsx` - Live stream player
 - Shaka Player, Dash.js, Mpegts.js for specific formats
 
 ### Service Worker Fallback Domain
