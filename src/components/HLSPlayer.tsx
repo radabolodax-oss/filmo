@@ -1,4 +1,4 @@
-﻿import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, memo, useMemo } from 'react';
 import type HlsType from 'hls.js';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock } from 'lucide-react';
@@ -24,7 +24,9 @@ const loadPako = async (): Promise<typeof pakoType> => {
 import HLSPlayerSettingsPanel from './HLSPlayerSettingsPanel';
 import { toast } from 'sonner';
 import { isUserVip } from '../utils/authUtils';
+import { isExtensionAvailable } from '../utils/extensionProxy';
 import { isDnsLikeError, notifyDnsBlocked } from '../utils/dnsErrorDetection';
+import { isLowLatencyEnabled } from '../utils/lowLatencyPref';
 import {
   initializeCastApi,
   requestCastSession,
@@ -41,7 +43,7 @@ import { useAntiSpoilerSettings } from '../hooks/useAntiSpoilerSettings';
 import { useTranslation } from 'react-i18next';
 import { encodeId } from '../utils/idEncoder';
 import { RIVESTREAM_PROXIES } from '../config/rivestreamProxy';
-import { PROXY_BASE_URL, PROXIES_EMBED_API, buildApiProxyUrl } from '../config/runtime';
+import { PROXY_BASE_URL, PROXIES_EMBED_API } from '../config/runtime';
 import { getTmdbLanguage } from '../i18n';
 import { getCoflixPreferredUrl } from '../utils/coflix';
 import { safePlay } from '../utils/safePlay';
@@ -67,6 +69,7 @@ const SOURCE_MAIN_TO_TOP_LEVEL: Record<string, TopLevelSourceId> = {
   darkino_main: 'darkino',
   fstream_main: 'fstream',
   wiflix_main: 'wiflix',
+  j1f_main: 'j1f',
   omega_main: 'omega',
   multi_main: 'coflix',
   viper_main: 'viper',
@@ -83,15 +86,9 @@ const SOURCE_MAIN_TO_TOP_LEVEL: Record<string, TopLevelSourceId> = {
 // Add TMDB API key
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
 
-// Constante pour contrôler la vérification VIP pour Rivestream
-const ENABLE_RIVESTREAM_VIP_CHECK = false;
-
-// Helper function to check if Rivestream is available (VIP check if enabled)
+// rivestream.org ne résout plus en DNS (domaine mort) — source désactivée.
 const isRivestreamAvailable = (): boolean => {
-  if (!ENABLE_RIVESTREAM_VIP_CHECK) {
-    return true; // Si la vérification VIP est désactivée, Rivestream est toujours disponible
-  }
-  return isUserVip();
+  return false;
 };
 
 // Helper function to extract original URL from proxy URL
@@ -273,41 +270,8 @@ const isMP4Source = (url: string): boolean => {
 
 // Utility function to create HLS config based on domain
 const createHlsConfig = (src: string) => {
-  const isNakiosProxy   = src.includes('nakios-proxy') || src.includes('nakios');
   const isPulseTopstrime = src.includes('pulse.topstrime.online');
   const isServersicuro = src.includes('serversicuro.cc');
-
-  // Profil Nakios — flux CMAF/HLS segmentés (.m4s) via proxy Worker
-  if (isNakiosProxy) {
-    return {
-      enableWorker: true,
-      lowLatencyMode: false,
-      startFragPrefetch: false,
-      maxBufferLength: 20,
-      maxMaxBufferLength: 120,
-      maxBufferSize: 30 * 1000 * 1000,
-      maxBufferHole: 1,
-      highBufferWatchdogPeriod: 3,
-      appendErrorMaxRetry: 3,
-      enableSoftwareAES: true,
-      nudgeOffset: 0.2,
-      nudgeMaxRetry: 3,
-      maxSeekHole: 3,
-      fragLoadingTimeOut: 30000,
-      manifestLoadingTimeOut: 20000,
-      levelLoadingTimeOut: 20000,
-      fragLoadingMaxRetry: 4,
-      levelLoadingMaxRetry: 3,
-      manifestLoadingMaxRetry: 3,
-      xhrSetup: (xhr: XMLHttpRequest, url: string) => {
-        // withCredentials DOIT être false : notre Worker renvoie Access-Control-Allow-Origin: *
-        // qui est incompatible avec credentials=true (spec CORS §3.2.2)
-        xhr.withCredentials = false;
-        xhr.setRequestHeader('Accept', '*/*');
-        console.log(`[HLS_NAK] XHR → ${url.substring(0, 120)}`);
-      },
-    };
-  }
 
   if (isPulseTopstrime) {
     console.log('🔧 Applying pulse.topstrime.online optimizations: limited concurrent requests (max 4 segments)');
@@ -319,7 +283,7 @@ const createHlsConfig = (src: string) => {
 
   return {
     enableWorker: true,
-    lowLatencyMode: true,
+    lowLatencyMode: isLowLatencyEnabled('movies'), // opt-in via Settings › Performance
     startFragPrefetch: !isPulseTopstrime, // Désactiver le prefetch pour pulse.topstrime.online
     backBufferLength: isPulseTopstrime ? 30 : (isServersicuro ? 60 : 90),
     maxBufferLength: isPulseTopstrime ? 4 : (isServersicuro ? 20 : 30), // Augmenter pour serversicuro
@@ -365,24 +329,78 @@ const createHlsConfig = (src: string) => {
 
 };
 
+// ── Cinep (topstream/purstream) subtitles ─────────────────────────────────
+// Some cinep masters declare #EXT-X-MEDIA:TYPE=SUBTITLES with a URI pointing
+// straight at a .vtt file. hls.js expects that URI to be an m3u8 playlist and
+// hard-fails with "Missing #EXTM3U", which kills the whole source. Replace such
+// direct subtitle URIs with an inline data: playlist (one segment = the raw
+// .vtt) so hls.js parses a valid playlist, then fetches the .vtt DIRECTLY — the
+// browser extension injects the required Referer/Origin headers, no proxy
+// server involved. Video segments stay direct too. Idempotent: already-wrapped
+// (data:) or real playlist URIs pass through untouched.
+const rewriteCinepSubtitleUris = (text: string, baseUrl: string): string => {
+  if (!text || text.indexOf('#EXT-X-MEDIA:') === -1) return text;
+  return text.split('\n').map((line) => {
+    if (!/^#EXT-X-MEDIA:/i.test(line) || !/TYPE=SUBTITLES/i.test(line)) return line;
+    return line.replace(/URI="([^"]+)"/i, (whole, uri) => {
+      if (/^data:/i.test(uri)) return whole; // already wrapped
+      let abs: string;
+      try { abs = new URL(uri, baseUrl).href; } catch { return whole; }
+      const path = abs.split('?')[0].toLowerCase();
+      if (!(path.endsWith('.vtt') || path.endsWith('.srt'))) return whole; // real playlist
+      if (abs.includes('/cinep-proxy')) return whole; // server already wrapped it (VIP path)
+      const wrapper =
+        '#EXTM3U\n' +
+        '#EXT-X-VERSION:3\n' +
+        '#EXT-X-TARGETDURATION:999999\n' +
+        '#EXT-X-MEDIA-SEQUENCE:0\n' +
+        '#EXTINF:999999.0,\n' +
+        abs + '\n' +
+        '#EXT-X-ENDLIST\n';
+      return `URI="data:application/vnd.apple.mpegurl,${encodeURIComponent(wrapper)}"`;
+    });
+  }).join('\n');
+};
+
+// Playlist loader that post-processes the master playlist to fix direct-.vtt
+// subtitle declarations (see rewriteCinepSubtitleUris). Only attached for
+// cinep/purstream sources; extends the default loader so xhrSetup/proxy still apply.
+const makeCinepSubtitlePLoader = (HlsCtor: typeof HlsType): any => {
+  const BaseLoader: any = (HlsCtor as any).DefaultConfig.loader;
+  return class CinepSubtitlePLoader extends BaseLoader {
+    load(context: any, config: any, callbacks: any) {
+      const originalOnSuccess = callbacks.onSuccess;
+      callbacks.onSuccess = (response: any, stats: any, ctx: any, networkDetails: any) => {
+        try {
+          if (response && typeof response.data === 'string') {
+            response.data = rewriteCinepSubtitleUris(response.data, ctx?.url || context?.url || '');
+          }
+        } catch { /* pass through unmodified on any error */ }
+        originalOnSuccess(response, stats, ctx, networkDetails);
+      };
+      super.load(context, config, callbacks);
+    }
+  };
+};
+
+// True when an hls.js error is about loading/parsing a subtitle track/file.
+// Used to keep a broken subtitle from killing video playback.
+const isSubtitleLoadError = (data: any): boolean => {
+  const details = typeof data?.details === 'string' ? data.details.toLowerCase() : '';
+  if (details.includes('subtitle')) return true;
+  const url = data?.url || data?.frag?.url || data?.context?.url || '';
+  return /\.(vtt|srt)([?&]|$)/i.test(url);
+};
+
 // Global variables to track failed segments for retry
 const failed429Segments: Set<number> = new Set();
-const failed500Segments: Set<number> = new Set();
 let retryTimeout: NodeJS.Timeout | null = null;
-let retry500Timeout: NodeJS.Timeout | null = null;
 
 // Function to clear failed segments when playback is successful
 const clearFailed429Segments = () => {
   if (failed429Segments.size > 0) {
     console.log(`✅ Clearing ${failed429Segments.size} failed segments from retry list`);
     failed429Segments.clear();
-  }
-};
-
-const clearFailed500Segments = () => {
-  if (failed500Segments.size > 0) {
-    console.log(`✅ Clearing ${failed500Segments.size} failed 500 segments from retry list`);
-    failed500Segments.clear();
   }
 };
 
@@ -511,97 +529,6 @@ const handle429Error = (hls: any, videoRef: React.RefObject<HTMLVideoElement>, d
   }, 5000); // Attendre 5 secondes pour éviter les 429 répétés
 };
 
-// Utility function to handle 500 errors with smart retry logic
-const handle500Error = (hls: any, videoRef: React.RefObject<HTMLVideoElement>, data: any) => {
-  const failedUrl = data.frag?.url || data.url || 'unknown';
-  const isTopstrime = failedUrl.includes('pulse.topstrime.online');
-
-  if (isTopstrime) {
-    console.error('🚨 Error 500 detected on pulse.topstrime.online');
-  } else {
-    console.error('🚨 Error 500 detected');
-  }
-  console.log('🔍 Failed request details:', failedUrl);
-
-  // Sauvegarder la position actuelle et les informations du fragment qui a échoué
-  const currentTime = videoRef.current ? videoRef.current.currentTime : 0;
-  const failedFragUrl = data.frag?.url || data.url;
-  const failedFragSN = data.frag?.sn; // Sequence number du fragment qui a échoué
-
-  console.log(`🔍 Failed fragment SN: ${failedFragSN}, URL: ${failedFragUrl}`);
-
-  // Ajouter le segment à la liste des segments qui ont échoué
-  if (typeof failedFragSN === 'number') {
-    failed500Segments.add(failedFragSN);
-    console.log(`📝 Added segment ${failedFragSN} to 500 retry list. Total failed segments: ${failed500Segments.size}`);
-  }
-
-  // Vérifier si on a trop d'erreurs 500 consécutives
-  const retryKey = `500_${isTopstrime ? 'topstrime' : 'other'}`;
-  if (!(window as any).error500RetryCount) {
-    (window as any).error500RetryCount = {};
-  }
-  (window as any).error500RetryCount[retryKey] = ((window as any).error500RetryCount[retryKey] || 0) + 1;
-
-  // Si trop d'erreurs 500, déclencher un changement de source
-  if ((window as any).error500RetryCount[retryKey] > 2) {
-    console.error(`❌ Too many 500 errors (${(window as any).error500RetryCount[retryKey]}), switching source...`);
-    (window as any).error500RetryCount[retryKey] = 0; // Reset le compteur
-    setTimeout(() => {
-      // Déclencher le changement de source via un événement personnalisé
-      const sourceChangeEvent = new CustomEvent('forceSourceChange', {
-        detail: { reason: 'too_many_500_errors', url: failedUrl }
-      });
-      window.dispatchEvent(sourceChangeEvent);
-    }, 1000);
-    return;
-  }
-
-  // Arrêter toutes les requêtes en cours
-  if (hls) {
-    hls.stopLoad();
-    console.log('🛑 Stopped all HLS loading operations due to 500 error');
-  }
-
-  // Annuler le timeout précédent s'il existe
-  if (retry500Timeout) {
-    clearTimeout(retry500Timeout);
-  }
-
-  // Attendre un délai plus long avant de réessayer pour les erreurs 500 (erreur serveur)
-  retry500Timeout = setTimeout(() => {
-    console.log('🔄 Retrying after 500 error...');
-    if (hls && videoRef.current) {
-      // Calculer la position exacte du segment qui a échoué
-      // En général, chaque segment fait ~10 secondes, mais on utilise la position actuelle
-      const targetTime = Math.max(0, currentTime - 10); // Reculer de 10 secondes pour les erreurs 500
-
-      console.log(`🎯 Targeting time: ${targetTime}s to retry failed segment ${failedFragSN}`);
-
-      // Redémarrer le chargement depuis une position légèrement antérieure
-      hls.startLoad(targetTime);
-
-      // Repositionner la vidéo sur la position cible
-      if (videoRef.current.readyState >= 1) {
-        videoRef.current.currentTime = targetTime;
-      } else {
-        // Si la vidéo n'est pas prête, attendre qu'elle le soit
-        const onLoadedMetadata = () => {
-          if (videoRef.current) {
-            videoRef.current.currentTime = targetTime;
-            videoRef.current.removeEventListener('loadedmetadata', onLoadedMetadata);
-          }
-        };
-        videoRef.current.addEventListener('loadedmetadata', onLoadedMetadata);
-      }
-
-      console.log(`▶️ Restarted HLS loading from: ${targetTime}s after 500 error`);
-    }
-    retry500Timeout = null;
-  }, 8000); // Attendre 8 secondes pour les erreurs 500 (plus long que pour 429)
-};
-
-
 // Utility function to reset media element error state
 const resetMediaElementError = (videoElement: HTMLVideoElement): Promise<void> => {
   return new Promise((resolve) => {
@@ -679,8 +606,6 @@ interface HLSPlayerProps {
   nexusHlsSources?: { url: string; label: string }[];
   nexusFileSources?: { url: string; label: string }[];
   purstreamSources?: { url: string; label: string }[];
-  loadingNakios?: boolean;
-  nakiosStreamUrl?: string | null;
   rivestreamSources?: { url: string; label: string; quality: number; service: string; category: string }[];
   rivestreamCaptions?: { label: string; file: string }[];
   loadingRivestream?: boolean;
@@ -690,6 +615,7 @@ interface HLSPlayerProps {
   coflixSources?: any[];
   fstreamSources?: { url: string; label: string; category: string }[];
   wiflixSources?: { url: string; label: string; category: string }[];
+  j1fSources?: { url: string; label: string; category: string }[];
   viperSources?: { url: string; label: string; quality: string; language: string }[];
   voxSources?: { name: string; link: string }[];
   onlyQualityMenu?: boolean; // Ajout pour l'affichage du menu qualité seul
@@ -730,12 +656,10 @@ interface HLSPlayerProps {
   //   - { mode: 'timeBeforeEnd', value: 120 } (120 seconds = 2 minutes before end)
   nextContentThreshold?: NextContentThreshold; // Default: 95 (percentage)
   onShowSources?: () => void; // Callback to show sources menu
-  similarContent?: SimilarItem[];
-  onSimilarContentSelect?: (id: number, mediaType: string) => void;
 
   /**
    * Catégorie de priorité utilisateur appliquée au tri des hosters dans le panel
-   * Serveurs. `'moviesTv'` pour films/séries, `'anime'` pour les animes.
+   * Serveurs. `'moviesTv'` pour WatchMovie/WatchTv, `'anime'` pour WatchAnime.
    * Par défaut `'moviesTv'` côté panel si non fourni.
    */
   priorityCategory?: 'moviesTv' | 'anime';
@@ -792,15 +716,6 @@ interface WatchProgress {
   position: number;
   timestamp: string;
   duration: number;
-}
-
-interface SimilarItem {
-  id: number;
-  title?: string;
-  name?: string;
-  poster_path: string;
-  vote_average: number;
-  media_type?: string;
 }
 
 interface NextEpisodePromptProps {
@@ -890,8 +805,7 @@ declare global {
   }
 }
 
-const MAIN_API = (import.meta.env.VITE_MAIN_API as string || '').replace(/\/+$/, '');
-const PURSTREAM_PROXY = (import.meta.env.VITE_PURSTREAM_PROXY as string || 'https://purstream.ac').replace(/\/+$/, '');
+// Add MAIN_API from env
 
 // Ajouter ces types pour les API propriétaires de WebKit juste après les interfaces existantes
 interface HTMLVideoElementWithWebkit extends HTMLVideoElement {
@@ -945,8 +859,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   nexusHlsSources = [],
   nexusFileSources = [],
   purstreamSources = [],
-  loadingNakios = false,
-  nakiosStreamUrl = null,
   rivestreamSources = [],
   rivestreamCaptions = [],
   loadingRivestream = false,
@@ -956,6 +868,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   coflixSources = [],
   fstreamSources = [],
   wiflixSources = [],
+  j1fSources = [],
   viperSources = [],
   voxSources = [],
   onlyQualityMenu = false,
@@ -980,8 +893,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   onPlayerSeeked,
   onPlayerEnded,
   onShowSources,
-  similarContent = [],
-  onSimilarContentSelect,
   priorityCategory,
 }, ref) => {
   const { t, i18n } = useTranslation();
@@ -1056,10 +967,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
   // Custom video OLED values
   const [customOled, setCustomOled] = useState(() => {
+    const defaults = { contrast: 1, saturate: 1, brightness: 1, sepia: 0 };
     const saved = localStorage.getItem('playerCustomOled');
-    return saved ? JSON.parse(saved) : {
-      contrast: 1, saturate: 1, brightness: 1, sepia: 0
-    };
+    if (!saved) return defaults;
+    try {
+      const parsed = JSON.parse(saved);
+      // Merge with defaults so older saved values without all fields don't crash .toFixed()
+      return { ...defaults, ...parsed };
+    } catch {
+      return defaults;
+    }
   });
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number>(0);
@@ -1123,11 +1040,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [externalSubs, setExternalSubs] = useState<any[]>([]);
   const [externalLoading, setExternalLoading] = useState(false);
   const [loadingSubtitle, setLoadingSubtitle] = useState(false);
-  const [autoFrenchSubs, setAutoFrenchSubs] = useState<boolean>(() =>
-    localStorage.getItem('autoFrenchSubs') !== 'false'
-  );
-  const autoSubsPendingRef = useRef(false);
-  const autoSubsLoadedForRef = useRef('');
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
@@ -1210,8 +1122,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [nextMovieInfo, setNextMovieInfo] = useState<MovieInfo | null>(null);
   const [showNextEpisodeOverlay, setShowNextEpisodeOverlay] = useState(false);
   const [hasDeclinedNextEpisode, setHasDeclinedNextEpisode] = useState(false);
-  const [showSkipIntro, setShowSkipIntro] = useState(false);
-  const [showSimilarContent, setShowSimilarContent] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [hasLoadedProgress, setHasLoadedProgress] = useState(false);
   const progressSaveInterval = useRef<NodeJS.Timeout>();
@@ -1323,6 +1233,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [showNexusMenu, setShowNexusMenu] = useState(false);
   const [showFstreamMenu, setShowFstreamMenu] = useState(false);
   const [showWiflixMenu, setShowWiflixMenu] = useState(false);
+  const [showJ1fMenu, setShowJ1fMenu] = useState(false);
   const [showViperMenu, setShowViperMenu] = useState(false);
   const [showVoxMenu, setShowVoxMenu] = useState(false);
   const [showRivestreamMenu, setShowRivestreamMenu] = useState(false);
@@ -1465,7 +1376,12 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [isAirPlayLoading, setIsAirPlayLoading] = useState(false);
   const castButtonRef = useRef<HTMLElement | null>(null);
   const lastLoadedCastSrcRef = useRef<string | null>(null);
-  // Native Android cast bridge (injected by the Prowler Android app WebView).
+  // Single-flight guard: when a cast is started from startCasting(), the SDK
+  // also fires SESSION_STARTED which triggers a second loadMedia for the same
+  // src. Two concurrent LOAD requests race on the receiver (the first gets
+  // LOAD_CANCELLED), surfacing spurious errors or restarting playback.
+  const castLoadInFlightRef = useRef<string | null>(null);
+  // Native Android cast bridge (injected by the Movix Android app WebView).
   // When present, clicking cast routes through the Google Cast SDK on-device
   // instead of the web cast_sender.js SDK (which isn't available inside WebView).
   const [nativeCastBridge, setNativeCastBridge] = useState<any>(null);
@@ -2040,8 +1956,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       });
     }
 
-    // Process PurStream (Bravo) sources - VIP/extension play HLS directly, others via embed fallback
-    if (purstreamSources && purstreamSources.length > 0) {
+    // Process PurStream (Bravo) sources - réservé VIP/extension
+    if (purstreamSources && purstreamSources.length > 0 && (isUserVip() || isExtensionAvailable())) {
       hlsSources.push({
         type: 'bravo_main',
         id: 'bravo_main',
@@ -2071,19 +1987,19 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           type: 'frembed',
           id: 'frembed_main',
           label: t('watch.frembedPlayer'),
-          url: `https://frembed.click/embed/movie/${movieId}`,
+          url: `https://frembed.click/api/film.php?id=${movieId}`,
         });
       } else if (tvShowId && seasonNumber && episodeNumber) {
         embedSources.push({
           type: 'frembed',
           id: 'frembed_main',
           label: t('watch.frembedPlayer'),
-          url: `https://frembed.click/embed/serie/${tvShowId}?sa=${seasonNumber}&epi=${episodeNumber}`,
+          url: `https://frembed.click/api/serie.php?id=${tvShowId}&sa=${seasonNumber}&epi=${episodeNumber}`,
         });
       }
     }
 
-    // Add custom sources (Prowler players)
+    // Add custom sources (Movix players)
     if (customSources && customSources.length > 0) {
       customSources.forEach((source, index) => {
         const srcLower = source.toLowerCase();
@@ -2141,6 +2057,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       });
     } else {
       console.log('❌ [HLSPlayer] No Wiflix/Lynx sources available:', wiflixSources);
+    }
+
+    // Add J1F (1jour1film) sources
+    if (j1fSources && j1fSources.length > 0) {
+      embedSources.push({
+        type: 'j1f_main',
+        id: 'j1f_main',
+        label: t('watch.j1fPlayers', { count: j1fSources.length }),
+        url: '#',
+      });
     }
 
     // Add Viper sources
@@ -2211,40 +2137,23 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       }
     }
 
-    // Purstream VF — bouton standalone avant le sous-menu VOSTFR
-    {
-      const purstreamEmbedUrl = (tvShowId != null && seasonNumber != null && episodeNumber != null)
-        ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'tv', id: tvShowId, season: seasonNumber, episode: episodeNumber }))}`
-        : movieId
-          ? `${PURSTREAM_PROXY}/watch/${btoa(JSON.stringify({ type: 'movie', id: movieId }))}`
-          : '#';
-      if (purstreamEmbedUrl !== '#') {
-        embedSources.push({
-          type: 'vostfr',
-          id: 'purstream',
-          label: '🇫🇷 Purstream VF',
-          url: purstreamEmbedUrl,
-        });
-      }
-    }
-
-    // Nakios VF — bouton standalone (lazy fetch déclenché au clic)
-    if (movieId || (tvShowId != null && seasonNumber != null && episodeNumber != null)) {
-      if (loadingNakios) {
-        embedSources.push({
-          type: 'nakios',
-          id: 'nakios_loading',
-          label: '⏳ Nakios VF...',
-          url: '#',
-        });
-      } else {
-        embedSources.push({
-          type: 'nakios',
-          id: nakiosStreamUrl ? 'nakios_main' : 'nakios_trigger',
-          label: '🇫🇷 Nakios VF',
-          url: nakiosStreamUrl ?? '#',
-        });
-      }
+    // Wavewatch — lecteur autonome (bouton top-level, pas dans le sous-menu VO/VOSTFR)
+    if (tvShowId != null && seasonNumber != null && episodeNumber != null) {
+      embedSources.push({
+        type: 'vostfr',
+        id: 'wavewatch',
+        label: 'Wavewatch',
+        url: `https://wwembed.wavewatch.top/api/v1/streaming/ww-tv-${tvShowId}-s${seasonNumber}-e${episodeNumber}`,
+        isActive: false,
+      });
+    } else if (movieId) {
+      embedSources.push({
+        type: 'vostfr',
+        id: 'wavewatch',
+        label: 'Wavewatch',
+        url: `https://wwembed.wavewatch.top/api/v1/streaming/ww-movie-${movieId}`,
+        isActive: false,
+      });
     }
 
     // Ajouter les sources VOSTFR dans un menu déroulant
@@ -2260,8 +2169,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     // Définir les lecteurs VO/VOSTFR à conserver (enlever 6, 4 et 2)
     if (showVostfrMenu) {
       const vostfrSources = [
-        { id: 'vostfr',    label: 'Videasy',   url: '' },
-        { id: 'vidlink',   label: 'Vidlink',   url: '' },
+        { id: 'peachify', label: 'Peachify', url: '' }, // Peachify (priorité, FR subs + accent Movix)
+        { id: 'vostfr', label: 'Videasy', url: '' }, // Videasy
+        { id: 'vidlink', label: 'Vidlink', url: '' }, // vidlink
+        { id: 'vidsrccc', label: 'Vidsrc.io', url: '' }, // vidsrc.io
+        { id: 'vidsrcwtf1', label: 'Vidsrc.wtf 1', url: '' } // vidsrc.wtf (v1)
       ];
 
       vostfrSources.forEach(source => {
@@ -2273,12 +2185,18 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         // boutons Sources/Open dupliqués (rendus dans le parent ET dans l'iframe imbriqué).
         if (tvShowId != null && seasonNumber != null && episodeNumber != null) {
           // TV Show URLs
-          if      (source.id === 'vostfr')  finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
-          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`;
+          if (source.id === 'peachify') finalUrl = `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626`;
+          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`; // vidlink.pro
+          else if (source.id === 'vidsrccc') finalUrl = `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}`;
+          else if (source.id === 'vostfr') finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`; // Videasy
+          else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`; // Assumed pattern
         } else if (movieId) {
-          // Movie URLs
-          if      (source.id === 'vostfr')  finalUrl = `https://player.videasy.net/movie/${movieId}`;
-          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/movie/${movieId}`;
+          // Movie URLs (existing logic)
+          if (source.id === 'peachify') finalUrl = `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626`;
+          else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/movie/${movieId}`; // vidlink.pro
+          else if (source.id === 'vidsrccc') finalUrl = `https://vidsrc.io/embed/movie?tmdb=${movieId}`;
+          else if (source.id === 'vostfr') finalUrl = `https://player.videasy.net/movie/${movieId}`;
+          else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/movie/?id=${movieId}`;
         }
 
         embedSources.push({
@@ -2319,14 +2237,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     nexusFileSources?.length,
     rivestreamSources?.length,
     loadingRivestream,
-    loadingNakios,
-    nakiosStreamUrl,
     frembedAvailable,
     customSources?.length,
     omegaSources?.length,
     coflixSources?.length,
     fstreamSources?.length,
     wiflixSources?.length,
+    j1fSources?.length,
     viperSources?.length,
     movieId,
     adFreeM3u8Url,
@@ -2336,6 +2253,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     showNexusMenu,
     showFstreamMenu,
     showWiflixMenu,
+    showJ1fMenu,
     showViperMenu,
     showVostfrMenu,
     embedType,
@@ -2376,7 +2294,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   // Fonction pour gérer le changement de source
   const handleSourceChange = (sourceType: string, sourceId: string, sourceUrl: string) => {
     // --- Dropdown Toggle Handling (Doesn't close settings) ---
-    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main' || sourceType === 'bravo_main') {
+    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main' || sourceType === 'bravo_main') {
       setShowDarkinoMenu(sourceType === 'darkino_main' ? !showDarkinoMenu : false);
       setShowOmegaMenu(sourceType === 'omega_main' ? !showOmegaMenu : false);
       setShowCoflixMenu(sourceType === 'multi_main' ? !showCoflixMenu : false);
@@ -2384,6 +2302,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       setShowNexusMenu(sourceType === 'nexus_main' ? !showNexusMenu : false);
       setShowFstreamMenu(sourceType === 'fstream_main' ? !showFstreamMenu : false);
       setShowWiflixMenu(sourceType === 'wiflix_main' ? !showWiflixMenu : false);
+      setShowJ1fMenu(sourceType === 'j1f_main' ? !showJ1fMenu : false);
       setShowViperMenu(sourceType === 'viper_main' ? !showViperMenu : false);
       setShowVoxMenu(sourceType === 'vox_main' ? !showVoxMenu : false);
       setShowRivestreamMenu(sourceType === 'rivestream_main' ? !showRivestreamMenu : false);
@@ -2429,6 +2348,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       const index = parseInt(sourceId.split('_')[1], 10);
       if (wiflixSources && wiflixSources[index]) {
         targetUrl = wiflixSources[index].url || '';
+      }
+    } else if (sourceType === 'j1f') {
+      const index = parseInt(sourceId.split('_')[1], 10);
+      if (j1fSources && j1fSources[index]) {
+        targetUrl = j1fSources[index].url || '';
       }
     } else if (sourceType === 'viper') {
       const index = parseInt(sourceId, 10);
@@ -2484,7 +2408,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     }, 500);
 
     // Close settings panel for embed sources (keep open for HLS sources to allow quality selection)
-    const embedTypes = ['frembed', 'custom', 'omega', 'coflix', 'vostfr', 'adfree', 'fstream', 'wiflix', 'viper', 'vox'];
+    const embedTypes = ['frembed', 'custom', 'omega', 'coflix', 'vostfr', 'adfree', 'fstream', 'wiflix', 'j1f', 'viper', 'vox'];
     if (embedTypes.includes(sourceType)) {
       // For embed sources, always close settings
       setShowSettings(false);
@@ -2637,10 +2561,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         (window as any).error429RetryCount = {};
         console.log('✅ Cleared 429 error retry counters');
       }
-      if ((window as any).error500RetryCount) {
-        (window as any).error500RetryCount = {};
-        console.log('✅ Cleared 500 error retry counters');
-      }
       if ((window as any).error502RetryCount) {
         (window as any).error502RetryCount = {};
         console.log('✅ Cleared 502 error retry counters');
@@ -2770,7 +2690,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       };
     } else if (Hls.isSupported()) {
       // Utiliser la configuration HLS optimisée selon le domaine
-      const hlsConfig = createHlsConfig(normalizedSrc);
+      const hlsConfig: any = createHlsConfig(normalizedSrc);
+      // Cinep/purstream masters can declare direct-.vtt subtitles that crash
+      // hls.js — route them through the proxy vttwrap endpoint. Video stays direct.
+      const isBravoSrc = Array.isArray(purstreamSources) && purstreamSources.some(s => s.url === normalizedSrc);
+      if (isBravoSrc && Hls) {
+        hlsConfig.pLoader = makeCinepSubtitlePLoader(Hls);
+      }
       console.log(`📡 [HLSPlayer] Initializing HLS with URL: ${normalizedSrc.substring(0, 100)}...`);
       const hls = new Hls(hlsConfig);
 
@@ -2940,7 +2866,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             // Si on est en train de lire normalement, nettoyer la liste des échecs
             if (!videoRef.current?.paused) {
               clearFailed429Segments();
-              clearFailed500Segments();
             }
           }
         }
@@ -2986,9 +2911,19 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           return;
         }
 
-        // Vérifier si c'est une erreur 429 (Too Many Requests), 500 (Internal Server Error) ou 502 (Bad Gateway)
+        // A broken/unsupported subtitle must never kill video playback — drop
+        // the subtitle track and continue instead of switching source.
+        if (isSubtitleLoadError(data)) {
+          console.warn('💬 Subtitle load/parse error — dropping subtitle, keeping playback:', data.details);
+          try {
+            if (hls.subtitleTrack >= 0) hls.subtitleTrack = -1;
+            (hls as any).subtitleDisplay = false;
+          } catch { /* ignore */ }
+          return;
+        }
+
+        // Vérifier si c'est une erreur 429 (Too Many Requests)
         const is429Error = data.response && data.response.code === 429;
-        const is500Error = data.response && data.response.code === 500;
         const isPulseTopstrime = src.includes('pulse.topstrime.online');
 
         // Gestion spécifique des erreurs audio/vidéo
@@ -3248,11 +3183,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           return;
         }
 
-        if (is500Error && isPulseTopstrime) {
-          handle500Error(hlsRef.current, videoRef, data);
-          return;
-        }
-
         if (data.fatal) {
           console.error('🚨 HLS Fatal Error:', data.type, data.details);
 
@@ -3403,11 +3333,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       // Seulement naviguer vers l'épisode suivant si la lecture en boucle n'est PAS activée
       if (nextMovie) {
         setShowNextMovie(true);
-      } else if (nextEpisode && autoNextEpisodeEnabled && !hasDeclinedNextEpisode) {
-        // Afficher l'overlay (qui gère le compte à rebours et la navigation)
-        setShowNextEpisodeOverlay(true);
-      } else if (!nextEpisode && !nextMovie && similarContent && similarContent.length > 0) {
-        setShowSimilarContent(true);
+      }
+      if (nextEpisode && onNextEpisode && autoNextEpisodeEnabled) {
+        onNextEpisode(nextEpisode.seasonNumber, nextEpisode.episodeNumber);
       }
     };
 
@@ -3420,7 +3348,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('ended', handleEnded);
     };
-  }, [nextMovie, nextEpisode, onNextEpisode, isLooping, onEnded, onPlayerEnded, onPlayerPlay, onPlayerPause, autoNextEpisodeEnabled, hasDeclinedNextEpisode, similarContent, audioEnhancerMode, volumeBoost, customAudio]);
+  }, [nextMovie, nextEpisode, onNextEpisode, isLooping, onEnded, onPlayerEnded, onPlayerPlay, onPlayerPause, autoNextEpisodeEnabled, audioEnhancerMode, volumeBoost, customAudio]);
 
   // Add seeked event listener for WatchParty seek sync
   useEffect(() => {
@@ -3610,12 +3538,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     }
 
     if (subtitleId.startsWith('internal:')) {
-      const lang = subtitleId.replace('internal:', '');
-      const track = Array.from(video.textTracks).find((t, idx) => `internal:${t.language || idx}` === subtitleId);
+      const track = Array.from(video.textTracks).find((t, idx) => `internal:${idx}` === subtitleId);
       if (track) {
         track.mode = 'hidden';
         setCurrentSubtitle(subtitleId);
-        setSelectedSubtitleLang(lang);
+        setSelectedSubtitleLang(track.language || null);
         const trackUrl = track.hasOwnProperty('src') ? (track as any).src : track.hasOwnProperty('url') ? (track as any).url : '';
         setSelectedSubtitleUrl(trackUrl);
         refreshActiveCues(video, track, subtitleStyle.delay);
@@ -3684,7 +3611,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           return;
         }
 
-        const res = await axios.get(osUrl, { headers: { 'User-Agent': 'Prowler/1.0' } });
+        const res = await axios.get(osUrl, { headers: { 'User-Agent': 'Movix/1.0' } });
         if (cancelled) return;
 
         if (Array.isArray(res.data)) {
@@ -3707,26 +3634,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     fetchAvailableLanguages();
     return () => { cancelled = true; };
   }, [movieId, tvShowId, seasonNumber, episodeNumber]);
-
-  // Persist autoFrenchSubs preference
-  useEffect(() => {
-    localStorage.setItem('autoFrenchSubs', String(autoFrenchSubs));
-  }, [autoFrenchSubs]);
-
-  // Auto-trigger: when French subtitles are available and setting is on, fetch them
-  useEffect(() => {
-    if (!autoFrenchSubs) return;
-    if (availableExternalLangCodes === null || externalLangsLoading) return;
-    if (!availableExternalLangCodes.has('fre')) return;
-
-    const mediaKey = [movieId ?? '', tvShowId ?? '', seasonNumber ?? '', episodeNumber ?? ''].join(':');
-    if (autoSubsLoadedForRef.current === mediaKey) return;
-
-    autoSubsLoadedForRef.current = mediaKey;
-    autoSubsPendingRef.current = true;
-    handleExternalLanguageSelect('fre');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFrenchSubs, availableExternalLangCodes, externalLangsLoading, movieId, tvShowId, seasonNumber, episodeNumber]);
 
   // When user selects an external language, query OpenSubtitles for that imdb id
   const handleExternalLanguageSelect = async (langCode: string) => {
@@ -3776,7 +3683,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
       // OpenSubtitles requires a User-Agent header; set a simple one
       console.log(`Fetching OpenSubtitles from: ${osUrl}`);
-      const res = await axios.get(osUrl, { headers: { 'User-Agent': 'Prowler/1.0' } });
+      const res = await axios.get(osUrl, { headers: { 'User-Agent': 'Movix/1.0' } });
       if (Array.isArray(res.data)) {
         console.log(`Found ${res.data.length} subtitle results for ${hasTvShowId ? 'TV show' : 'movie'}`);
         setExternalSubs(res.data);
@@ -3821,7 +3728,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           // Download and extract the .gz file locally using PAKO
           const response = await fetch(downloadLink, {
             headers: {
-              'User-Agent': 'Prowler/1.0'
+              'User-Agent': 'Movix/1.0'
             }
           });
 
@@ -3973,22 +3880,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     }
   };
 
-  // When auto-load is pending and OpenSubtitles results arrive, load the best French subtitle
-  useEffect(() => {
-    if (!autoSubsPendingRef.current || externalSubs.length === 0) return;
-    autoSubsPendingRef.current = false;
-
-    const best = externalSubs.reduce((a, b) => {
-      const scoreA = parseFloat(a.SubRating || '0') * 1000 + parseInt(a.SubDownloadsCnt || a.SubDownloadCount || '0', 10);
-      const scoreB = parseFloat(b.SubRating || '0') * 1000 + parseInt(b.SubDownloadsCnt || b.SubDownloadCount || '0', 10);
-      return scoreB > scoreA ? b : a;
-    }, externalSubs[0]);
-
-    const subId = `external:${best.IDSubtitle || best.IDSubtitleFile || '0'}`;
-    loadExternalSubtitle(best, subId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [externalSubs]);
-
   // Helper function to detect text encoding from byte array (exact same logic as server.js)
   const detectEncoding = (buffer: Uint8Array): string => {
     // Détecter BOM UTF-16/UTF-8 (exactement comme dans server.js)
@@ -4071,12 +3962,22 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     const adjustedTime = video.currentTime - delay;
 
     // Filter cues based on the adjusted time
-    const adjustedCues = Array.from(track.cues || []).filter(cue =>
+    const adjustedCues = (Array.from(track.cues || []) as VTTCue[]).filter(cue =>
       cue.startTime <= adjustedTime && adjustedTime <= cue.endTime
-    ) as VTTCue[];
+    );
 
-    setActiveSubtitleCues(adjustedCues);
-    setSubtitleContainerVisible(adjustedCues.length > 0);
+    // Segmented HLS WebVTT repeats the same cue across segment boundaries, so
+    // track.cues can contain identical cues that render twice. Dedup on time+text.
+    const seen = new Set<string>();
+    const dedupedCues = adjustedCues.filter(cue => {
+      const key = `${cue.startTime}-${cue.endTime}-${cue.text}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    setActiveSubtitleCues(dedupedCues);
+    setSubtitleContainerVisible(dedupedCues.length > 0);
 
   };
 
@@ -4967,7 +4868,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         const currentTime = video.currentTime;
         const wasPlaying = !video.paused;
 
-        // Step 1: Destroy HLS.js instance if it exists
+        // Step 1: Show the system picker FIRST, synchronously inside the user
+        // gesture. webkitShowPlaybackTargetPicker silently no-ops without
+        // transient activation — awaiting the source swap (manifest fetch)
+        // before showing it burns the gesture on slow networks. The user takes
+        // at least a second to pick a device, which gives the swap below time
+        // to finish in parallel.
+        await requestAirPlay(video);
+        console.log('[AirPlay] Device picker shown successfully');
+
+        // Step 2: Destroy HLS.js instance if it exists
         // AirPlay is incompatible with MSE (Media Source Extensions)
         if (hlsRef.current) {
           console.log('[AirPlay] Destroying HLS.js instance for native playback...');
@@ -4975,12 +4885,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           hlsRef.current = null;
         }
 
-        // Step 2: Switch to native Safari playback
+        // Step 3: Switch to native Safari playback
         // Safari has built-in HLS support that works with AirPlay
-        let airPlayUrl = src;
-        if (src.includes('darkibox.com')) {
-          airPlayUrl = buildApiProxyUrl(src);
-        }
+        const airPlayUrl = src;
 
         console.log('[AirPlay] Switching to native playback with URL:', airPlayUrl);
 
@@ -4996,17 +4903,37 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
         // Set the source directly (Safari will handle HLS natively)
         video.src = airPlayUrl;
-        video.currentTime = currentTime;
 
-        // Wait for video to be ready
-        await new Promise<void>((resolve) => {
-          const onLoadedMetadata = () => {
+        // Wait for video to be ready. Reject on media error and after 15s so
+        // a stream the native pipeline can't load (CORS, headers, dead host)
+        // doesn't leave the player stuck on the connecting spinner forever.
+        await new Promise<void>((resolve, reject) => {
+          const cleanupListeners = () => {
+            window.clearTimeout(timeoutId);
             video.removeEventListener('loadedmetadata', onLoadedMetadata);
+            video.removeEventListener('error', onError);
+          };
+          const onLoadedMetadata = () => {
+            cleanupListeners();
             resolve();
           };
+          const onError = () => {
+            cleanupListeners();
+            const mediaError = video.error;
+            reject(new Error(`AirPlay: native stream failed to load${mediaError ? ` (code ${mediaError.code})` : ''}`));
+          };
+          const timeoutId = window.setTimeout(() => {
+            cleanupListeners();
+            reject(new Error('AirPlay: timed out loading native stream'));
+          }, 15000);
           video.addEventListener('loadedmetadata', onLoadedMetadata);
+          video.addEventListener('error', onError);
           video.load();
         });
+
+        // Restore position only once metadata is ready — seeking before
+        // loadedmetadata gets discarded by Safari and playback restarts at 0.
+        video.currentTime = currentTime;
 
         // Resume playback if it was playing
         if (wasPlaying) {
@@ -5021,13 +4948,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         if ('disableRemotePlayback' in video) {
           (video as any).disableRemotePlayback = false;
         }
+
+        // Show the Remote Playback picker — must run inside the user gesture.
+        await requestAirPlay(video);
+        console.log('[AirPlay] Device picker shown successfully');
       }
-
-      // Step 3: Show AirPlay / Remote Playback device picker
-      // This must be called from a user gesture (button click)
-      await requestAirPlay(video);
-
-      console.log('[AirPlay] Device picker shown successfully');
 
     } catch (error) {
       console.error('[AirPlay] Error starting AirPlay:', error);
@@ -5047,6 +4972,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   };
 
   const loadCurrentMediaOnCastSession = useCallback(async (session: any) => {
+    const mySrc = src;
+    // Dedupe concurrent loads of the same src (startCasting + SESSION_STARTED
+    // both call this for a fresh session).
+    if (castLoadInFlightRef.current === mySrc) {
+      console.log('[Cast] Load already in flight for this src, skipping duplicate');
+      return;
+    }
+    castLoadInFlightRef.current = mySrc;
     try {
       setIsCastLoading(true);
       setCastError(null);
@@ -5090,6 +5023,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         isPlaying,
         subtitlesForCast,
         enableSubsOnCast,
+        // VOD content (movies / episodes) is seekable — BUFFERED is correct here
+        // (LIVE is only used by LiveTVPlayer for live channels).
+        'BUFFERED',
       );
 
       setIsCasting(true);
@@ -5098,12 +5034,24 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       console.log('Successfully started casting with language selection');
 
     } catch (error) {
+      // A newer load for a different src cancelled this one on the receiver
+      // (LOAD_INTERRUPTED / error 904). Expected during episode/server
+      // switches — not a user-facing failure.
+      if (castLoadInFlightRef.current !== mySrc) {
+        console.log('[Cast] Load superseded by a newer source, ignoring error');
+        return;
+      }
       console.error('Error starting cast:', error);
       setCastError(error instanceof Error ? error.message : t('watch.castError'));
       // Keep menu open so the user actually sees the error message.
       setShowCastMenu(true);
     } finally {
-      setIsCastLoading(false);
+      // Only the owning load clears the in-flight marker / spinner — a
+      // superseded load must not wipe the state of the one that replaced it.
+      if (castLoadInFlightRef.current === mySrc) {
+        castLoadInFlightRef.current = null;
+        setIsCastLoading(false);
+      }
     }
   }, [isPlaying, poster, src, t, title, tvShow?.name, subtitleUrl, currentSubtitle]);
 
@@ -5124,10 +5072,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         const streamUrl = bestStream?.url || src;
         const preferredStreamUrl = await preferFrenchAudioVariant(streamUrl, src);
 
-        let finalUrl = preferredStreamUrl;
-        if (finalUrl.includes('darkibox.com')) {
-          finalUrl = buildApiProxyUrl(finalUrl);
-        }
+        const finalUrl = preferredStreamUrl;
 
         const posterUrl = poster
           ? (poster.startsWith('http') ? poster : `https://image.tmdb.org/t/p/w500${poster}`)
@@ -5135,7 +5080,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
         await nativeCastBridge.loadMedia(
           finalUrl,
-          title || tvShow?.name || 'Prowler',
+          title || tvShow?.name || 'Movix',
           posterUrl,
           videoRef.current?.currentTime || 0,
         );
@@ -5495,11 +5440,24 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
       setCastSession(session);
 
+      const isResumed =
+        sessionState === castFramework?.SessionState?.SESSION_RESUMED ||
+        sessionState === 'SESSION_RESUMED';
+
+      // Resumed session (page reload / navigation while casting): the receiver
+      // is usually already playing. Re-loading media here would restart the TV
+      // from 0 — adopt the session as-is instead and let the src-change effect
+      // push new media only when the user actually switches episode/server.
+      if (isResumed && Array.isArray(session.media) && session.media.length > 0) {
+        lastLoadedCastSrcRef.current = src;
+        setIsCasting(true);
+        return;
+      }
+
       const shouldLoadMedia =
         sessionState === castFramework?.SessionState?.SESSION_STARTED ||
-        sessionState === castFramework?.SessionState?.SESSION_RESUMED ||
         sessionState === 'SESSION_STARTED' ||
-        sessionState === 'SESSION_RESUMED';
+        isResumed;
 
       if (shouldLoadMedia) {
         void loadCurrentMediaOnCastSession(session);
@@ -5537,9 +5495,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         castContext.removeEventListener(castStateEvent, handleCastStateChanged);
       }
     };
-  }, [loadCurrentMediaOnCastSession, castSdkReady]);
+  }, [loadCurrentMediaOnCastSession, castSdkReady, src]);
 
-  // Detect the Prowler Android app WebView cast bridge.
+  // Detect the Movix Android app WebView cast bridge.
   // When the React Native shell injects window.MovixAndroidCast, we route
   // casts through the on-device Google Cast SDK instead of the web SDK
   // (chrome.cast is not available inside Android WebView).
@@ -6013,11 +5971,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       saveProgress();
     }
 
-    // Skip intro button: visible during first 90s for TV episodes
-    if (tvShowId) {
-      setShowSkipIntro(player.currentTime > 1 && player.currentTime <= 90);
-    }
-
     // Afficher le film suivant ou l'épisode suivant selon le seuil configuré
     if (shouldShowNextContent(player.currentTime, player.duration)) {
       if (nextMovie && !showNextMovieOverlay && !hasIgnored) {
@@ -6182,7 +6135,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           const subEntries: { id: string; label: string }[] = [];
           if (video) {
             Array.from(video.textTracks).forEach((track, idx) => {
-              const id = `internal:${track.language || idx}`;
+              const id = `internal:${idx}`;
               const label = track.label || track.language || `Piste ${idx + 1}`;
               subEntries.push({ id, label });
             });
@@ -6386,8 +6339,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
   useEffect(() => {
     setHasDeclinedNextEpisode(false);
-    setShowSimilarContent(false);
-    setShowSkipIntro(false);
   }, [src]);
 
   useEffect(() => {
@@ -6919,24 +6870,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     const hls = hlsRef.current;
     if (hls) {
       const onHlsError = (_event: any, data: any) => {
-        // Log précis pour les sources Nakios
-        if (src?.includes('nakios-proxy')) {
-          const errType = data.type === 'networkError' ? '🌐 networkError'
-            : data.type === 'mediaError' ? '🎬 mediaError'
-            : data.type === 'keySystemError' ? '🔑 keySystemError'
-            : data.type;
-          console.error(
-            `[HLS_ERROR][NAKIOS] ${errType} | details=${data.details} | fatal=${data.fatal}` +
-            ` | httpStatus=${data.response?.code ?? 'N/A'} | url=${(data.url ?? data.frag?.url ?? '').substring(0, 120)}`
-          );
-          if (data.type === 'networkError') {
-            console.error('[HLS_ERROR][NAKIOS] → Segment ou manifest injoignable. Vérifier que le Worker proxy retourne bien CORS * et Content-Type correct.');
-          }
-          if (data.type === 'mediaError') {
-            console.error('[HLS_ERROR][NAKIOS] → Problème de décodage/buffer. Codec non supporté ou segments corrompus.');
-          }
-        }
-
         // Gestion de l'erreur 403 : auto-switch vers le prochain lecteur HLS disponible
         if (data.response && (data.response.code === 403 || data.response.code === 4033)) {
           console.warn('🚫 403/4033 Forbidden error detected - trying next HLS player...');
@@ -6950,18 +6883,23 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           return;
         }
 
-        // Vérifier si c'est une erreur 429 (Too Many Requests) ou 500 (Internal Server Error)
+        // A broken/unsupported subtitle must never kill video playback — drop
+        // the subtitle track and continue instead of switching source.
+        if (isSubtitleLoadError(data)) {
+          console.warn('💬 Subtitle load/parse error — dropping subtitle, keeping playback:', data.details);
+          try {
+            if (hls.subtitleTrack >= 0) hls.subtitleTrack = -1;
+            (hls as any).subtitleDisplay = false;
+          } catch { /* ignore */ }
+          return;
+        }
+
+        // Vérifier si c'est une erreur 429 (Too Many Requests)
         const is429Error = data.response && data.response.code === 429;
-        const is500Error = data.response && data.response.code === 500;
         const isPulseTopstrime = src.includes('pulse.topstrime.online');
 
         if (is429Error && isPulseTopstrime) {
           handle429Error(hls, videoRef, data, src);
-          return;
-        }
-
-        if (is500Error && isPulseTopstrime) {
-          handle500Error(hls, videoRef, data);
           return;
         }
 
@@ -7552,7 +7490,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       const video = videoRef.current;
       if (!video) return;
 
-      // Le premier caption devrait déjà être français grâce au tri des captions.
+      // Le premier caption devrait déjà être français grâce au tri dans WatchTv.tsx
       const firstCaption = rivestreamCaptions[0];
       const isFrench = firstCaption.label.toLowerCase().includes('français') ||
         firstCaption.label.toLowerCase().includes('french');
@@ -7798,9 +7736,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                   <div key={`group_${groupIndex}`} className="mb-6">
                     <h4 className="text-gray-400 text-xs uppercase tracking-wider mb-2 px-2">{group.title}</h4>
                     {group.sources.map(source => {
-                      // Skip individual VOSTFR sources handled in the dropdown (Videasy, Vidlink)
-                      // Exception: Purstream (id='purstream') is VF and rendered as standalone button
-                      if (source.type === 'vostfr' && source.id !== 'purstream') return null;
+                      // Skip rendering individual VOSTFR sources here, they are handled in the dropdown —
+                      // sauf Wavewatch qui est un lecteur autonome (bouton top-level dédié).
+                      if (source.type === 'vostfr' && source.id !== 'wavewatch') return null;
 
                       let isActive = false;
                       // Updated isActive logic for HLS sources
@@ -7818,19 +7756,24 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                         // Existing logic for embed sources
                         isActive = !!source.isActive || (onlyQualityMenu && embedType === source.type && embedUrl === source.url);
                       }
-                      const topLevelForPin: TopLevelSourceId | null = SOURCE_MAIN_TO_TOP_LEVEL[source.type] ?? null;
+                      // Wavewatch est un bouton top-level isolé (source.type reste 'vostfr' pour
+                      // rester hors du sous-menu VO/VOSTFR, cf. plus haut) donc absent de
+                      // SOURCE_MAIN_TO_TOP_LEVEL qui ne connaît que 'vostfr_main' (le groupe).
+                      const topLevelForPin: TopLevelSourceId | null = source.id === 'wavewatch'
+                        ? 'wavewatch'
+                        : (SOURCE_MAIN_TO_TOP_LEVEL[source.type] ?? null);
                       return (
                         <React.Fragment key={source.id}>
                           <div className="mb-2 flex items-stretch gap-2">
                             <button
                               onClick={() => handleSourceChange(source.type, source.id, source.url)}
                               disabled={(source.type === 'rivestream_hls' && loadingRivestream)}
-                              className={`w-full flex-1 px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isActive ? 'bg-gray-800 border-l-4 border-white/20 pl-3' : 'bg-gray-900/60 text-white'
+                              className={`w-full flex-1 px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isActive ? 'bg-gray-800 border-l-4 border-red-600 pl-3' : 'bg-gray-900/60 text-white'
                                 } ${onlyQualityMenu && embedType && embedUrl && source.type === embedType && source.url === embedUrl ? 'ring-2 ring-red-500 bg-gray-800/80' : ''} ${(source.type === 'rivestream_hls' && loadingRivestream) ? 'opacity-70 cursor-not-allowed' : ''
                                 }`}
                             >
                               <div className="min-w-0 flex flex-1 flex-col">
-                                <span className={`${isActive ? 'text-green-400 font-medium' : 'text-white'} ${(source.type === 'rivestream_hls' && loadingRivestream) ? 'animate-pulse' : ''
+                                <span className={`${isActive ? 'text-red-600 font-medium' : 'text-white'} ${(source.type === 'rivestream_hls' && loadingRivestream) ? 'animate-pulse' : ''
                                   }`}>
                                   {source.label}
                                   {topLevelForPin && __pinnedSourceId === topLevelForPin && (
@@ -7840,12 +7783,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                 {group.type === 'hls' && (source.type === 'mp4' || source.type === 'm3u8') && renderSourceQualityMeta(source.url, isActive, source.quality, source.label)}
                               </div>
                               <div className="ml-3 flex items-center gap-2">
-                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'bravo_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
+                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'bravo_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
                                   <ChevronRight className={`w-4 h-4 transition-transform ${(source.type === 'darkino_main' && showDarkinoMenu) ||
                                     (source.type === 'omega_main' && showOmegaMenu) ||
                                     (source.type === 'multi_main' && showCoflixMenu) ||
                                     (source.type === 'fstream_main' && showFstreamMenu) ||
                                     (source.type === 'wiflix_main' && showWiflixMenu) ||
+                                    (source.type === 'j1f_main' && showJ1fMenu) ||
                                     (source.type === 'nexus_main' && showNexusMenu) ||
                                     (source.type === 'rivestream_main' && showRivestreamMenu) ||
                                     (source.type === 'bravo_main' && showBravoMenu) ||
@@ -7855,9 +7799,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                   />
                                 )}
                                 {onlyQualityMenu && embedType && embedUrl && source.type === embedType && source.url === embedUrl && (
-                                  <span className="ml-2 text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.inProgress')}</span>
+                                  <span className="ml-2 text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.inProgress')}</span>
                                 )}
-                                {isActive && <span className="text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.active')}</span>}
+                                {isActive && <span className="text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
                               </div>
                             </button>
                             {topLevelForPin && (
@@ -7898,11 +7842,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                       >
                                         <button
                                           onClick={() => handleSourceChange('darkino', `darkino_${index}`, darkiSource.m3u8 || '')}
-                                          className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isDarkinoSourceActive ? 'bg-gray-800/80 border-l-2 border-white/20 pl-3' : 'bg-gray-900/40 text-gray-300'
+                                          className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isDarkinoSourceActive ? 'bg-gray-800/80 border-l-2 border-red-600 pl-3' : 'bg-gray-900/40 text-gray-300'
                                             }`}
                                         >
                                           <div className="min-w-0 flex flex-1 flex-col">
-                                            <span className={isDarkinoSourceActive ? 'text-green-400 font-medium' : 'text-white'}>
+                                            <span className={isDarkinoSourceActive ? 'text-red-600 font-medium' : 'text-white'}>
                                               {darkiSource.label || darkiSource.quality || `Source ${index + 1}`}
                                               {darkiHosterId && darkiHosterId !== 'unknown' && __pinnedHosterId === darkiHosterId && (
                                                 <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
@@ -7912,7 +7856,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                           </div>
                                           <div className="ml-3 flex items-center gap-2">
                                             <span className="text-xs text-gray-400">{darkiSource.language || t('watch.french')}</span>
-                                            {isDarkinoSourceActive && <span className="text-xs px-2 py-0.5 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.active')}</span>}
+                                            {isDarkinoSourceActive && <span className="text-xs px-2 py-0.5 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
                                           </div>
                                         </button>
                                         {__renderHosterPin(darkiHosterId)}
@@ -7948,11 +7892,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                       >
                                         <button
                                           onClick={() => handleSourceChange('nexus_hls', `nexus_hls_${index}`, nexusSource.url || '')}
-                                          className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isNexusHlsActive ? 'bg-gray-800/80 border-l-2 border-white/20 pl-3' : 'bg-gray-900/40 text-gray-300'
+                                          className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isNexusHlsActive ? 'bg-gray-800/80 border-l-2 border-red-600 pl-3' : 'bg-gray-900/40 text-gray-300'
                                             }`}
                                         >
                                           <div className="min-w-0 flex flex-1 flex-col">
-                                            <span className={isNexusHlsActive ? 'text-green-400 font-medium' : 'text-white'}>
+                                            <span className={isNexusHlsActive ? 'text-red-600 font-medium' : 'text-white'}>
                                           🚀 {nexusSource.label || `Nexus HLS ${index + 1}`}
                                           {nexusHlsHosterId && nexusHlsHosterId !== 'unknown' && __pinnedHosterId === nexusHlsHosterId && (
                                             <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
@@ -7960,7 +7904,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                         </span>
                                             {renderSourceQualityMeta(nexusSource.url, isNexusHlsActive, undefined, nexusSource.label || `Nexus HLS ${index + 1}`)}
                                           </div>
-                                          {isNexusHlsActive && <span className="ml-2 text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.active')}</span>}
+                                          {isNexusHlsActive && <span className="ml-2 text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
                                         </button>
                                         {__renderHosterPin(nexusHlsHosterId)}
                                         {renderCopySourceButton(nexusSource.url)}
@@ -7982,11 +7926,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                       >
                                         <button
                                           onClick={() => handleSourceChange('nexus_file', `nexus_file_${index}`, nexusSource.url || '')}
-                                          className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isNexusFileActive ? 'bg-gray-800/80 border-l-2 border-white/20 pl-3' : 'bg-gray-900/40 text-gray-300'
+                                          className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center ${isNexusFileActive ? 'bg-gray-800/80 border-l-2 border-red-600 pl-3' : 'bg-gray-900/40 text-gray-300'
                                             }`}
                                         >
                                           <div className="min-w-0 flex flex-1 flex-col">
-                                            <span className={isNexusFileActive ? 'text-green-400 font-medium' : 'text-white'}>
+                                            <span className={isNexusFileActive ? 'text-red-600 font-medium' : 'text-white'}>
                                           {nexusSource.label || `Nexus File ${index + 1}`}
                                           {nexusFileHosterId && nexusFileHosterId !== 'unknown' && __pinnedHosterId === nexusFileHosterId && (
                                             <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
@@ -7994,7 +7938,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                         </span>
                                             {renderSourceQualityMeta(nexusSource.url, isNexusFileActive, undefined, nexusSource.label || `Nexus File ${index + 1}`)}
                                           </div>
-                                          {isNexusFileActive && <span className="ml-2 text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.active')}</span>}
+                                          {isNexusFileActive && <span className="ml-2 text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
                                         </button>
                                         {__renderHosterPin(nexusFileHosterId)}
                                         {renderCopySourceButton(nexusSource.url)}
@@ -8042,7 +7986,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                           {(omegaSource.player?.toLowerCase().includes('supervideo') || omegaSource.player?.toLowerCase().includes('dropload')) && (
                                             <span className="text-xs text-gray-400">{t('watch.noAds')}</span>
                                           )}
-                                          {isEmbedActive && <span className="ml-2 text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                          {isEmbedActive && <span className="ml-2 text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.inProgress')}</span>}
                                         </motion.button>
                                         {__renderHosterPin(omegaHosterId)}
                                       </div>
@@ -8082,7 +8026,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                             )}
                                           </span>
                                           <span className="text-xs text-gray-400">{coflixSource.language || t('watch.french')}</span>
-                                          {isCoflixActive && <span className="ml-2 text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                          {isCoflixActive && <span className="ml-2 text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.inProgress')}</span>}
                                         </motion.button>
                                         {__renderHosterPin(coflixHosterId)}
                                       </div>
@@ -8104,18 +8048,27 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                   className="ml-4 pl-2 border-l-2 border-gray-700 mb-2"
                                 >
                                   {[
-                                    { id: 'vostfr',    label: 'Videasy' },
-                                    { id: 'vidlink',   label: 'Vidlink' },
+                                    { id: 'peachify', label: 'Peachify' },
+                                    { id: 'vostfr', label: 'Videasy' },
+                                    { id: 'vidlink', label: 'Vidlink' },
+                                    { id: 'vidsrccc', label: 'Vidsrc.io' },
+                                    { id: 'vidsrcwtf1', label: 'Vidsrc.wtf 1' }
                                   ].map((vostfrSource, index) => {
                                     // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
                                     // (épisode spécial / Spéciaux TMDB) tombe dans le fallback '#' qui fait
                                     // charger la page courante en boucle dans l'iframe.
                                     const sourceUrl = movieId ?
-                                      vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                                        `https://vidlink.pro/movie/${movieId}` :
+                                      vostfrSource.id === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
+                                        vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
+                                          vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/movie?tmdb=${movieId}` :
+                                            vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
+                                                `https://vidsrc.wtf/api/1/movie/?id=${movieId}` :
                                       (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
-                                        vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                          `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                        vostfrSource.id === 'peachify' ? `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626` :
+                                          vostfrSource.id === 'vidlink' ? `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                            vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}` :
+                                              vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                                  `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
                                         '#'; // Fallback if neither movie nor TV info is present
 
                                     // Active state check for VOSTFR sources in main menu
@@ -8132,7 +8085,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                       >
                                         <span>{vostfrSource.label}</span>
                                         <span className="text-xs text-gray-400">{t('watch.voVostfr')}</span>
-                                        {isVostfrActive && <span className="ml-2 text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                        {isVostfrActive && <span className="ml-2 text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.inProgress')}</span>}
                                       </motion.button>
                                     );
                                   })}
@@ -8205,7 +8158,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                                   </span>
                                                   <div className="flex items-center gap-2">
                                                     <span className="text-xs text-gray-500">{fstreamSource.category}</span>
-                                                    {isFstreamActive && <span className="text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                    {isFstreamActive && <span className="text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.inProgress')}</span>}
                                                   </div>
                                                 </motion.button>
                                                 {__renderHosterPin(fstreamHosterId)}
@@ -8281,10 +8234,82 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                                   </span>
                                                   <div className="flex items-center gap-2">
                                                     <span className="text-xs text-gray-500">{wiflixSource.category}</span>
-                                                    {isWiflixActive && <span className="text-xs px-2 py-1 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                    {isWiflixActive && <span className="text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.inProgress')}</span>}
                                                   </div>
                                                 </motion.button>
                                                 {__renderHosterPin(wiflixHosterId)}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    }).filter(Boolean);
+                                  })()}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          )}
+                          {/* Ajout du menu déroulant J1F / 1jour1film */}
+                          {source.type === 'j1f_main' && (
+                            <AnimatePresence>
+                              {showJ1fMenu && (
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.95, transformOrigin: "top" }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.95 }}
+                                  transition={{ duration: 0.2, ease: "easeOut" }}
+                                  className="ml-4 pl-2 border-l-2 border-gray-700 mb-2"
+                                >
+                                  {j1fSources && j1fSources.length > 0 && (() => {
+                                    const sourcesByCategory = j1fSources.reduce((acc, source) => {
+                                      const category = source.category || 'Default';
+                                      if (!acc[category]) acc[category] = [];
+                                      acc[category].push(source);
+                                      return acc;
+                                    }, {} as Record<string, typeof j1fSources>);
+
+                                    const categoryOrder = [
+                                      { key: 'VF', label: t('watch.french'), flagCode: 'FR' },
+                                      { key: 'VOSTFR', label: t('watch.voSubtitledFr'), flagCode: 'GB' }
+                                    ];
+
+                                    return categoryOrder.map((cat) => {
+                                      const categorySources = sourcesByCategory[cat.key];
+                                      if (!categorySources || categorySources.length === 0) return null;
+
+                                      return (
+                                        <div key={`j1f_category_${cat.key}`} className="mb-3">
+                                          <div className="flex items-center gap-2 mb-2 px-2">
+                                            <span className="text-lg"><ReactCountryFlag countryCode={cat.flagCode} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }} /></span>
+                                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                              {cat.label} ({categorySources.length})
+                                            </span>
+                                          </div>
+                                          {categorySources.map((j1fSource, index) => {
+                                            const globalIndex = j1fSources.findIndex(s => s.url === j1fSource.url);
+                                            const isJ1fActive = onlyQualityMenu && embedType === 'j1f' && embedUrl === j1fSource.url;
+                                            const j1fHosterId = __detectHosterFromUrl(j1fSource.url, j1fSource.label);
+                                            return (
+                                              <div key={`j1f_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
+                                                <motion.button
+                                                  initial={{ opacity: 0, x: -20 }}
+                                                  animate={{ opacity: 1, x: 0 }}
+                                                  transition={{ duration: 0.2, delay: index * 0.03 }}
+                                                  onClick={() => handleSourceChange('j1f', `j1f_${globalIndex}`, j1fSource.url)}
+                                                  className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isJ1fActive ? 'ring-2 ring-red-500 bg-gray-800/80' : ''}`}
+                                                >
+                                                  <span>
+                                                    {j1fSource.label}
+                                                    {j1fHosterId && j1fHosterId !== 'unknown' && __pinnedHosterId === j1fHosterId && (
+                                                      <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
+                                                    )}
+                                                  </span>
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-gray-500">{j1fSource.category}</span>
+                                                    {isJ1fActive && <span className="text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                  </div>
+                                                </motion.button>
+                                                {__renderHosterPin(j1fHosterId)}
                                               </div>
                                             );
                                           })}
@@ -8325,7 +8350,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                             className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isBravoActive ? 'ring-2 ring-red-500 bg-gray-800/80' : ''}`}
                                           >
                                             <div className="min-w-0 flex flex-1 flex-col">
-                                              <span className={isBravoActive ? 'text-green-400 font-medium' : 'text-white'}>
+                                              <span className={isBravoActive ? 'text-red-600 font-medium' : 'text-white'}>
                                                 {bravoSource.label}
                                                 {bravoHosterId && bravoHosterId !== 'unknown' && __pinnedHosterId === bravoHosterId && (
                                                   <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
@@ -8333,7 +8358,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                               </span>
                                               {renderSourceQualityMeta(bravoSource.url, isBravoActive, undefined, bravoSource.label)}
                                             </div>
-                                            {isBravoActive && <span className="text-xs px-2 py-0.5 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.active')}</span>}
+                                            {isBravoActive && <span className="text-xs px-2 py-0.5 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
                                           </button>
                                           {__renderHosterPin(bravoHosterId)}
                                           {renderCopySourceButton(bravoSource.url)}
@@ -8415,7 +8440,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                                   className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isRivestreamActive ? 'ring-2 ring-red-500 bg-gray-800/80' : ''}`}
                                                 >
                                                   <div className="min-w-0 flex flex-1 flex-col">
-                                                    <span className={isRivestreamActive ? 'text-green-400 font-medium' : 'text-white'}>
+                                                    <span className={isRivestreamActive ? 'text-red-600 font-medium' : 'text-white'}>
                                                       {rivestreamSource.label}
                                                       {rivestreamHosterId && rivestreamHosterId !== 'unknown' && __pinnedHosterId === rivestreamHosterId && (
                                                         <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
@@ -8425,7 +8450,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                                   </div>
                                                   <div className="ml-3 flex items-center gap-2">
                                                     <span className="text-xs text-gray-400">{rivestreamSource.service}</span>
-                                                    {isRivestreamActive && <span className="text-xs px-2 py-0.5 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.active')}</span>}
+                                                    {isRivestreamActive && <span className="text-xs px-2 py-0.5 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
                                                   </div>
                                                 </button>
                                                 {__renderHosterPin(rivestreamHosterId)}
@@ -8472,7 +8497,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                           className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isViperSourceActive ? 'ring-2 ring-red-500 bg-gray-800/80' : ''}`}
                                         >
                                           <div className="flex flex-col">
-                                            <span className={isViperSourceActive ? 'text-green-400 font-medium' : 'text-white'}>
+                                            <span className={isViperSourceActive ? 'text-red-600 font-medium' : 'text-white'}>
                                               {vSource.label}
                                               {viperHosterId && viperHosterId !== 'unknown' && __pinnedHosterId === viperHosterId && (
                                                 <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
@@ -8483,7 +8508,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                               {vSource.quality && <span className="text-[10px] text-gray-500">{vSource.quality}</span>}
                                             </div>
                                           </div>
-                                          {isViperSourceActive && <span className="text-xs px-2 py-0.5 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.active')}</span>}
+                                          {isViperSourceActive && <span className="text-xs px-2 py-0.5 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
                                         </motion.button>
                                         {__renderHosterPin(viperHosterId)}
                                       </div>
@@ -8517,14 +8542,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                           className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isVoxSourceActive ? 'ring-2 ring-red-500 bg-gray-800/80' : ''}`}
                                         >
                                           <div className="flex flex-col">
-                                            <span className={isVoxSourceActive ? 'text-green-400 font-medium' : 'text-white'}>
+                                            <span className={isVoxSourceActive ? 'text-red-600 font-medium' : 'text-white'}>
                                               {vSource.name}
                                               {voxHosterId && voxHosterId !== 'unknown' && __pinnedHosterId === voxHosterId && (
                                                 <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
                                               )}
                                             </span>
                                           </div>
-                                          {isVoxSourceActive && <span className="text-xs px-2 py-0.5 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full">{t('watch.active')}</span>}
+                                          {isVoxSourceActive && <span className="text-xs px-2 py-0.5 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
                                         </motion.button>
                                         {__renderHosterPin(voxHosterId)}
                                       </div>
@@ -9082,7 +9107,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           <div className="absolute top-0 left-0 right-0 z-20 bg-black/95 shadow-lg">
             <div className="flex items-center justify-between px-6 py-3">
               <div className="flex items-center gap-3">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11zM21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
                 </svg>
                 <div className="flex flex-col">
@@ -9190,7 +9215,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                       }
                     } catch (e) { console.error('Cast toggle play/pause failed', e); }
                   }}
-                  className="inline-flex items-center gap-2 sm:gap-2 px-5 sm:px-6 py-3 sm:py-3 rounded-xl bg-gradient-to-r from-green-400 to-purple-500 text-white hover:bg-red-700 transition-all duration-200 border border-white/20 hover:border-white/20 font-bold text-sm sm:text-base shadow-xl backdrop-blur-sm min-w-0"
+                  className="inline-flex items-center gap-2 sm:gap-2 px-5 sm:px-6 py-3 sm:py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-all duration-200 border border-red-500 hover:border-red-400 font-bold text-sm sm:text-base shadow-xl backdrop-blur-sm min-w-0"
                   title={t('watch.playPause')}
                 >
                   {(() => {
@@ -9305,7 +9330,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                         style={{ width: 'var(--slider-progress)' }}
                       />
                       <div
-                        className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-400 to-purple-500 rounded-full"
+                        className="absolute top-0 left-0 h-full bg-red-500 rounded-full"
                         style={{ width: 'var(--slider-fill)' }}
                       />
                       <div
@@ -9349,7 +9374,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         >
           <video
             ref={videoRef}
-            className={`w-full h-full ${getVideoObjectFitClass()} ${isFullscreen ? '!w-full !h-full !object-contain' : className} ${!isPlaying ? 'grayscale' : ''} subtitles-disabled transition-all duration-500 ${isFullscreenAnimating ? 'z-[9999] scale-[1.04] grayscale bg-black' : ''} ${shouldHideCursor ? 'cursor-none' : ''}`}
+            className={`w-full h-full ${getVideoObjectFitClass()} ${className} ${!isPlaying ? 'grayscale' : ''} subtitles-disabled transition-all duration-500 ${isFullscreenAnimating ? 'z-[9999] scale-[1.04] grayscale bg-black' : ''} ${shouldHideCursor ? 'cursor-none' : ''}`}
             style={{
               filter: !isPlaying ? undefined : (videoOledMode !== 'off' ? getVideoOledFilter() : undefined),
               transition: 'filter 0.5s ease'
@@ -9503,7 +9528,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           <span className="text-lg font-bold">{t('watch.zoomValue', { value: Math.round(zoomState.scale * 100) })}</span>
           <button
             onClick={resetZoom}
-            className="bg-gradient-to-r from-green-400 to-purple-500 hover:bg-gradient-to-r hover:from-green-400 to-purple-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+            className="bg-red-600 hover:bg-red-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -9578,7 +9603,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-green-400 to-purple-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center"
+            className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 flex items-center"
           >
             <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -9603,8 +9628,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
               const processSubtitleText = (text: string): string => {
                 const lines = text.split('\n');
-                const processedLines = lines.map(line => escapeHtml(line.trim()))
-                  .filter(line => line.length > 0);
+                const processedLines = lines
+                  .map(line => line.trim())
+                  .filter(line => line.length > 0)
+                  // Escape for XSS safety, then restore i/b/u formatting tags
+                  // (VTT/SRT italic/bold/underline) so they render instead of
+                  // showing as literal <i>…</i>.
+                  .map(line => escapeHtml(line)
+                    .replace(/&lt;(\/?)([biu])(?:\.[^&\s]*)?&gt;/gi, '<$1$2>'));
                 return processedLines.join('<br>');
               };
 
@@ -9636,7 +9667,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             </div>
           )}
           <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-            <div className="w-16 h-16 border-4 border-white/20 border-t-transparent rounded-full animate-spin" />
+            <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
           </div>
           <div className="absolute left-0 right-0 bottom-20 z-10 flex justify-center pointer-events-none">
             <p className="text-sm text-gray-300 text-center px-4 bg-black/50 rounded-lg py-2">
@@ -9662,7 +9693,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
           <div className="bg-gray-900/90 p-8 rounded-xl border border-red-500/50 max-w-lg text-center backdrop-blur-sm shadow-2xl relative">
             <div className="mx-auto w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4 animate-pulse">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
@@ -9680,7 +9711,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                   window.dispatchEvent(new CustomEvent('showSourcesMenu'));
                 }
               }}
-              className="px-6 py-2.5 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center mx-auto gap-2"
+              className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center mx-auto gap-2"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
@@ -10064,7 +10095,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           tabIndex={showControls ? 0 : -1}
           className="absolute top-16 right-2 z-50 flex items-center gap-2 px-4 py-2 rounded-lg bg-black/70 backdrop-blur-sm border border-gray-700 text-white font-medium text-sm shadow-lg border-opacity-50"
         >
-          <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
           <span>{t('watch.sources')}</span>
@@ -10137,11 +10168,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               style={{ width: `${getBufferedWidth()}%` }}
             />
             <div
-              className="absolute h-full bg-gradient-to-r from-green-400 to-purple-500 rounded-full"
+              className="absolute h-full bg-red-600 rounded-full"
               style={{ width: `${(currentTime / duration) * 100}%` }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gradient-to-r from-green-400 to-purple-500 rounded-full -ml-2"
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-red-600 rounded-full -ml-2"
               style={{ left: `${(currentTime / duration) * 100}%` }}
             />
           </div>
@@ -10226,7 +10257,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               <div className="relative flex items-center h-[24px]">
                 <button
                   onClick={toggleWatchParty}
-                  className="text-white hover:text-green-400 transition-colors flex items-center justify-center"
+                  className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
                   aria-label={t('watch.watchParty')}
                 >
                   <motion.div
@@ -10248,7 +10279,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               <div className="relative flex items-center h-[24px]">
                 <button
                   onClick={togglePip}
-                  className="text-white hover:text-green-400 transition-colors flex items-center justify-center"
+                  className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
                   aria-label={t('watch.pictureInPicture')}
                 >
                   <motion.div
@@ -10270,7 +10301,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               <div className="relative flex items-center h-[24px]">
                 <button
                   onClick={toggleLoop}
-                  className="text-white hover:text-green-400 transition-colors flex items-center justify-center"
+                  className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
                   aria-label={t('watch.loopPlayback')}
                 >
                   <motion.div
@@ -10294,7 +10325,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                   e.stopPropagation();
                   enterLockMode();
                 }}
-                className="text-white hover:text-green-400 transition-colors flex items-center justify-center h-[24px]"
+                className="text-white hover:text-red-600 transition-colors flex items-center justify-center h-[24px]"
                 aria-label={t('watch.lockControls')}
                 title={t('watch.lockControls')}
               >
@@ -10303,7 +10334,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               <div className="relative flex items-center h-[24px]">
                 <button
                   onClick={() => setShowSettings(!showSettings)}
-                  className="text-white hover:text-green-400 transition-colors flex items-center justify-center"
+                  className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
                 >
                   <motion.div
                     animate={{
@@ -10320,7 +10351,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               </div>
               <button
                 onClick={toggleFullscreen}
-                className="text-white hover:text-green-400 transition-colors flex items-center justify-center h-[24px]"
+                className="text-white hover:text-red-600 transition-colors flex items-center justify-center h-[24px]"
               >
                 {isFullscreen ?
                   <Minimize size={isMobile ? 20 : 24} /> :
@@ -10401,7 +10432,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
                         setShowCastMenu(false);
                       }}
-                      className="text-white hover:text-green-400 transition-colors flex items-center justify-center"
+                      className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
                       aria-label={airPlayAvailable && !castAvailable ? t('watch.airplay') : castAvailable && !airPlayAvailable ? t('watch.cast') : t('watch.streamTo')}
                     >
                       <motion.div
@@ -10471,7 +10502,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                         // AirPlay only
                         <div className="space-y-2">
                           <button
-                            onClick={() => videoRef.current && requestAirPlay(videoRef.current)}
+                            onClick={() => toggleAirPlay()}
                             disabled={isAirPlayLoading}
                             className={`w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded transition-colors flex items-center gap-2 ${isAirPlayLoading ? 'opacity-50 cursor-not-allowed' : ''
                               }`}
@@ -10549,10 +10580,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                         <div className="space-y-2">
                           {airPlayAvailable && (
                             <button
-                              onClick={() => {
-                                setShowCastMenu(false);
-                                videoRef.current && requestAirPlay(videoRef.current);
-                              }}
+                              onClick={() => toggleAirPlay()}
                               disabled={isAirPlayLoading}
                               className={`w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded transition-colors flex items-center gap-2 ${isAirPlayLoading ? 'opacity-50 cursor-not-allowed' : ''
                                 }`}
@@ -10656,111 +10684,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           }}
         />
       )}
-      {/* Skip Intro Button — bottom-right, always visible during first 90s of TV episodes */}
-      <AnimatePresence>
-        {showSkipIntro && !isLoading && controls && (
-          <motion.button
-            key="skip-intro"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 0.2 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (videoRef.current) videoRef.current.currentTime = 90;
-              setShowSkipIntro(false);
-            }}
-            className="absolute bottom-24 md:bottom-28 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl
-                       backdrop-blur-md bg-white/10 border border-white/20 text-white text-sm font-medium
-                       hover:bg-white/20 hover:border-white/40 transition-all duration-200 shadow-lg"
-          >
-            <span>Passer l'intro</span>
-            <ChevronRight className="w-4 h-4" />
-          </motion.button>
-        )}
-      </AnimatePresence>
-
-      {/* Previous Episode Button — bottom-left, always visible, discrete liquid glass */}
-      <AnimatePresence>
-        {onPreviousEpisode && !(seasonNumber === 1 && episodeNumber === 1) && controls && (
-          <motion.button
-            key="prev-episode"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onPreviousEpisode();
-            }}
-            className="absolute bottom-24 md:bottom-28 left-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl
-                       backdrop-blur-md bg-white/10 border border-white/20 text-white text-sm font-medium
-                       hover:bg-white/20 hover:border-white/40 transition-all duration-200 shadow-lg"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            <span className="hidden sm:inline">Épisode précédent</span>
-          </motion.button>
-        )}
-      </AnimatePresence>
-
-      {/* Similar Content Overlay — shown when video ends with no next episode */}
-      <AnimatePresence>
-        {showSimilarContent && similarContent && similarContent.length > 0 && (
-          <motion.div
-            key="similar-content"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[200] flex flex-col items-center justify-center p-6
-                       backdrop-blur-md bg-black/80"
-          >
-            <div className="w-full max-w-3xl">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-white text-xl font-bold">À regarder ensuite</h2>
-                <button
-                  onClick={() => setShowSimilarContent(false)}
-                  className="text-white/60 hover:text-white transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-                {similarContent.slice(0, 6).map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      if (onSimilarContentSelect) {
-                        onSimilarContentSelect(item.id, item.media_type || (movieId ? 'movie' : 'tv'));
-                      }
-                    }}
-                    className="text-left rounded-xl overflow-hidden border border-white/10
-                               hover:border-white/40 hover:scale-105 transition-all duration-200 focus:outline-none"
-                  >
-                    {item.poster_path ? (
-                      <img
-                        src={`https://image.tmdb.org/t/p/w300${item.poster_path}`}
-                        alt={item.title || item.name || ''}
-                        className="w-full aspect-[2/3] object-cover"
-                      />
-                    ) : (
-                      <div className="w-full aspect-[2/3] bg-white/10 flex items-center justify-center">
-                        <span className="text-white/40 text-xs">No image</span>
-                      </div>
-                    )}
-                    <div className="p-1.5 bg-black/60">
-                      <p className="text-white text-xs font-medium truncate">{item.title || item.name}</p>
-                      <p className="text-yellow-400 text-xs">★ {(item.vote_average || 0).toFixed(1)}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Settings Panel - Moved outside the main controls conditional */}
       <AnimatePresence>
         {showSettings && (
@@ -10792,8 +10715,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             onlyQualityMenu,
             embedType,
             loadingRivestream,
-            loadingNakios,
-            nakiosStreamUrl,
             handleSourceChange,
             renderSourceQualityMeta,
             renderCopySourceButton,
@@ -10802,6 +10723,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             showCoflixMenu,
             showFstreamMenu,
             showWiflixMenu,
+            showJ1fMenu,
             showNexusMenu,
             showRivestreamMenu,
             showBravoMenu,
@@ -10812,6 +10734,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             coflixSources,
             fstreamSources,
             wiflixSources,
+            j1fSources,
             rivestreamSources,
             rivestreamCaptions,
             getOriginalUrl,
@@ -10839,8 +10762,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             loadingSubtitle,
             loadExternalSubtitle,
             setLoadingSubtitle,
-            autoFrenchSubs,
-            setAutoFrenchSubs,
             selectedExternalSub,
             externalSubs,
             setCurrentSubtitle,
@@ -11199,7 +11120,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
                 {/* Lecture */}
-                <div className="col-span-1 sm:col-span-2 text-xs font-bold text-green-400 uppercase tracking-wider mt-2 mb-1">{t('watch.shortcutsPlayback')}</div>
+                <div className="col-span-1 sm:col-span-2 text-xs font-bold text-red-400 uppercase tracking-wider mt-2 mb-1">{t('watch.shortcutsPlayback')}</div>
                 {[
                   ['Espace / K', t('watch.shortcutPlayPause')],
                   ['J', t('watch.shortcutRewind10s')],
@@ -11217,7 +11138,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 ))}
 
                 {/* Volume */}
-                <div className="col-span-1 sm:col-span-2 text-xs font-bold text-green-400 uppercase tracking-wider mt-3 mb-1">{t('watch.volume')}</div>
+                <div className="col-span-1 sm:col-span-2 text-xs font-bold text-red-400 uppercase tracking-wider mt-3 mb-1">{t('watch.volume')}</div>
                 {[
                   ['↑ / ↓', t('watch.shortcutVolumeAdjust')],
                   ['M', t('watch.shortcutToggleMute')],
@@ -11229,7 +11150,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 ))}
 
                 {/* Vitesse */}
-                <div className="col-span-1 sm:col-span-2 text-xs font-bold text-green-400 uppercase tracking-wider mt-3 mb-1">{t('watch.speed')}</div>
+                <div className="col-span-1 sm:col-span-2 text-xs font-bold text-red-400 uppercase tracking-wider mt-3 mb-1">{t('watch.speed')}</div>
                 {[
                   ['Shift + > / <', t('watch.shortcutSpeedAdjust')],
                   ['+ / -', t('watch.shortcutSpeedAdjust')],
@@ -11244,7 +11165,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 ))}
 
                 {/* Affichage */}
-                <div className="col-span-1 sm:col-span-2 text-xs font-bold text-green-400 uppercase tracking-wider mt-3 mb-1">{t('watch.shortcutsDisplay')}</div>
+                <div className="col-span-1 sm:col-span-2 text-xs font-bold text-red-400 uppercase tracking-wider mt-3 mb-1">{t('watch.shortcutsDisplay')}</div>
                 {[
                   ['F', t('watch.shortcutToggleFullscreen')],
                   ['P', t('watch.shortcutTogglePip')],
@@ -11471,102 +11392,100 @@ const NextUpPrompt: React.FC<{
 
 const NextEpisodePrompt: React.FC<NextEpisodePromptProps> = ({ nextEpisode, tvShow, onPlay, onIgnore, shouldHide, getMaskedContent }) => {
   const { t } = useTranslation();
-  const [countdown, setCountdown] = useState(10);
-  const intervalRef = React.useRef<NodeJS.Timeout | null>(null);
+  const handlePlay = () => {
+    onPlay();
+  };
+  const isMobile = window.innerWidth < 768;
+  const isLandscape = window.innerWidth > window.innerHeight;
 
-  useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalRef.current!);
-          onPlay();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [onPlay]);
-
-  const handleCancel = () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    onIgnore();
+  // Utilise la même logique de positionnement que NextUpPrompt
+  const getPositionClasses = () => {
+    const isFullscreen = !!document.fullscreenElement;
+    if (isMobile) {
+      if (isLandscape) {
+        // Mobile paysage : bas droite, plus petit
+        return {
+          container: `${isFullscreen ? 'bottom-16' : 'bottom-4'} right-4 w-64 h-36`,
+          image: 'w-16'
+        };
+      } else {
+        // Mobile portrait : bas centre, presque toute la largeur
+        return {
+          container: `${isFullscreen ? 'bottom-16' : 'bottom-2'} left-2 right-2 w-auto h-40`,
+          image: 'w-20'
+        };
+      }
+    } else {
+      // Desktop : bas droite, plus grand
+      return {
+        container: `${isFullscreen ? 'bottom-20' : 'bottom-4'} right-4 w-96 h-48`,
+        image: 'w-32'
+      };
+    }
   };
 
-  const isMobile = window.innerWidth < 768;
-  const isFullscreen = !!document.fullscreenElement;
+  const positionClasses = getPositionClasses();
 
   if (!nextEpisode) return null;
 
-  const epNum = nextEpisode.episodeNumber || nextEpisode.episode_number;
-  const season = nextEpisode.seasonNumber || nextEpisode.season_number;
-  const epName = nextEpisode.name || nextEpisode.title || '';
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 20, scale: 0.97 }}
-      transition={{ duration: 0.25, ease: 'easeOut' }}
-      className={`absolute ${isFullscreen ? 'bottom-20' : 'bottom-20'} right-4 z-[150]
-                  w-80 rounded-2xl overflow-hidden
-                  backdrop-blur-md bg-white/10 border border-white/20 shadow-2xl`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className={`absolute bottom-0 ${positionClasses.container} bg-black/80 rounded-lg overflow-hidden`}
     >
-      {/* Countdown progress bar */}
-      <div className="relative h-1 bg-white/20">
-        <motion.div
-          className="absolute inset-y-0 left-0 bg-white/70"
-          initial={{ width: '100%' }}
-          animate={{ width: '0%' }}
-          transition={{ duration: 10, ease: 'linear' }}
-        />
-      </div>
-
-      <div className="flex gap-3 p-4">
-        {tvShow?.backdrop_path && !shouldHide('episodeImages') && (
-          <img
-            src={`https://image.tmdb.org/t/p/w300${tvShow.backdrop_path}`}
-            className="w-24 h-16 object-cover rounded-lg flex-shrink-0"
-            alt={tvShow.name}
-          />
+      <div className="flex h-full">
+        {tvShow?.backdrop_path && (
+          shouldHide('episodeImages') ? (
+            <div className={`h-full ${positionClasses.image} bg-gray-600 flex items-center justify-center`}>
+              <span className="text-gray-400 text-xs">{t('watch.hiddenImage')}</span>
+            </div>
+          ) : (
+            <img
+              src={`https://image.tmdb.org/t/p/w500${tvShow.backdrop_path}`}
+              className={`h-full ${positionClasses.image} object-cover`}
+              alt={tvShow.name}
+            />
+          )
         )}
-        <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-start mb-1">
-            <p className="text-white/60 text-xs font-medium uppercase tracking-wide">Épisode suivant</p>
-            <button onClick={handleCancel} className="text-white/50 hover:text-white transition-colors ml-2 flex-shrink-0">
-              <X size={14} />
+        <div className="flex-1 p-4 flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-start">
+              <h3 className={`${isMobile ? 'text-base' : 'text-lg'} font-bold mb-1`}>{t('watch.upNext')}</h3>
+              <button
+                onClick={onIgnore}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <p className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium`}>
+              {shouldHide('episodeNames')
+                ? getMaskedContent((nextEpisode.name || nextEpisode.title || ''), 'episodeNames', undefined, nextEpisode.episodeNumber || nextEpisode.episode_number)
+                : `${nextEpisode.episodeNumber || nextEpisode.episode_number}. ${nextEpisode.name || nextEpisode.title || ''}`}
+            </p>
+
+            <p className={`${isLandscape && isMobile ? 'hidden' : 'text-xs line-clamp-1'} ${!isMobile ? 'text-gray-400 line-clamp-2' : ''} mt-1`}>
+              {shouldHide('episodeOverviews')
+                ? getMaskedContent(nextEpisode.overview || '', 'episodeOverviews', undefined, nextEpisode.episodeNumber || nextEpisode.episode_number)
+                : (nextEpisode.overview || '')}
+            </p>
+          </div>
+          <div className="flex gap-2 mt-1">
+            <button
+              onClick={handlePlay}
+              className={`px-4 py-1 bg-white text-black ${isMobile ? 'text-xs' : 'text-sm'} font-medium rounded hover:bg-gray-200 transition-colors`}
+            >
+              {t('watch.playback')}
+            </button>
+            <button
+              onClick={onIgnore}
+              className={`px-4 py-1 bg-gray-600/50 text-white ${isMobile ? 'text-xs' : 'text-sm'} font-medium rounded hover:bg-gray-600 transition-colors`}
+            >
+              {t('watch.later')}
             </button>
           </div>
-          {season && epNum && (
-            <p className="text-white/60 text-xs mb-0.5">S{season}:E{String(epNum).padStart(2, '0')}</p>
-          )}
-          <p className="text-white text-sm font-semibold truncate">
-            {shouldHide('episodeNames')
-              ? getMaskedContent(epName, 'episodeNames', undefined, epNum)
-              : (isMobile ? epName : epName)}
-          </p>
         </div>
-      </div>
-
-      <div className="flex gap-2 px-4 pb-4">
-        <button
-          onClick={onPlay}
-          className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl
-                     bg-white text-black text-sm font-semibold
-                     hover:bg-white/90 transition-colors"
-        >
-          <Play size={14} />
-          <span>Regarder ({countdown}s)</span>
-        </button>
-        <button
-          onClick={handleCancel}
-          className="py-2 px-3 rounded-xl
-                     backdrop-blur-md bg-white/10 border border-white/20
-                     text-white text-sm font-medium
-                     hover:bg-white/20 transition-colors"
-        >
-          Annuler
-        </button>
       </div>
     </motion.div>
   );
