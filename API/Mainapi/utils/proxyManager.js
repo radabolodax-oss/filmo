@@ -11,7 +11,21 @@ const { SocksProxyAgent } = require("socks-proxy-agent");
 const { HttpProxyAgent } = require("http-proxy-agent");
 const { HttpsProxyAgent } = require("https-proxy-agent");
 const tough = require("tough-cookie");
-const initCycleTLS = require("cycletls");
+// cycletls spawns a Go-compiled subprocess binary for TLS-fingerprint
+// Cloudflare bypass -- no Android build exists, so it's excluded from the
+// mobile/local package.json entirely. Guard the require so its absence
+// doesn't crash app boot; getCycleTLS() below throws a clear error instead,
+// which the (already try/catch-wrapped) LecteurVideo/1jour1film/CineStream
+// /AnimeSama call sites turn into a normal "source unavailable" failure.
+let initCycleTLS = null;
+try {
+  initCycleTLS = require("cycletls");
+} catch (e) {
+  console.warn(
+    "[proxyManager] cycletls not installed (expected in mobile/local mode) — TLS-fingerprint bypass sources will be skipped:",
+    e.message,
+  );
+}
 
 // === PROXY AGENT CACHES ===
 const proxyAgentCache = new Map();
@@ -45,7 +59,9 @@ const DARKINO_403_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 let darkino403CooldownUntil = 0; // Timestamp jusqu'auquel on ne fait plus de requ\u00eates
 
 // === CPASMAL CONFIGURATION ===
-const CPASMAL_BASE_URL = "https://www.cpasmal.rip";
+// Domaine rotatif (site pirate) — surchargeable via env sans toucher au code
+// quand www.cpasmal.rip devient injoignable (DNS mort / saisie de domaine).
+const CPASMAL_BASE_URL = process.env.CPASMAL_BASE_URL || "https://www.cpasmal.rip";
 
 const cpasmalJar = new tough.CookieJar(null, { rejectPublicSuffixes: false });
 
@@ -565,6 +581,11 @@ let cycleTLSInitializing = false;
 const cycleTLSWaiters = [];
 
 async function getCycleTLS() {
+  if (!initCycleTLS) {
+    throw new Error(
+      "cycletls unavailable in this environment (mobile/local mode) — TLS-fingerprint bypass sources are disabled",
+    );
+  }
   if (cycleTLSInstance) return cycleTLSInstance;
   if (cycleTLSInitializing) {
     return new Promise((resolve) => cycleTLSWaiters.push(resolve));
@@ -763,6 +784,151 @@ async function makeLecteurVideoRequest(targetUrl, options = {}) {
     `[LECTEURVIDEO] tous les proxies ont echoue pour ${cleanTargetUrl}`,
   );
   throw lastError || new Error("[LECTEURVIDEO] Tous les proxies ont echoue");
+}
+
+// 1jour1film (Cloudflare-fronted) via CycleTLS + rotation sur le pool
+// HTTP_PROXIES/SOCKS5_PROXIES existant (meme pool que LecteurVideo). Retourne
+// {data,status,headers} au format axios. timeout en SECONDES (CycleTLS).
+async function make1j1fRequest(targetUrl, options = {}) {
+  const { headers = {}, timeout = 15, method = "get", body = "" } = options;
+  const cleanTargetUrl = targetUrl.trim();
+  const lowerMethod = String(method).toLowerCase();
+
+  const cycleHeaders = {
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    ...headers,
+  };
+
+  const isCfBlock = (status, b) =>
+    (status === 403 || status === 503) &&
+    typeof b === "string" &&
+    (b.includes("cf-wrapper") ||
+      b.includes("Just a moment") ||
+      b.includes("cloudflare"));
+  const shouldRotate = (status, b) =>
+    (status >= 500 && status < 600) || isCfBlock(status, b);
+
+  const cycleTLS = await getCycleTLS();
+  const asAxiosLike = (resp) => ({
+    data: typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body),
+    status: resp.status,
+    headers: resp.headers || {},
+  });
+
+  const doRequest = (proxyUrl) =>
+    cycleTLS(
+      cleanTargetUrl,
+      {
+        body,
+        ja3: CHROME_JA3,
+        userAgent: CHROME_UA,
+        headers: cycleHeaders,
+        timeout,
+        ...(proxyUrl ? { proxy: proxyUrl } : {}),
+      },
+      lowerMethod,
+    );
+
+  const { proxies, useSocks } = pickLecteurVideoProxyCandidates();
+
+  if (!proxies || proxies.length === 0) {
+    return asAxiosLike(await doRequest(null));
+  }
+
+  let lastResult = null;
+  let lastError = null;
+  for (let i = 0; i < proxies.length; i++) {
+    const proxy = proxies[i];
+    const auth = proxy.auth ? `${proxy.auth}@` : "";
+    const proxyUrl = useSocks
+      ? `socks5h://${auth}${proxy.host}:${proxy.port}`
+      : `http://${auth}${proxy.host}:${proxy.port}`;
+    try {
+      const result = asAxiosLike(await doRequest(proxyUrl));
+      if (shouldRotate(result.status, result.data)) {
+        lastResult = result;
+        continue;
+      }
+      return result; // 2xx, ou 4xx definitif
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (lastResult) return lastResult;
+  throw lastError || new Error("[1J1F] Tous les proxies ont echoue");
+}
+
+// CineStream (fallback films pour Wiflix, cf. routes/cinestream.js) via CycleTLS
+// + rotation sur le pool HTTP_PROXIES/SOCKS5_PROXIES existant (meme mecanisme que
+// LecteurVideo/1jour1film). Ne throw jamais sur un statut HTTP (meme 5xx/525) —
+// l'appelant regex la reponse et trouve simplement "not found" si l'upstream flanche.
+async function makeCinestreamRequest(targetUrl, options = {}) {
+  const { headers = {}, timeout = 15 } = options;
+  const cleanTargetUrl = targetUrl.trim();
+
+  const cycleHeaders = {
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    Referer: "https://cinestream.info/",
+    ...headers,
+  };
+
+  const isCfBlock = (status, body) =>
+    status === 403 &&
+    typeof body === "string" &&
+    (body.includes("cf-wrapper") || body.includes("cloudflare"));
+  const shouldRotate = (status, body) =>
+    (status >= 500 && status < 600) || isCfBlock(status, body);
+
+  const cycleTLS = await getCycleTLS();
+  const asAxiosLike = (resp) => ({
+    data: typeof resp.body === "string" ? resp.body : JSON.stringify(resp.body),
+    status: resp.status,
+    headers: resp.headers || {},
+  });
+
+  const { proxies, useSocks } = pickLecteurVideoProxyCandidates();
+
+  if (!proxies || proxies.length === 0) {
+    const resp = await cycleTLS(
+      cleanTargetUrl,
+      { body: "", ja3: CHROME_JA3, userAgent: CHROME_UA, headers: cycleHeaders, timeout },
+      "get",
+    );
+    return asAxiosLike(resp);
+  }
+
+  let lastResult = null;
+  let lastError = null;
+
+  for (let i = 0; i < proxies.length; i++) {
+    const proxy = proxies[i];
+    const auth = proxy.auth ? `${proxy.auth}@` : "";
+    const proxyUrl = useSocks
+      ? `socks5h://${auth}${proxy.host}:${proxy.port}`
+      : `http://${auth}${proxy.host}:${proxy.port}`;
+
+    try {
+      const resp = await cycleTLS(
+        cleanTargetUrl,
+        { body: "", ja3: CHROME_JA3, userAgent: CHROME_UA, proxy: proxyUrl, headers: cycleHeaders, timeout },
+        "get",
+      );
+      const result = asAxiosLike(resp);
+      if (shouldRotate(result.status, result.data)) {
+        lastResult = result;
+        continue;
+      }
+      return result; // 2xx, ou 4xx definitif
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (lastResult) return lastResult;
+  throw lastError || new Error("[CINESTREAM] Tous les proxies ont echoue");
 }
 
 // Fonction AnimeSama avec CycleTLS (cloudscraper-style : JA3 Chrome pour bypass Cloudflare).
@@ -1922,6 +2088,8 @@ module.exports = {
   makeCoflixRequest,
   makeLecteurVideoRequest,
   makeAnimeSamaRequest,
+  make1j1fRequest,
+  makeCinestreamRequest,
 
   // SOCKS5 proxies
   PROXIES,

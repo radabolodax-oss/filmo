@@ -456,16 +456,6 @@ app.use('/api/help', require('./routes/helpFeedback'));
 app.use('/api/darkiworld', darkiworldRouter);
 app.use('/api/drama', voirdramaRouter);
 app.use('/api/ftv', francetvRouter);
-const purstreamRouter = require('./routes/purstream');
-purstreamRouter.configure({
-  TMDB_API_KEY,
-  TMDB_API_URL,
-  PROXY_SERVER_URL: process.env.PROXY_SERVER_URL,
-  getFromCacheNoExpiration,
-  saveToCache,
-  shouldUpdateCache,
-});
-app.use("/api/purstream", purstreamRouter);
 
 const proxyRouter = require('./routes/proxyRouter');
 app.use('/proxy', proxyRouter);

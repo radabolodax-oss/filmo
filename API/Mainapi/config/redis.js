@@ -3,6 +3,16 @@
  * Extracted from server.js — centralizes Redis configuration.
  */
 
+// --- Mobile/offline backend switch -----------------------------------------
+// Set REDIS_BACKEND=memory (see server-mobile.js) to swap the whole module
+// for config/redisMemory.js (in-process Map, no Redis/Memurai server needed
+// -- for running on a phone). Default (unset) path below is 100% unchanged
+// from before -- normal desktop `npm run dev` / `node server.js` is unaffected.
+if (process.env.REDIS_BACKEND === 'memory') {
+  module.exports = require('./redisMemory');
+  return;
+}
+
 const Redis = require('ioredis');
 
 // === REDIS CACHE POUR OPTIMISER LES PERFORMANCES ===

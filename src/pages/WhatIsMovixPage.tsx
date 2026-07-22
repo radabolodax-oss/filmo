@@ -14,16 +14,11 @@ const supportedSources = [
   { name: 'Cpasmal', color: '#ffffff' },
   { name: 'Anime-Sama', color: '#ec4899' },
   { name: 'France.tv', color: '#14b8a6' },
-  { name: 'WiTV', color: '#f59e0b' },
-  { name: 'Sosplay', color: '#ef4444' },
-  { name: 'Bolaloca', color: '#10b981' },
-  { name: 'LiveTV873', color: '#38bdf8' },
   { name: 'Frembed', color: '#6366f1' },
   { name: 'Darkiworld', color: '#22c55e' },
   { name: 'VoirDrama', color: '#ffffff' },
   { name: 'FStream', color: '#06b6d4' },
   { name: 'French-Stream', color: '#e11d48' },
-  { name: 'Purstream', color: '#d946ef' },
 ];
 
 // Timeline / Histoire de Prowler
@@ -299,7 +294,6 @@ const WhatIsMovixPage: React.FC = () => {
             {[
               { icon: <Globe className="w-6 h-6" />, title: t('whatIsMovix.multiSources'), desc: t('whatIsMovix.multiSourcesDesc'), color: '#3b82f6' },
               { icon: <Film className="w-6 h-6" />, title: t('whatIsMovix.hugeCatalog'), desc: t('whatIsMovix.hugeCatalogDesc'), color: '#f97316' },
-              { icon: <Tv className="w-6 h-6" />, title: t('whatIsMovix.directTV'), desc: t('whatIsMovix.directTVDesc'), color: '#14b8a6' },
               { icon: <Users className="w-6 h-6" />, title: t('whatIsMovix.watchPartyFeature'), desc: t('whatIsMovix.watchPartyFeatureDesc'), color: '#ec4899' },
               { icon: <Star className="w-6 h-6" />, title: t('whatIsMovix.sharedLists'), desc: t('whatIsMovix.sharedListsDesc'), color: '#f59e0b' },
               { icon: <Sparkles className="w-6 h-6" />, title: t('whatIsMovix.modernUI'), desc: t('whatIsMovix.modernUIDesc'), color: '#ffffff' },

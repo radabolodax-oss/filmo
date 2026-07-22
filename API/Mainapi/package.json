@@ -46,6 +46,7 @@
     "proper-lockfile": "^4.1.2",
     "socket.io": "^4.8.3",
     "socks-proxy-agent": "^8.0.5",
+    "sql.js": "^1.14.1",
     "sqlite3": "^5.1.7",
     "tiny-secp256k1": "^2.2.4",
     "tough-cookie": "^5.1.2",

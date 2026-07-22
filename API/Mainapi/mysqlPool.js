@@ -1,3 +1,13 @@
+// --- Mobile/offline backend switch -----------------------------------------
+// Set DB_BACKEND=sqlite (see server-mobile.js) to swap the whole module for
+// mysqlPoolSqlite.js (sql.js-backed, no MySQL server needed -- for running
+// on a phone). Default (unset) path below is 100% unchanged from before --
+// normal desktop `npm run dev` / `node server.js` is unaffected.
+if (process.env.DB_BACKEND === 'sqlite') {
+  module.exports = require('./mysqlPoolSqlite');
+  return;
+}
+
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 

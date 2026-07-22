@@ -1606,7 +1606,6 @@ const WatchPartyRoom: React.FC = () => {
                     url: nexusSource.url,
                     label: nexusSource.label
                   })) || []}
-                  purstreamSources={bravoSources}
                   mp4Sources={mp4Sources}
                   rivestreamSources={roomInfo.media?.rivestreamSources?.map(rsSource => ({
                     url: rsSource.url,

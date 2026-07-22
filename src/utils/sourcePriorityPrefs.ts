@@ -28,7 +28,7 @@ type SchemaVersion = 1 | 2;
  * n'impose pas d'ordre sémantique — c'est ici (dans le builder des défauts) que
  * l'ordre fonctionnel est défini.
  *
- * Ordre legacy : nexus_hls > nexus_file > bravo > mp4 > darkino > fstream > omega >
+ * Ordre legacy : nexus_hls > nexus_file > mp4 > darkino > fstream > omega >
  * wiflix > viper > coflix > custom > frembed > vox > vostfr > rivestream_hls.
  *
  * Note design : la spec §3 fusionne Films et Séries en une seule catégorie
@@ -38,24 +38,28 @@ type SchemaVersion = 1 | 2;
  * Les utilisateurs qui préfèrent l'ancien ordre TV peuvent le recomposer
  * manuellement via Settings → Priorité des sources.
  *
- * Les ids `viper`, `vox`, `rivestream_hls`, `bravo` sont présents mais
+ * Les ids `viper`, `vox`, `rivestream_hls` sont présents mais
  * n'ont de sens que pour certaines pages (film vs série vs anime) — ils
  * resteront simplement indisponibles (hasData=false) sur les pages qui ne
  * les fournissent pas.
  */
 const DEFAULT_MOVIES_TV_ORDER: readonly TopLevelSourceId[] = [
-  'nexus_hls', 'bravo', 'mp4', 'darkino',
+  'nexus_hls', 'mp4', 'darkino',
   'fstream', 'omega', 'wiflix', 'viper', 'coflix',
   'custom', 'frembed', 'vox', 'vostfr',
 ];
 
 /**
  * Ordre par défaut des hosters pour la catégorie Animes.
- * Scope volontairement restreint (anime-sama ne renvoie qu'un sous-ensemble) :
- * vidmoly, sibnet, smoothpre, seekstreaming (détection # incluse), minochinos.
+ * Scope étendu suite au portage de 7 extracteurs additionnels (déjà utilisés côté
+ * Films/Séries) vers WatchAnime : voe, uqload, vidzy, fsvid, doodstream, darkibox.
+ * Insérés après vidmoly/sibnet (priorité historique VF/VOSTFR la plus fiable) mais
+ * avant smoothpre/seekstreaming/minochinos (hosters sans extracteur HLS dédié ou
+ * au pattern de détection très large) pour préserver le comportement existant.
  */
 const DEFAULT_ANIME_HOSTER_ORDER: readonly HosterId[] = [
-  'vidmoly', 'sibnet', 'smoothpre', 'seekstreaming', 'minochinos',
+  'vidmoly', 'sibnet', 'voe', 'doodstream', 'uqload', 'vidzy', 'fsvid', 'darkibox',
+  'smoothpre', 'seekstreaming', 'minochinos',
 ];
 
 export function buildDefaults(): SourcePriorityPrefs {

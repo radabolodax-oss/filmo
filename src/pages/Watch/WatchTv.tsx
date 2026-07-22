@@ -18,7 +18,7 @@ import { getTmdbId, encodeId } from '../../utils/idEncoder';
 import { useAntiSpoilerSettings } from '../../hooks/useAntiSpoilerSettings';
 import { generateRivestreamSecretKey } from '../../utils/rivestreamSecretKey';
 import { useWrappedTracker } from '../../hooks/useWrappedTracker';
-import { isUserVip, getVipHeaders } from '../../utils/authUtils';
+import { getVipHeaders } from '../../utils/authUtils';
 import { isExtensionAvailable } from '../../utils/extensionProxy';
 import { RIVESTREAM_PROXIES } from '../../config/rivestreamProxy';
 import { buildProxyUrl } from '../../config/runtime';
@@ -593,10 +593,6 @@ const WatchTv: React.FC = () => {
   const [selectedVoxSource, setSelectedVoxSource] = useState<number>(0);
   const [loadingVox, setLoadingVox] = useState(true);
 
-  // PurStream (Bravo) HLS states
-  const [purstreamSources, setPurstreamSources] = useState<{ url: string; label: string }[]>([]);
-  const canUseBravo = isUserVip() || isExtensionAvailable();
-
   // Rivestream VO/VOSTFR HLS states
   const [rivestreamSources, setRivestreamSources] = useState<{ url: string; label: string; quality: number; service: string; category: string }[]>([]);
   const [selectedRivestreamSource, setSelectedRivestreamSource] = useState<number>(0);
@@ -1080,7 +1076,6 @@ const WatchTv: React.FC = () => {
       (selectedSource === 'darkino' && darkinoSources.length > 0) ||
       (selectedSource === 'mp4' && (mp4Sources.length > 0 || sibnetUrl)) ||
       (selectedSource === 'm3u8' && adFreeM3u8Url) ||
-      (selectedSource === 'bravo' && purstreamSources.length > 0 && canUseBravo) ||
       (selectedSource === 'rivestream' && rivestreamSources.length > 0) ||
       (selectedSource === 'rivestream_hls' && (rivestreamSources.length > 0 || loadingRivestream))) {
       setShowSourceButton(false);
@@ -1306,20 +1301,6 @@ const WatchTv: React.FC = () => {
           return omegaDataResult;
         })();
 
-        // ========== CHECK PURSTREAM (BRAVO) SOURCE ==========
-        const purstreamPromise = (async () => {
-          try {
-            const purstreamResponse = await axios.get(`${MAIN_API}/api/purstream/tv/${id}/stream`, {
-              params: { season: seasonNumber, episode: episodeNumber },
-              headers: { ...getVipHeaders() }
-            });
-            return purstreamResponse.data;
-          } catch (error) {
-            console.error('Error fetching PurStream TV sources:', error);
-            return null;
-          }
-        })();
-
         // ========== CHECK FSTREAM SOURCE ==========
         const fstreamPromise = (async () => {
           try {
@@ -1415,7 +1396,6 @@ const WatchTv: React.FC = () => {
           frembedAvailabilityResult,
           coflixResult,
           rawOmegaData,
-          purstreamResult,
           fstreamResult,
           wiflixResult,
           viperResult,
@@ -1428,7 +1408,6 @@ const WatchTv: React.FC = () => {
           frembedAvailabilityPromise,
           coflixPromise,
           omegaPromise,
-          purstreamPromise,
           fstreamPromise,
           wiflixPromise,
           viperPromise,
@@ -1512,40 +1491,6 @@ const WatchTv: React.FC = () => {
         // ========== INITIALISATION DES CONTAINERS POUR SOURCES EXTRAITES ==========
         let finalHlsSources: { url: string; label: string }[] = [];
         let finalFileSources: { url: string; label: string }[] = [];
-        let localBravoSources: { url: string; label: string }[] = [];
-
-        // ========== PURSTREAM (BRAVO) SOURCES (réservé VIP/extension) ==========
-        if (purstreamResult && purstreamResult.sources && purstreamResult.sources.length > 0) {
-          console.log('?? Processing PurStream (Bravo) result:', purstreamResult.sources.length, 'sources');
-          const rawBravo = purstreamResult.sources
-            .filter((s: { url: string; name: string; format: string }) => s.url)
-            .map((s: { url: string; name: string; format: string }) => ({
-              url: s.url,
-              label: (s.name || 'HLS').replace(/^pur\s*\|\s*/i, '').replace(/\s*\|\s*/g, ' - '),
-            }));
-          // Pré-tri par priorité hoster (M4) avec fallback raw si tous unknown.
-          const prefsBv0 = getSourcePriorityPrefs();
-          const annotatedBravo = rawBravo.map((s) => ({
-            ...s,
-            type: (detectHoster(s.url || '', {
-              patternOverrides: prefsBv0.patternOverrides,
-              customHosters: prefsBv0.customHosters,
-            }) ?? detectHoster(s.label || '', {
-              patternOverrides: prefsBv0.patternOverrides,
-              customHosters: prefsBv0.customHosters,
-            })) ?? 'unknown',
-          }));
-          const allUnknown = annotatedBravo.every((s) => s.type === 'unknown');
-          localBravoSources = allUnknown
-            ? rawBravo
-            : (sortHostersByPriority(annotatedBravo, { category: 'moviesTv', topLevel: 'bravo' }) as typeof rawBravo);
-          // Stocker les sources brutes — la gate canUseBravo est appliquée au
-          // render. Évite une race au mount où isExtensionAvailable() n'a pas
-          // encore vu l'extension/userscript injecter ses flags et bloquerait
-          // définitivement les sources même quand l'injection finit par arriver.
-          setPurstreamSources(localBravoSources);
-          console.log(`? PurStream (Bravo) sources set: ${localBravoSources.length}`);
-        }
 
         // Process Firebase darkibox links for m3u8 extraction (HIGH PRIORITY)
         if (customLinksResult.customLinks && customLinksResult.customLinks.length > 0) {
@@ -2680,7 +2625,7 @@ const WatchTv: React.FC = () => {
         // Par défaut (prefs vides) → ordre hardcodé historique, 100% rétrocompat.
         //
         // Legacy priority pour référence :
-        // nexus_hls > [embedseek custom promu] > nexus_file > bravo > mp4 > darkino >
+        // nexus_hls > [embedseek custom promu] > nexus_file > mp4 > darkino >
         // omega (supervideo) > wiflix > viper > adFree (m3u8) > mp4 (dup) > fstream >
         // omega (deep fallback) > wiflix/viper (deep) > coflix (multi) > fstream (deep) >
         // custom > frembed > vox > vostfr
@@ -2759,34 +2704,6 @@ const WatchTv: React.FC = () => {
               currentSourceRef.current = 'nexus_file';
               setEmbedUrl(null);
               setEmbedType(null);
-              setOnlyVostfrAvailable(false);
-              return true;
-            }
-            case 'bravo': {
-              const prefsBv = getSourcePriorityPrefs();
-              const sortedBravo = sortHostersByPriority(
-                localBravoSources.map((s: any) => ({
-                  ...s,
-                  type: (detectHoster(s.url || '', {
-                    patternOverrides: prefsBv.patternOverrides,
-                    customHosters: prefsBv.customHosters,
-                  }) ?? detectHoster(s.label || '', {
-                    patternOverrides: prefsBv.patternOverrides,
-                    customHosters: prefsBv.customHosters,
-                  })) ?? 'unknown',
-                })),
-                { category: 'moviesTv', topLevel: 'bravo' },
-              );
-              const allUnknownBv = sortedBravo.every((s: any) => s.type === 'unknown');
-              const bestBravo = allUnknownBv
-                ? localBravoSources[localBravoSources.length - 1]
-                : sortedBravo[0];
-              console.log(`✅ Selecting BRAVO as default source (HLS) → ${bestBravo.label}`);
-              setSelectedSource('bravo');
-              setVideoSource(bestBravo.url);
-              setEmbedUrl(null);
-              setEmbedType(null);
-              currentSourceRef.current = 'bravo';
               setOnlyVostfrAvailable(false);
               return true;
             }
@@ -3038,7 +2955,6 @@ const WatchTv: React.FC = () => {
           const availability: SourceAvailability[] = [
             { id: 'nexus_hls', hasData: finalHlsSources.length > 0 },
             { id: 'nexus_file', hasData: finalFileSources.length > 0 },
-            { id: 'bravo', hasData: localBravoSources.length > 0 && canUseBravo },
             { id: 'mp4', hasData: fetchedMp4Sources.length > 0 },
             { id: 'darkino', hasData: !!(darkinoResult && darkinoResult.available && darkinoResult.sources.length > 0) },
             { id: 'fstream', hasData: fstreamProcessedSources.length > 0 },
@@ -3140,7 +3056,7 @@ const WatchTv: React.FC = () => {
       }
 
       // Handle HLS source selections
-      if (type === 'nexus_hls' || type === 'nexus_file' || type === 'darkino' || type === 'mp4' || type === 'm3u8' || type === 'sibnet' || type === 'rivestream_hls' || type === 'rivestream' || type === 'bravo') {
+      if (type === 'nexus_hls' || type === 'nexus_file' || type === 'darkino' || type === 'mp4' || type === 'm3u8' || type === 'sibnet' || type === 'rivestream_hls' || type === 'rivestream') {
         // Ne pas cacher l'iframe si c'est juste le déclencheur de chargement Rivestream
         if (type !== 'rivestream_hls') {
           setEmbedUrl(null); // Hide iframe
@@ -3263,23 +3179,6 @@ const WatchTv: React.FC = () => {
             currentSourceRef.current = 'rivestream';
           }
         }
-        else if (type === 'bravo') {
-          // Sélection d'une source Bravo (PurStream) depuis le menu
-          const index = purstreamSources.findIndex(s => s.url === url);
-          const chosenBravoUrl = index !== -1
-            ? purstreamSources[index].url
-            : (purstreamSources[purstreamSources.length - 1]?.url || '');
-          if (chosenBravoUrl) {
-            if (!canUseBravo) {
-              return;
-            }
-            setSelectedSource('bravo');
-            setVideoSource(chosenBravoUrl);
-            setEmbedUrl(null);
-            setEmbedType(null);
-            currentSourceRef.current = 'bravo';
-          }
-        }
       }
       // Handle Embed source selections
       else if (type === 'frembed' || type === 'custom' || type === 'vostfr' || type === 'omega' || type === 'coflix' || type === 'fstream' || type === 'wiflix' || type === 'j1f' || type === 'viper' || type === 'adfree' || type === 'vox') {
@@ -3357,7 +3256,7 @@ const WatchTv: React.FC = () => {
       window.removeEventListener('sourceChange', handleSourceChangeFromMenu as EventListener);
     };
   }, [
-    nexusHlsSources, nexusFileSources, darkinoSources, mp4Sources, adFreeM3u8Url, sibnetUrl, darkinoAvailable, fstreamSources, rivestreamSources, viperSources, voxSources, purstreamSources, sortedFstream, sortedWiflix, sortedJ1f, j1fSources, canUseBravo, // Data sources
+    nexusHlsSources, nexusFileSources, darkinoSources, mp4Sources, adFreeM3u8Url, sibnetUrl, darkinoAvailable, fstreamSources, rivestreamSources, viperSources, voxSources, sortedFstream, sortedWiflix, sortedJ1f, j1fSources, // Data sources
     setOnlyVostfrAvailable, setShowEmbedQuality, // State setters for visibility
     setEmbedUrl, setEmbedType, setSelectedSource, // General source setters
     setSelectedNexusHlsSource, setSelectedNexusFileSource, setSelectedDarkinoSource, setSelectedMp4Source, setSelectedFstreamSource, setVideoSource, setSelectedViperSource, // HLS specific setters
@@ -3408,9 +3307,6 @@ const WatchTv: React.FC = () => {
     }
   } else if (selectedSource === 'rivestream_hls') {
     // Cas spécifique pour le retry Rivestream qui définit directement videoSource
-    hlsSrc = videoSource || '';
-  } else if (selectedSource === 'bravo') {
-    // Sources Bravo (PurStream) — utilise videoSource défini lors de la sélection
     hlsSrc = videoSource || '';
   }
 
@@ -4142,12 +4038,6 @@ const WatchTv: React.FC = () => {
           rivestreamSources[selectedRivestreamSource];
         return formatPremidSourceDetail(source?.label, source?.service);
       }
-      case 'bravo': {
-        const source =
-          purstreamSources.find(entry => entry.url === videoSource) ||
-          purstreamSources[0];
-        return formatPremidSourceDetail(source?.label);
-      }
       default:
         return undefined;
     }
@@ -4339,7 +4229,6 @@ const WatchTv: React.FC = () => {
               rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
               rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
               loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-              purstreamSources={purstreamSources}
               adFreeM3u8Url={adFreeM3u8Url}
               autoPlay={false}
               onlyQualityMenu={true}
@@ -4692,7 +4581,6 @@ const WatchTv: React.FC = () => {
                       rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
                       rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
                       loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-                      purstreamSources={purstreamSources}
                       adFreeM3u8Url={adFreeM3u8Url}
                       autoPlay={false}
                       onlyQualityMenu={true}
@@ -4747,7 +4635,6 @@ const WatchTv: React.FC = () => {
             rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
             rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
             loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-            purstreamSources={purstreamSources}
             adFreeM3u8Url={adFreeM3u8Url}
             // Pass TV show context for UI/progress saving
             tvShow={hlsTvShowProp}
@@ -4811,7 +4698,6 @@ const WatchTv: React.FC = () => {
                       rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
                       rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
                       loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-                      purstreamSources={purstreamSources}
                       adFreeM3u8Url={adFreeM3u8Url}
                       autoPlay={false}
                       onlyQualityMenu={true}
@@ -4854,7 +4740,6 @@ const WatchTv: React.FC = () => {
             rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
             rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
             loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-            purstreamSources={purstreamSources}
             adFreeM3u8Url={adFreeM3u8Url}
             autoPlay={false}
             onlyQualityMenu={true}

@@ -26,13 +26,6 @@ interface NexusSourceInfo {
   type: 'hls' | 'file';
 }
 
-interface BravoSourceInfo {
-  url: string;
-  label: string;
-  language?: string;
-  isVip?: boolean;
-}
-
 interface Mp4SourceInfo {
   url: string;
   label: string;
@@ -64,15 +57,13 @@ interface MediaInfo {
   episodeNumber?: number;
   nightflixSources?: NightflixSourceInfo[];
   nexusSources?: NexusSourceInfo[];
-  bravoSources?: BravoSourceInfo[];
   mp4Sources?: Mp4SourceInfo[];
   rivestreamSources?: RivestreamSourceInfo[];
   captions?: CaptionInfo[];
   currentNexusSource?: NexusSourceInfo;
-  currentBravoSource?: BravoSourceInfo;
 }
 
-type DefaultSourceFamily = 'nightflix' | 'nexus' | 'bravo' | 'mp4' | 'rivestream';
+type DefaultSourceFamily = 'nightflix' | 'nexus' | 'mp4' | 'rivestream';
 
 interface DefaultSourceOption {
   value: string;
@@ -85,31 +76,7 @@ const buildSourceLabel = (...parts: Array<string | number | undefined>): string 
     .map(String)
     .join(' • ');
 
-const resolveBravoSources = (mediaInfo: MediaInfo): BravoSourceInfo[] => {
-  if (mediaInfo.bravoSources?.length) {
-    return mediaInfo.bravoSources;
-  }
-
-  return (mediaInfo.mp4Sources || [])
-    .filter((source) => {
-      const label = source.label?.toLowerCase() || '';
-      return label.includes('bravo') || source.url === mediaInfo.currentBravoSource?.url;
-    })
-    .map((source) => ({
-      url: source.url,
-      label: source.label,
-      language: source.language,
-      isVip: source.isVip
-    }));
-};
-
-const resolveGenericMp4Sources = (mediaInfo: MediaInfo, bravoSources: BravoSourceInfo[]): Mp4SourceInfo[] => {
-  const bravoUrls = new Set(bravoSources.map((source) => source.url));
-  return (mediaInfo.mp4Sources || []).filter((source) => {
-    const label = source.label?.toLowerCase() || '';
-    return !bravoUrls.has(source.url) && !label.includes('bravo');
-  });
-};
+const resolveGenericMp4Sources = (mediaInfo: MediaInfo): Mp4SourceInfo[] => mediaInfo.mp4Sources || [];
 
 const WatchPartyCreate: React.FC = () => {
   const navigate = useNavigate();
@@ -159,8 +126,7 @@ const WatchPartyCreate: React.FC = () => {
         return {
           ...previousMediaInfo,
           src: selectedNightflixSource.src,
-          currentNexusSource: undefined,
-          currentBravoSource: undefined
+          currentNexusSource: undefined
         };
       }
 
@@ -170,31 +136,18 @@ const WatchPartyCreate: React.FC = () => {
         return {
           ...previousMediaInfo,
           src: selectedNexusSource.url,
-          currentNexusSource: selectedNexusSource,
-          currentBravoSource: undefined
-        };
-      }
-
-      if (family === 'bravo') {
-        const selectedBravoSource = resolveBravoSources(previousMediaInfo).find((source) => source.url === value);
-        if (!selectedBravoSource) return previousMediaInfo;
-        return {
-          ...previousMediaInfo,
-          src: selectedBravoSource.url,
-          currentNexusSource: undefined,
-          currentBravoSource: selectedBravoSource
+          currentNexusSource: selectedNexusSource
         };
       }
 
       if (family === 'mp4') {
-        const selectedMp4Source = resolveGenericMp4Sources(previousMediaInfo, resolveBravoSources(previousMediaInfo))
+        const selectedMp4Source = resolveGenericMp4Sources(previousMediaInfo)
           .find((source) => source.url === value);
         if (!selectedMp4Source) return previousMediaInfo;
         return {
           ...previousMediaInfo,
           src: selectedMp4Source.url,
-          currentNexusSource: undefined,
-          currentBravoSource: undefined
+          currentNexusSource: undefined
         };
       }
 
@@ -203,8 +156,7 @@ const WatchPartyCreate: React.FC = () => {
       return {
         ...previousMediaInfo,
         src: selectedRivestreamSource.url,
-        currentNexusSource: undefined,
-        currentBravoSource: undefined
+        currentNexusSource: undefined
       };
     });
   };
@@ -256,15 +208,13 @@ const WatchPartyCreate: React.FC = () => {
     );
   }
 
-  const bravoSources = resolveBravoSources(mediaInfo);
-  const mp4Sources = resolveGenericMp4Sources(mediaInfo, bravoSources);
+  const mp4Sources = resolveGenericMp4Sources(mediaInfo);
   const activeSourceFamily: DefaultSourceFamily | null =
-    (mediaInfo.currentBravoSource?.url || bravoSources.some((source) => source.url === mediaInfo.src)) ? 'bravo' :
-      (mediaInfo.currentNexusSource?.url || mediaInfo.nexusSources?.some((source) => source.url === mediaInfo.src)) ? 'nexus' :
-        mediaInfo.nightflixSources?.some((source) => source.src === mediaInfo.src) ? 'nightflix' :
-          mediaInfo.rivestreamSources?.some((source) => source.url === mediaInfo.src) ? 'rivestream' :
-            mp4Sources.some((source) => source.url === mediaInfo.src) ? 'mp4' :
-              null;
+    (mediaInfo.currentNexusSource?.url || mediaInfo.nexusSources?.some((source) => source.url === mediaInfo.src)) ? 'nexus' :
+      mediaInfo.nightflixSources?.some((source) => source.src === mediaInfo.src) ? 'nightflix' :
+        mediaInfo.rivestreamSources?.some((source) => source.url === mediaInfo.src) ? 'rivestream' :
+          mp4Sources.some((source) => source.url === mediaInfo.src) ? 'mp4' :
+            null;
 
   const sourceGroups: Array<{
     id: DefaultSourceFamily;
@@ -289,15 +239,6 @@ const WatchPartyCreate: React.FC = () => {
           label: buildSourceLabel(source.label, source.type === 'file' ? 'Fichier' : 'HLS') || `Nexus ${index + 1}`
         })),
         selectedValue: mediaInfo.currentNexusSource?.url || mediaInfo.nexusSources?.find((source) => source.url === mediaInfo.src)?.url || mediaInfo.nexusSources?.[0]?.url || ''
-      },
-      {
-        id: 'bravo',
-        label: 'Bravo',
-        options: bravoSources.map((source, index) => ({
-          value: source.url,
-          label: source.label || buildSourceLabel('Bravo', source.language, source.isVip ? 'VIP' : undefined) || `Bravo ${index + 1}`
-        })),
-        selectedValue: mediaInfo.currentBravoSource?.url || bravoSources.find((source) => source.url === mediaInfo.src)?.url || bravoSources[0]?.url || ''
       },
       {
         id: 'mp4',

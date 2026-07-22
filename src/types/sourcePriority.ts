@@ -2,9 +2,14 @@
 
 /** Sources top-level disponibles pour Films/Séries. Ordre = default hardcodé actuel. */
 export const TOP_LEVEL_SOURCE_IDS = [
-  'darkino', 'mp4', 'nexus_hls', 'bravo',
+  'darkino', 'mp4', 'nexus_hls',
   'fstream', 'wiflix', 'omega', 'coflix', 'frembed', 'vostfr',
   'viper', 'vox', 'custom',
+  // Ids propres au fork (movix.chat), sans équivalent upstream direct.
+  'j1f', 'nakios', 'vidzy', 'wavewatch', 'peachify', 'videasy', 'vidlink',
+  'vidsrcto', 'vidsrcsu', 'vidsrcio', 'vidsrcwtf1', 'vidsrcwtf5',
+  // Ajoutés lors du port des sources upstream sur la fiche film.
+  'vidmoly', 'rivestream', 'nexus_file',
 ] as const;
 export type TopLevelSourceId = typeof TOP_LEVEL_SOURCE_IDS[number];
 
@@ -12,7 +17,7 @@ export type TopLevelSourceId = typeof TOP_LEVEL_SOURCE_IDS[number];
  * Ids historiques retirés de l'UI de priorité.
  * mergeWithDefaults les strip des prefs persistées (cleanup migration).
  */
-export const DEPRECATED_SOURCE_IDS = ['nexus_file', 'rivestream_hls'] as const;
+export const DEPRECATED_SOURCE_IDS = ['nexus_file', 'rivestream_hls', 'bravo'] as const;
 export const DEPRECATED_HOSTER_IDS = [] as const;
 
 /** Hosters built-in connus. Les custom hosters utilisent des ids prefixés `custom_`. */

@@ -23,8 +23,6 @@ const loadPako = async (): Promise<typeof pakoType> => {
 };
 import HLSPlayerSettingsPanel from './HLSPlayerSettingsPanel';
 import { toast } from 'sonner';
-import { isUserVip } from '../utils/authUtils';
-import { isExtensionAvailable } from '../utils/extensionProxy';
 import { isDnsLikeError, notifyDnsBlocked } from '../utils/dnsErrorDetection';
 import { isLowLatencyEnabled } from '../utils/lowLatencyPref';
 import {
@@ -74,7 +72,6 @@ const SOURCE_MAIN_TO_TOP_LEVEL: Record<string, TopLevelSourceId> = {
   multi_main: 'coflix',
   viper_main: 'viper',
   vox_main: 'vox',
-  bravo_main: 'bravo',
   rivestream_main: 'rivestream_hls',
   vostfr_main: 'vostfr',
   frembed_main: 'frembed',
@@ -329,60 +326,6 @@ const createHlsConfig = (src: string) => {
 
 };
 
-// ── Cinep (topstream/purstream) subtitles ─────────────────────────────────
-// Some cinep masters declare #EXT-X-MEDIA:TYPE=SUBTITLES with a URI pointing
-// straight at a .vtt file. hls.js expects that URI to be an m3u8 playlist and
-// hard-fails with "Missing #EXTM3U", which kills the whole source. Replace such
-// direct subtitle URIs with an inline data: playlist (one segment = the raw
-// .vtt) so hls.js parses a valid playlist, then fetches the .vtt DIRECTLY — the
-// browser extension injects the required Referer/Origin headers, no proxy
-// server involved. Video segments stay direct too. Idempotent: already-wrapped
-// (data:) or real playlist URIs pass through untouched.
-const rewriteCinepSubtitleUris = (text: string, baseUrl: string): string => {
-  if (!text || text.indexOf('#EXT-X-MEDIA:') === -1) return text;
-  return text.split('\n').map((line) => {
-    if (!/^#EXT-X-MEDIA:/i.test(line) || !/TYPE=SUBTITLES/i.test(line)) return line;
-    return line.replace(/URI="([^"]+)"/i, (whole, uri) => {
-      if (/^data:/i.test(uri)) return whole; // already wrapped
-      let abs: string;
-      try { abs = new URL(uri, baseUrl).href; } catch { return whole; }
-      const path = abs.split('?')[0].toLowerCase();
-      if (!(path.endsWith('.vtt') || path.endsWith('.srt'))) return whole; // real playlist
-      if (abs.includes('/cinep-proxy')) return whole; // server already wrapped it (VIP path)
-      const wrapper =
-        '#EXTM3U\n' +
-        '#EXT-X-VERSION:3\n' +
-        '#EXT-X-TARGETDURATION:999999\n' +
-        '#EXT-X-MEDIA-SEQUENCE:0\n' +
-        '#EXTINF:999999.0,\n' +
-        abs + '\n' +
-        '#EXT-X-ENDLIST\n';
-      return `URI="data:application/vnd.apple.mpegurl,${encodeURIComponent(wrapper)}"`;
-    });
-  }).join('\n');
-};
-
-// Playlist loader that post-processes the master playlist to fix direct-.vtt
-// subtitle declarations (see rewriteCinepSubtitleUris). Only attached for
-// cinep/purstream sources; extends the default loader so xhrSetup/proxy still apply.
-const makeCinepSubtitlePLoader = (HlsCtor: typeof HlsType): any => {
-  const BaseLoader: any = (HlsCtor as any).DefaultConfig.loader;
-  return class CinepSubtitlePLoader extends BaseLoader {
-    load(context: any, config: any, callbacks: any) {
-      const originalOnSuccess = callbacks.onSuccess;
-      callbacks.onSuccess = (response: any, stats: any, ctx: any, networkDetails: any) => {
-        try {
-          if (response && typeof response.data === 'string') {
-            response.data = rewriteCinepSubtitleUris(response.data, ctx?.url || context?.url || '');
-          }
-        } catch { /* pass through unmodified on any error */ }
-        originalOnSuccess(response, stats, ctx, networkDetails);
-      };
-      super.load(context, config, callbacks);
-    }
-  };
-};
-
 // True when an hls.js error is about loading/parsing a subtitle track/file.
 // Used to keep a broken subtitle from killing video playback.
 const isSubtitleLoadError = (data: any): boolean => {
@@ -605,7 +548,6 @@ interface HLSPlayerProps {
   mp4Sources?: { url: string; label?: string; language?: string; isVip?: boolean }[];
   nexusHlsSources?: { url: string; label: string }[];
   nexusFileSources?: { url: string; label: string }[];
-  purstreamSources?: { url: string; label: string }[];
   rivestreamSources?: { url: string; label: string; quality: number; service: string; category: string }[];
   rivestreamCaptions?: { label: string; file: string }[];
   loadingRivestream?: boolean;
@@ -858,7 +800,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   mp4Sources = [],
   nexusHlsSources = [],
   nexusFileSources = [],
-  purstreamSources = [],
   rivestreamSources = [],
   rivestreamCaptions = [],
   loadingRivestream = false,
@@ -1129,7 +1070,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [currentDarkiIndex, setCurrentDarkiIndex] = useState(0);
   const [currentNexusHlsIndex, setCurrentNexusHlsIndex] = useState(0);
   const [currentNexusFileIndex, setCurrentNexusFileIndex] = useState(0);
-  const [currentBravoIndex, setCurrentBravoIndex] = useState(0);
   const [, setM3u8Url] = useState<string | null>(null);
   const [, setLoadingError] = useState(false);
   const [, setSelectedSubtitleUrl] = useState<string | null>(null);
@@ -1237,24 +1177,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [showViperMenu, setShowViperMenu] = useState(false);
   const [showVoxMenu, setShowVoxMenu] = useState(false);
   const [showRivestreamMenu, setShowRivestreamMenu] = useState(false);
-  const [showBravoMenu, setShowBravoMenu] = useState(false);
-
-  // Setup cinep DNR headers for PurStream sources (non-VIP extension users)
-  useEffect(() => {
-    if (purstreamSources && purstreamSources.length > 0 && window.movixSetupHeaders) {
-      // Only need one call per unique hostname
-      const seen = new Set<string>();
-      for (const s of purstreamSources) {
-        if (!s.url) continue;
-        try {
-          const host = new URL(s.url).hostname;
-          if (seen.has(host)) continue;
-          seen.add(host);
-          window.movixSetupHeaders!('cinep', s.url).catch(() => {});
-        } catch { /* ignore invalid urls */ }
-      }
-    }
-  }, [purstreamSources]);
 
   // const [currentHlsSrc, setCurrentHlsSrc] = useState<string>(src); // Track currently loaded HLS src
 
@@ -1709,31 +1631,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       }
     }
 
-    // Find the currently selected Bravo source (if any)
-    let currentBravoSource = null;
-    if (purstreamSources && purstreamSources.length > 0) {
-      const matchingBravoSource = purstreamSources.find(source => source.url === src);
-      if (matchingBravoSource) {
-        currentBravoSource = {
-          url: matchingBravoSource.url,
-          label: matchingBravoSource.label
-        };
-      }
-    }
-    if (!currentBravoSource && mp4Sources && mp4Sources.length > 0) {
-      const matchingBravoSource = mp4Sources.find(source =>
-        source.url === src && source.label && source.label.includes('🦁 Bravo')
-      );
-      if (matchingBravoSource) {
-        currentBravoSource = {
-          url: matchingBravoSource.url,
-          label: matchingBravoSource.label,
-          language: matchingBravoSource.language,
-          isVip: matchingBravoSource.isVip
-        };
-      }
-    }
-
     // Combine Nexus HLS and File sources into a single array
     const nexusSources = [
       ...(Array.isArray(nexusHlsSources) ? nexusHlsSources.map(source => ({
@@ -1769,11 +1666,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       })) : [], // Default to empty array if darkinoSources is not an array
       // Add Nexus sources to the media info
       nexusSources: nexusSources,
-      // Add Bravo/PurStream sources to the media info
-      bravoSources: Array.isArray(purstreamSources) ? purstreamSources.map(source => ({
-        url: source.url,
-        label: source.label
-      })) : [],
       // Add generic MP4/file sources to the media info
       mp4Sources: Array.isArray(mp4Sources) ? mp4Sources.map(source => ({
         url: source.url,
@@ -1794,10 +1686,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         label: caption.label,
         file: caption.file
       })) : [],
-      // Add currently selected Nexus source info for proper Bravo player transmission
-      currentNexusSource: currentNexusSource,
-      // Add currently selected Bravo source info
-      currentBravoSource: currentBravoSource
+      // Add currently selected Nexus source info for watch-party transmission
+      currentNexusSource: currentNexusSource
     };
 
     // Save media info to sessionStorage
@@ -1952,16 +1842,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         type: 'nexus_main',
         id: 'nexus_main',
         label: t('watch.nexusSource', { count: totalNexusSources }),
-        url: '#',
-      });
-    }
-
-    // Process PurStream (Bravo) sources - réservé VIP/extension
-    if (purstreamSources && purstreamSources.length > 0 && (isUserVip() || isExtensionAvailable())) {
-      hlsSources.push({
-        type: 'bravo_main',
-        id: 'bravo_main',
-        label: t('watch.bravoSource', { count: purstreamSources.length }),
         url: '#',
       });
     }
@@ -2294,7 +2174,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   // Fonction pour gérer le changement de source
   const handleSourceChange = (sourceType: string, sourceId: string, sourceUrl: string) => {
     // --- Dropdown Toggle Handling (Doesn't close settings) ---
-    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main' || sourceType === 'bravo_main') {
+    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main') {
       setShowDarkinoMenu(sourceType === 'darkino_main' ? !showDarkinoMenu : false);
       setShowOmegaMenu(sourceType === 'omega_main' ? !showOmegaMenu : false);
       setShowCoflixMenu(sourceType === 'multi_main' ? !showCoflixMenu : false);
@@ -2306,7 +2186,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       setShowViperMenu(sourceType === 'viper_main' ? !showViperMenu : false);
       setShowVoxMenu(sourceType === 'vox_main' ? !showVoxMenu : false);
       setShowRivestreamMenu(sourceType === 'rivestream_main' ? !showRivestreamMenu : false);
-      setShowBravoMenu(sourceType === 'bravo_main' ? !showBravoMenu : false);
       return; // Return here, DON'T close settings
     }
 
@@ -2369,15 +2248,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       if (rivestreamSources && rivestreamSources[index]) {
         targetUrl = rivestreamSources[index].url || '';
       }
-    } else if (sourceType === 'bravo') {
-      const index = parseInt(sourceId.split('_')[1], 10);
-      if (purstreamSources && purstreamSources[index]) {
-        targetUrl = purstreamSources[index].url || '';
-        // Setup cinep headers via extension for non-VIP users (raw URLs)
-        if (targetUrl && window.movixSetupHeaders) {
-          window.movixSetupHeaders('cinep', targetUrl).catch(() => {});
-        }
-      }
     } else if (sourceType === 'vox') {
       const index = parseInt(sourceId, 10);
       if (voxSources && voxSources[index]) {
@@ -2386,7 +2256,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     }
     // Note: Frembed, Custom, VOSTFR, AdFree M3U8 already use correct sourceUrl
 
-    if (!targetUrl && sourceType !== 'vostfr_main' && sourceType !== 'vostfr_main' && sourceType !== 'omega_main' && sourceType !== 'multi_main' && sourceType !== 'darkino_main' && sourceType !== 'rivestream_main' && sourceType !== 'bravo_main' && sourceType !== 'vox_main') {
+    if (!targetUrl && sourceType !== 'vostfr_main' && sourceType !== 'vostfr_main' && sourceType !== 'omega_main' && sourceType !== 'multi_main' && sourceType !== 'darkino_main' && sourceType !== 'rivestream_main' && sourceType !== 'vox_main') {
       console.error("Could not determine target URL for source:", sourceType, sourceId);
       return;
     }
@@ -2444,7 +2314,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     let foundDarkinoIndex = -1;
     let foundNexusHlsIndex = -1;
     let foundNexusFileIndex = -1;
-    let foundBravoIndex = -1;
 
     // Chercher dans les sources Nightflix
     if (darkinoSources && darkinoSources.length > 0) {
@@ -2461,44 +2330,30 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       foundNexusFileIndex = nexusFileSources.findIndex(source => source.url === src);
     }
 
-    if (purstreamSources && purstreamSources.length > 0) {
-      foundBravoIndex = purstreamSources.findIndex(source => source.url === src);
-    }
-
     // Mettre à jour les index selon la source trouvée
     if (foundDarkinoIndex >= 0) {
       setCurrentDarkiIndex(foundDarkinoIndex);
       setCurrentNexusHlsIndex(0);
       setCurrentNexusFileIndex(0);
-      setCurrentBravoIndex(0);
       console.log(`🔥 Current source is Nightflix #${foundDarkinoIndex + 1}`);
     } else if (foundNexusHlsIndex >= 0) {
       setCurrentDarkiIndex(darkinoSources?.length || 0); // Marquer comme épuisé
       setCurrentNexusHlsIndex(foundNexusHlsIndex);
       setCurrentNexusFileIndex(0);
-      setCurrentBravoIndex(0);
       console.log(`🚀 Current source is Nexus HLS #${foundNexusHlsIndex + 1}`);
     } else if (foundNexusFileIndex >= 0) {
       setCurrentDarkiIndex(darkinoSources?.length || 0); // Marquer comme épuisé
       setCurrentNexusHlsIndex(nexusHlsSources?.length || 0); // Marquer comme épuisé
       setCurrentNexusFileIndex(foundNexusFileIndex);
-      setCurrentBravoIndex(0);
       console.log(`🚀 Current source is Nexus File #${foundNexusFileIndex + 1}`);
-    } else if (foundBravoIndex >= 0) {
-      setCurrentDarkiIndex(darkinoSources?.length || 0); // Marquer comme épuisé
-      setCurrentNexusHlsIndex(nexusHlsSources?.length || 0); // Marquer comme épuisé
-      setCurrentNexusFileIndex(nexusFileSources?.length || 0); // Marquer comme épuisé
-      setCurrentBravoIndex(foundBravoIndex);
-      console.log(`🦁 Current source is Bravo #${foundBravoIndex + 1}`);
     } else {
       // Source inconnue, réinitialiser tous les index
       setCurrentDarkiIndex(0);
       setCurrentNexusHlsIndex(0);
       setCurrentNexusFileIndex(0);
-      setCurrentBravoIndex(0);
       console.log('🔄 Unknown source, reset all indexes');
     }
-  }, [src, darkinoSources, nexusHlsSources, nexusFileSources, purstreamSources]);
+  }, [src, darkinoSources, nexusHlsSources, nexusFileSources]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2593,10 +2448,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     video.addEventListener('progress', handleProgress);
 
     // Check if source is MP4
-    // Les sources mp4 (y compris Bravo/Purstream et Sibnet) sont jouées directement dans la balise <video> sans passer par Hls.js
+    // Les sources mp4 (y compris Sibnet) sont jouées directement dans la balise <video> sans passer par Hls.js
     const normalizedSrc = normalizeUqloadEmbedUrl(src);
     const isMP4 = isMP4Source(normalizedSrc);
-    // Bravo/Purstream fournit des liens mp4 compatibles avec cette logique
     if (isMP4) {
       // For MP4, directly set the source on the video element
       videoRef.current.src = normalizedSrc;
@@ -2691,12 +2545,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     } else if (Hls.isSupported()) {
       // Utiliser la configuration HLS optimisée selon le domaine
       const hlsConfig: any = createHlsConfig(normalizedSrc);
-      // Cinep/purstream masters can declare direct-.vtt subtitles that crash
-      // hls.js — route them through the proxy vttwrap endpoint. Video stays direct.
-      const isBravoSrc = Array.isArray(purstreamSources) && purstreamSources.some(s => s.url === normalizedSrc);
-      if (isBravoSrc && Hls) {
-        hlsConfig.pLoader = makeCinepSubtitlePLoader(Hls);
-      }
       console.log(`📡 [HLSPlayer] Initializing HLS with URL: ${normalizedSrc.substring(0, 100)}...`);
       const hls = new Hls(hlsConfig);
 
@@ -6576,30 +6424,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     return false;
   }, [nexusFileSources, currentNexusFileIndex, src]);
 
-  // Fonction pour essayer la prochaine source Bravo (PurStream)
-  const tryNextBravoSource = useCallback(async () => {
-    if (purstreamSources && currentBravoIndex < purstreamSources.length - 1) {
-      const nextIndex = currentBravoIndex + 1;
-      setCurrentBravoIndex(nextIndex);
-      const nextSource = purstreamSources[nextIndex];
-
-      console.log(`Trying Bravo source ${nextIndex + 1}/${purstreamSources.length}:`, nextSource);
-
-      const sourceChangeEvent = new CustomEvent('sourceChange', {
-        detail: {
-          type: 'bravo',
-          id: `bravo_${nextIndex}`,
-          url: nextSource.url,
-          origin: 'auto-fallback',
-          fromSrc: src
-        }
-      });
-      window.dispatchEvent(sourceChangeEvent);
-      return true;
-    }
-    return false;
-  }, [purstreamSources, currentBravoIndex, src]);
-
   const handleHlsError = async () => {
     console.log('🔄 Source loading failed or timeout occurred. Current src:', src?.substring(0, 100));
     let savedPosition = 0;
@@ -6709,30 +6533,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         });
         window.dispatchEvent(sourceChangeEvent);
         setCurrentNexusFileIndex(0);
-        switched = true;
-      }
-    }
-
-    // 3.5. Si les sources Nexus File sont épuisées, essayer les sources Bravo (PurStream)
-    if (!switched && purstreamSources && purstreamSources.length > 0) {
-      const isCurrentBravo = purstreamSources.some(s => s.url === currentSrc);
-      if (currentBravoIndex < purstreamSources.length - 1) {
-        console.log(`🦁 Switching to next Bravo source: ${currentBravoIndex + 2} of ${purstreamSources.length}`);
-        switched = await tryNextBravoSource();
-      } else if (!isCurrentBravo && currentBravoIndex === 0 && currentNexusFileIndex >= (nexusFileSources?.length || 0)) {
-        // Si on n'a pas encore essayé la première source Bravo et que les sources précédentes sont épuisées
-        console.log('🦁 Switching to first Bravo source');
-        const sourceChangeEvent = new CustomEvent('sourceChange', {
-          detail: {
-            type: 'bravo',
-            id: 'bravo_0',
-            url: purstreamSources[0].url,
-            origin: 'auto-fallback',
-            fromSrc: currentSrc
-          }
-        });
-        window.dispatchEvent(sourceChangeEvent);
-        setCurrentBravoIndex(0);
         switched = true;
       }
     }
@@ -7783,7 +7583,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                 {group.type === 'hls' && (source.type === 'mp4' || source.type === 'm3u8') && renderSourceQualityMeta(source.url, isActive, source.quality, source.label)}
                               </div>
                               <div className="ml-3 flex items-center gap-2">
-                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'bravo_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
+                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
                                   <ChevronRight className={`w-4 h-4 transition-transform ${(source.type === 'darkino_main' && showDarkinoMenu) ||
                                     (source.type === 'omega_main' && showOmegaMenu) ||
                                     (source.type === 'multi_main' && showCoflixMenu) ||
@@ -7792,7 +7592,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                     (source.type === 'j1f_main' && showJ1fMenu) ||
                                     (source.type === 'nexus_main' && showNexusMenu) ||
                                     (source.type === 'rivestream_main' && showRivestreamMenu) ||
-                                    (source.type === 'bravo_main' && showBravoMenu) ||
                                     (source.type === 'viper_main' && showViperMenu) ||
                                     (source.type === 'vox_main' && showVoxMenu)
                                     ? 'rotate-90' : ''}`}
@@ -8317,59 +8116,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                       );
                                     }).filter(Boolean);
                                   })()}
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          )}
-                          {/* Sous-menu Bravo (PurStream) */}
-                          {source.type === 'bravo_main' && (
-                            <AnimatePresence>
-                              {showBravoMenu && (
-                                <motion.div
-                                  initial={{ opacity: 0, scale: 0.95, transformOrigin: "top" }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.95 }}
-                                  transition={{ duration: 0.2, ease: "easeOut" }}
-                                  className="ml-4 pl-2 border-l-2 border-gray-700 mb-2"
-                                >
-                                  {purstreamSources && purstreamSources.length > 0 ? (
-                                    purstreamSources.map((bravoSource, index) => {
-                                      const isBravoActive = src === bravoSource.url
-                                        || (embedType === 'bravo' && !!embedUrl && embedUrl.includes(bravoSource.url));
-                                      const bravoHosterId = __detectHosterFromUrl(bravoSource.url, bravoSource.label);
-                                      return (
-                                        <motion.div
-                                          key={`bravo_${index}`}
-                                          initial={{ opacity: 0, x: -20 }}
-                                          animate={{ opacity: 1, x: 0 }}
-                                          transition={{ duration: 0.2, delay: index * 0.03 }}
-                                          className="mb-1 ml-4 flex items-stretch gap-2"
-                                        >
-                                          <button
-                                            onClick={() => handleSourceChange('bravo', `bravo_${index}`, bravoSource.url)}
-                                            className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isBravoActive ? 'ring-2 ring-red-500 bg-gray-800/80' : ''}`}
-                                          >
-                                            <div className="min-w-0 flex flex-1 flex-col">
-                                              <span className={isBravoActive ? 'text-red-600 font-medium' : 'text-white'}>
-                                                {bravoSource.label}
-                                                {bravoHosterId && bravoHosterId !== 'unknown' && __pinnedHosterId === bravoHosterId && (
-                                                  <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
-                                                )}
-                                              </span>
-                                              {renderSourceQualityMeta(bravoSource.url, isBravoActive, undefined, bravoSource.label)}
-                                            </div>
-                                            {isBravoActive && <span className="text-xs px-2 py-0.5 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
-                                          </button>
-                                          {__renderHosterPin(bravoHosterId)}
-                                          {renderCopySourceButton(bravoSource.url)}
-                                        </motion.div>
-                                      );
-                                    })
-                                  ) : (
-                                    <div className="px-4 py-2 text-sm text-gray-400">
-                                      {t('watch.noSources')}
-                                    </div>
-                                  )}
                                 </motion.div>
                               )}
                             </AnimatePresence>
@@ -10710,7 +10456,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             nexusFileSources,
             viperSources,
             voxSources,
-            purstreamSources,
             embedUrl,
             onlyQualityMenu,
             embedType,
@@ -10726,7 +10471,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             showJ1fMenu,
             showNexusMenu,
             showRivestreamMenu,
-            showBravoMenu,
             showViperMenu,
             showVoxMenu,
             showVostfrMenu,

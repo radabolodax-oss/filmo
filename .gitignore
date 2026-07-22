@@ -82,3 +82,20 @@ API/BOT/
 *.pyc
 *.pyo
 **/.venv/
+
+# Android app (android-app/) — generated/downloaded content, not source.
+# Rebuild via: npm run build --mode mobile (repo root) -> android-app/scripts/prepare-www.mjs,
+# then npx cap sync android. libnode/ is downloaded from nodejs-mobile releases (see cpp/README
+# or agent notes) — not redistributed in git.
+android-app/www/
+android-app/android/app/src/main/assets/public/
+android-app/android/app/src/main/assets/nodejs-project/
+android-app/android/app/libnode/
+android-app/android/app/.cxx/
+android-app/android/.gradle/
+android-app/android/**/build/
+android-app/android/local.properties
+android-app/android/capacitor-cordova-android-plugins/
+*.apk
+*.aab
+.env.mobile

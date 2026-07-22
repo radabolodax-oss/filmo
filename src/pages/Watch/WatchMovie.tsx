@@ -205,7 +205,7 @@ interface NightflixSource {
   label?: string;
 }
 
-type PlayerSourceType = 'primary' | 'vostfr' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'coflix' | 'frembed' | 'custom' | 'nexus_hls' | 'nexus_file' | 'fstream' | 'wiflix' | 'j1f' | 'viper' | 'vidmoly' | 'dropload' | 'adfree' | 'rivestream_hls' | 'rivestream' | 'bravo' | number;
+type PlayerSourceType = 'primary' | 'vostfr' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'coflix' | 'frembed' | 'custom' | 'nexus_hls' | 'nexus_file' | 'fstream' | 'wiflix' | 'j1f' | 'viper' | 'vidmoly' | 'dropload' | 'adfree' | 'rivestream_hls' | 'rivestream' | number;
 
 function formatPremidSourceDetail(...parts: Array<string | null | undefined>) {
   const normalizedParts = parts
@@ -476,10 +476,6 @@ const WatchMovie: React.FC = () => {
   const [loadingExtractions, setLoadingExtractions] = useState(true); // Nouvel état pour les extractions
   const [, setVipRetryMessage] = useState<string | null>(null);
   const [onlyVostfrAvailable, setOnlyVostfrAvailable] = useState<boolean>(false);
-
-  // PurStream (Bravo) HLS states
-  const [purstreamSources, setPurstreamSources] = useState<{ url: string; label: string }[]>([]);
-  const canUseBravo = isUserVip() || isExtensionAvailable();
 
   // Rivestream VO/VOSTFR HLS states
   const [rivestreamSources, setRivestreamSources] = useState<{ url: string; label: string; quality: number; service: string; category: string }[]>([]);
@@ -831,19 +827,6 @@ const WatchMovie: React.FC = () => {
 
 
 
-      // =========== CHECK PURSTREAM (BRAVO) SOURCE ==========
-      const purstreamPromise = (async () => {
-        try {
-          const purstreamResponse = await axios.get(`${MAIN_API}/api/purstream/movie/${id}/stream`, {
-            headers: { ...getVipHeaders() }
-          });
-          return purstreamResponse.data;
-        } catch (error) {
-          console.error('Error fetching PurStream movie sources:', error);
-          return null;
-        }
-      })();
-
       // =========== CHECK FSTREAM SOURCE ==========
       const fstreamPromise = (async () => {
         try {
@@ -906,7 +889,6 @@ const WatchMovie: React.FC = () => {
         availabilityResult,
         coflixResult,
         omegaResult,
-        purstreamResult,
         fstreamResult,
         wiflixResult,
         viperResult,
@@ -917,7 +899,6 @@ const WatchMovie: React.FC = () => {
         availabilityPromise,
         coflixPromise,
         omegaPromise,
-        purstreamPromise,
         fstreamPromise,
         wiflixPromise,
         viperPromise,
@@ -1008,41 +989,6 @@ const WatchMovie: React.FC = () => {
       // ========== INITIALISATION DES CONTAINERS POUR SOURCES EXTRAITES ==========
       let finalHlsSources: { url: string; label: string }[] = [];
       let finalFileSources: { url: string; label: string }[] = [];
-      let localBravoSources: { url: string; label: string }[] = [];
-
-      // ========== PURSTREAM (BRAVO) SOURCES (réservé VIP/extension) ==========
-      if (purstreamResult && purstreamResult.sources && purstreamResult.sources.length > 0) {
-        console.log('🎬 Processing PurStream (Bravo) result:', purstreamResult.sources.length, 'sources');
-        const rawBravo = purstreamResult.sources
-          .filter((s: { url: string; name: string; format: string }) => s.url)
-          .map((s: { url: string; name: string; format: string }) => ({
-            url: s.url,
-            label: (s.name || 'HLS').replace(/^pur\s*\|\s*/i, '').replace(/\s*\|\s*/g, ' - '),
-          }));
-        // Pré-tri par priorité hoster (M4) avec fallback : si tous unknown,
-        // on garde l'ordre brut (purstream c'est souvent un seul provider).
-        const prefsBv0 = getSourcePriorityPrefs();
-        const annotatedBravo = rawBravo.map((s) => ({
-          ...s,
-          type: (detectHoster(s.url || '', {
-            patternOverrides: prefsBv0.patternOverrides,
-            customHosters: prefsBv0.customHosters,
-          }) ?? detectHoster(s.label || '', {
-            patternOverrides: prefsBv0.patternOverrides,
-            customHosters: prefsBv0.customHosters,
-          })) ?? 'unknown',
-        }));
-        const allUnknown = annotatedBravo.every((s) => s.type === 'unknown');
-        localBravoSources = allUnknown
-          ? rawBravo
-          : (sortHostersByPriority(annotatedBravo, { category: 'moviesTv', topLevel: 'bravo' }) as typeof rawBravo);
-        // Stocker les sources brutes — la gate canUseBravo est appliquée au
-        // render. Évite une race au mount où isExtensionAvailable() n'a pas
-        // encore vu l'extension/userscript injecter ses flags et bloquerait
-        // définitivement les sources même quand l'injection finit par arriver.
-        setPurstreamSources(localBravoSources);
-        console.log(`✅ PurStream (Bravo) sources set: ${localBravoSources.length}`);
-      }
 
       // Add supervideo and dropload HLS sources if available (regardless of Nexus success)
       if (omegaResult) {
@@ -2157,35 +2103,6 @@ const WatchMovie: React.FC = () => {
             setOnlyVostfrAvailable(false);
             return true;
           }
-          case 'bravo': {
-            // Tri par priorité hoster (M4) ; conserve fallback "dernier élément" si tous unknown.
-            const prefsBv = getSourcePriorityPrefs();
-            const sortedBravo = sortHostersByPriority(
-              localBravoSources.map((s: any) => ({
-                ...s,
-                type: (detectHoster(s.url || '', {
-                  patternOverrides: prefsBv.patternOverrides,
-                  customHosters: prefsBv.customHosters,
-                }) ?? detectHoster(s.label || '', {
-                  patternOverrides: prefsBv.patternOverrides,
-                  customHosters: prefsBv.customHosters,
-                })) ?? 'unknown',
-              })),
-              { category: 'moviesTv', topLevel: 'bravo' },
-            );
-            const allUnknownBv = sortedBravo.every((s: any) => s.type === 'unknown');
-            const bestBravo = allUnknownBv
-              ? localBravoSources[localBravoSources.length - 1]
-              : sortedBravo[0];
-            console.log(`✅ Selecting BRAVO as default source (HLS) → ${bestBravo.label}`);
-            setSelectedSource('bravo');
-            setVideoSource(bestBravo.url);
-            setEmbedUrl(null);
-            setEmbedType(null);
-            currentSourceRef.current = 'bravo';
-            setOnlyVostfrAvailable(false);
-            return true;
-          }
           case 'mp4': {
             setSelectedSource('mp4');
             setSelectedMp4Source(0);
@@ -2431,7 +2348,6 @@ const WatchMovie: React.FC = () => {
         const availability: SourceAvailability[] = [
           { id: 'nexus_hls', hasData: finalHlsSources.length > 0 },
           { id: 'nexus_file', hasData: finalFileSources.length > 0 },
-          { id: 'bravo', hasData: localBravoSources.length > 0 && canUseBravo },
           { id: 'mp4', hasData: fetchedMp4Sources.length > 0 },
           { id: 'darkino', hasData: !!(darkinoResult && typeof darkinoResult === 'object' && 'available' in darkinoResult && darkinoResult.available && darkinoResult.sources.length > 0) },
           { id: 'fstream', hasData: fstreamProcessedSources.length > 0 },
@@ -2729,7 +2645,7 @@ const WatchMovie: React.FC = () => {
       }
 
       // Handle HLS source selections
-      if (type === 'darkino' || type === 'mp4' || type === 'nexus_hls' || type === 'nexus_file' || type === 'rivestream_hls' || type === 'rivestream' || type === 'bravo') {
+      if (type === 'darkino' || type === 'mp4' || type === 'nexus_hls' || type === 'nexus_file' || type === 'rivestream_hls' || type === 'rivestream') {
         // Ne pas cacher l'iframe si c'est juste le déclencheur de chargement Rivestream
         if (type !== 'rivestream_hls') {
           setEmbedUrl(null); // Hide iframe
@@ -2837,24 +2753,6 @@ const WatchMovie: React.FC = () => {
               setSelectedSource('rivestream_hls');
               setVideoSource(rivestreamSources[0].url);
             }
-          }
-        } else if (type === 'bravo') {
-          // Sélection d'une source Bravo (PurStream) depuis le menu déroulant
-          console.log('🎬 [WatchMovie] Bravo source selected:', url);
-          const index = purstreamSources.findIndex(s => s.url === url);
-          const chosenBravoUrl = index !== -1
-            ? purstreamSources[index].url
-            : (purstreamSources[purstreamSources.length - 1]?.url || '');
-          if (chosenBravoUrl) {
-            if (!canUseBravo) {
-              return;
-            }
-            setSelectedSource('bravo');
-            setVideoSource(chosenBravoUrl);
-            setEmbedUrl(null);
-            setEmbedType(null);
-            currentSourceRef.current = 'bravo';
-            console.log(`✅ [WatchMovie] Playing Bravo via HLS: ${chosenBravoUrl}`);
           }
         }
       }
@@ -3187,12 +3085,6 @@ const WatchMovie: React.FC = () => {
           rivestreamSources[selectedRivestreamSource];
         return formatPremidSourceDetail(source?.label, source?.service);
       }
-      case 'bravo': {
-        const source =
-          purstreamSources.find(entry => entry.url === videoSource) ||
-          purstreamSources[0];
-        return formatPremidSourceDetail(source?.label);
-      }
       default:
         return undefined;
     }
@@ -3357,7 +3249,6 @@ const WatchMovie: React.FC = () => {
               rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
               rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
               loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-              purstreamSources={purstreamSources}
               darkinoSources={darkinoSources}
               mp4Sources={mp4Sources}
               frembedAvailable={frembedAvailable}
@@ -3458,7 +3349,6 @@ const WatchMovie: React.FC = () => {
                       rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
                       rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
                       loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-                      purstreamSources={purstreamSources}
                       darkinoSources={darkinoSources}
                       mp4Sources={mp4Sources}
                       frembedAvailable={frembedAvailable}
@@ -3558,7 +3448,6 @@ const WatchMovie: React.FC = () => {
             rivestreamSources={rivestreamSources}
             rivestreamCaptions={rivestreamCaptions}
             loadingRivestream={loadingRivestream}
-            purstreamSources={purstreamSources}
             darkinoSources={darkinoSources}
             mp4Sources={mp4Sources}
             frembedAvailable={frembedAvailable}
@@ -3606,7 +3495,6 @@ const WatchMovie: React.FC = () => {
                       rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
                       rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
                       loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-                      purstreamSources={purstreamSources}
                       darkinoSources={darkinoSources}
                       mp4Sources={mp4Sources}
                       frembedAvailable={frembedAvailable}
@@ -3665,7 +3553,6 @@ const WatchMovie: React.FC = () => {
             rivestreamSources={rivestreamSources}
             rivestreamCaptions={rivestreamCaptions}
             loadingRivestream={loadingRivestream}
-            purstreamSources={purstreamSources}
             darkinoSources={darkinoSources}
             mp4Sources={mp4Sources}
             frembedAvailable={frembedAvailable}
@@ -3732,7 +3619,7 @@ const WatchMovie: React.FC = () => {
             )}
           </AnimatePresence>
         </div>
-      ) : ((selectedSource === 'nexus_hls' && nexusHlsSources.length > 0) || (selectedSource === 'bravo' && purstreamSources.length > 0 && canUseBravo)) && (!adPopupTriggered || shouldLoadIframe || hasClickedAd) ? (
+      ) : (selectedSource === 'nexus_hls' && nexusHlsSources.length > 0) && (!adPopupTriggered || shouldLoadIframe || hasClickedAd) ? (
         <div className="w-full h-full flex items-center justify-center">
           <HLSPlayer
             priorityCategory="moviesTv"
@@ -3766,7 +3653,6 @@ const WatchMovie: React.FC = () => {
             rivestreamSources={rivestreamSources}
             rivestreamCaptions={rivestreamCaptions}
             loadingRivestream={loadingRivestream}
-            purstreamSources={purstreamSources}
             darkinoSources={darkinoSources}
             mp4Sources={mp4Sources}
             frembedAvailable={frembedAvailable}
@@ -3814,7 +3700,6 @@ const WatchMovie: React.FC = () => {
                       rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
                       rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
                       loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-                      purstreamSources={purstreamSources}
                       darkinoSources={darkinoSources}
                       mp4Sources={mp4Sources}
                       frembedAvailable={frembedAvailable}
@@ -3873,7 +3758,6 @@ const WatchMovie: React.FC = () => {
             rivestreamSources={rivestreamSources}
             rivestreamCaptions={rivestreamCaptions}
             loadingRivestream={loadingRivestream}
-            purstreamSources={purstreamSources}
             darkinoSources={darkinoSources}
             mp4Sources={mp4Sources}
             frembedAvailable={frembedAvailable}
@@ -3921,7 +3805,6 @@ const WatchMovie: React.FC = () => {
                       rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
                       rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
                       loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-                      purstreamSources={purstreamSources}
                       darkinoSources={darkinoSources}
                       mp4Sources={mp4Sources}
                       frembedAvailable={frembedAvailable}
@@ -4132,7 +4015,6 @@ const WatchMovie: React.FC = () => {
             rivestreamSources={rivestreamSources}
             rivestreamCaptions={rivestreamCaptions}
             loadingRivestream={loadingRivestream}
-            purstreamSources={purstreamSources}
             darkinoSources={darkinoSources}
             mp4Sources={mp4Sources}
             frembedAvailable={frembedAvailable}
@@ -4297,7 +4179,6 @@ const WatchMovie: React.FC = () => {
                       rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
                       rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
                       loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-                      purstreamSources={purstreamSources}
                       darkinoSources={darkinoSources}
                       mp4Sources={mp4Sources}
                       frembedAvailable={frembedAvailable}
@@ -4399,7 +4280,6 @@ const WatchMovie: React.FC = () => {
                       rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
                       rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
                       loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-                      purstreamSources={purstreamSources}
                       darkinoSources={darkinoSources}
                       mp4Sources={mp4Sources}
                       frembedAvailable={frembedAvailable}
