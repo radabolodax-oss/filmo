@@ -12,13 +12,12 @@ interface EmbedPlayerChromeProps {
  * Wraps a third-party embed <iframe> with our own Back/Sources controls.
  * We don't control the embed's internal UI (it can draw its own header/logo
  * anywhere), so our controls auto-hide after a few seconds instead of
- * staying permanently on top of it, and on mobile the whole thing takes
- * over the viewport (embeds are unusable when squeezed into the inline size).
+ * staying permanently on top of it. Stays inline (not fullscreen) so the
+ * synopsis and "similar movies" below the player stay reachable by scrolling.
  */
 const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({ onBack, onOpenNewTab, onChangeSource, children }) => {
   const { t } = useTranslation();
   const [chromeVisible, setChromeVisible] = useState(true);
-  const [isMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scheduleHide = () => {
@@ -39,7 +38,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({ onBack, onOpenNew
   };
 
   return (
-    <div className={isMobile ? 'fixed inset-0 z-[11500] bg-black' : 'w-full h-full flex items-center justify-center relative'}>
+    <div className="w-full h-full flex items-center justify-center relative">
       <button
         onClick={onBack}
         className={`absolute top-3 left-3 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 hover:bg-black/90 text-white shadow-lg transition-opacity duration-300 ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
