@@ -7,7 +7,7 @@ import { TooltipProvider } from './components/ui/tooltip';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Home from './pages/Home';
-// import { useTVMode } from './hooks/useTVMode'; // Désactivé temporairement : navigation D-pad/télécommande suspendue
+import { useTVMode } from './hooks/useTVMode';
 import { useSpaceToPlayIframe } from './hooks/useSpaceToPlayIframe';
 import DnsBlockBanner from './components/DnsBlockBanner';
 import { AdFreePopupProvider } from './context/AdFreePopupContext';
@@ -1433,7 +1433,7 @@ const AppWithIntro: React.FC = () => {
   const location = useLocation();
   const [showRedirectPopup, setShowRedirectPopup] = useState(false);
   const { showIntro, completeIntro } = useIntro();
-  // useTVMode(); // Désactivé temporairement : navigation D-pad/télécommande suspendue
+  useTVMode();
   useSpaceToPlayIframe();
   useAutoTabDetection();
 
