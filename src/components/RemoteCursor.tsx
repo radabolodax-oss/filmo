@@ -41,14 +41,45 @@ const RemoteCursor: React.FC = () => {
   useEffect(() => {
     const clamp = (v: number, max: number) => Math.max(0, Math.min(max, v));
 
+    // Walks up from the element under the cursor to find whatever actually
+    // scrolls (a modal body, a horizontal rail, ...), falling back to the
+    // page itself so content below the fold is still reachable.
+    const findScrollable = (el: Element | null): Element => {
+      while (el && el !== document.documentElement && el !== document.body) {
+        const style = window.getComputedStyle(el);
+        const canScrollY = (style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+        if (canScrollY) return el;
+        el = el.parentElement;
+      }
+      return document.scrollingElement || document.documentElement;
+    };
+
+    const scrollAt = (x: number, y: number, delta: number) => {
+      const target = findScrollable(document.elementFromPoint(x, y));
+      if (target === document.scrollingElement || target === document.documentElement) {
+        window.scrollBy({ top: delta });
+      } else {
+        (target as HTMLElement).scrollTop += delta;
+      }
+    };
+
     const move = (dir: Dir) => {
       setActive(true);
       setPos(prev => {
         let { x, y } = prev;
-        if (dir === 'up') y = clamp(y - STEP, window.innerHeight - 1);
-        if (dir === 'down') y = clamp(y + STEP, window.innerHeight - 1);
         if (dir === 'left') x = clamp(x - STEP, window.innerWidth - 1);
         if (dir === 'right') x = clamp(x + STEP, window.innerWidth - 1);
+        if (dir === 'up' || dir === 'down') {
+          const delta = dir === 'up' ? -STEP : STEP;
+          const nextY = y + delta;
+          // Cursor is viewport-fixed, so once it hits the top/bottom edge
+          // the only way to reach more content is to scroll the page (or
+          // whatever scrollable container sits under it) instead of the dot.
+          if (nextY < 0 || nextY > window.innerHeight - 1) {
+            scrollAt(x, y, delta);
+          }
+          y = clamp(nextY, window.innerHeight - 1);
+        }
         return { x, y };
       });
     };
