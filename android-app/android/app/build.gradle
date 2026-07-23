@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.chaquo.python'
 
 android {
     namespace = "com.tonsite.pcprowlermobile"
@@ -43,6 +44,46 @@ android {
         main {
             jniLibs.srcDirs = ['libnode/bin']
         }
+    }
+}
+
+// Chaquopy: on-device Python interpreter running app/src/main/python's port
+// of API/proxiesembed/ (stream-URL extraction/DRM proxying, ~67 sources).
+// Same ABI set as the ndk.abiFilters above (Chaquopy needs its own
+// per-ABI native Python interpreter) -- default Python version (3.10)
+// supports both 32- and 64-bit ABIs (3.12+ dropped 32-bit support), so
+// armeabi-v7a stays covered alongside arm64-v8a/x86_64.
+chaquopy {
+    defaultConfig {
+        // Host-machine Python used only to run pip at build time (resolves/
+        // downloads wheels for the target Android ABIs) -- must match the
+        // in-app `version` below exactly.
+        buildPython("C:/Python311/python.exe")
+        // 3.11 (not the 3.10 default): m3u8's `backports-datetime-
+        // fromisoformat` dependency (needed only for python_version < 3.11)
+        // has no Android-compatible wheel anywhere, and building its C
+        // extension from sdist isn't supported here (same category as
+        // curl_cffi). 3.11 is still <=3.11, i.e. still within Chaquopy's
+        // "supports both 32- and 64-bit ABIs" range, so armeabi-v7a stays
+        // covered (3.12+ dropped 32-bit ABI support entirely).
+        version = "3.11"
+        pip {
+            install("-r", "requirements-mobile.txt")
+        }
+        // Python modules are loaded straight out of the APK by default and
+        // don't exist as real files -- our code needs real files on disk
+        // for __file__-relative sys.path/os.chdir/os.listdir tricks
+        // (server.py's _DRMPROXY_DIR resolution, drmproxy's service-file
+        // discovery). See src/main/python/mobile_entry.py's docstring.
+        extractPackages(
+            "proxiesembed",
+            "proxiesembed.drmproxy",
+            "proxiesembed.drmproxy.services",
+            "proxiesembed.drmproxy.utils",
+            "proxiesembed.drmproxy.utils.tools",
+            "proxiesembed.drmproxy.utils.constants",
+            "proxiesembed.drmproxy.utils.pssh_box"
+        )
     }
 }
 

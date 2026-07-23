@@ -11,6 +11,9 @@ import android.webkit.WebView;
 
 import androidx.activity.OnBackPressedCallback;
 
+import com.chaquo.python.PyException;
+import com.chaquo.python.Python;
+import com.chaquo.python.android.AndroidPlatform;
 import com.getcapacitor.BridgeActivity;
 
 import java.io.File;
@@ -43,6 +46,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     private static boolean startedNodeAlready = false;
+    private static boolean startedPythonAlready = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,6 +95,34 @@ public class MainActivity extends BridgeActivity {
                     }
                     Log.i(TAG, "Starting embedded Node from " + nodeDir + "/main.js");
                     startNodeWithArguments(new String[]{"node", nodeDir + "/main.js"});
+                }
+            }).start();
+        }
+
+        // Starts the embedded Python proxiesembed server (Chaquopy) --
+        // resolves video-stream-URLs/DRM proxying for ~67 sources, the
+        // second half of the real Movix backend alongside Node/Mainapi
+        // above. Same fire-and-forget background-thread pattern: the
+        // frontend just needs VITE_PROXIES_EMBED_API to eventually become
+        // reachable, not at cold boot.
+        if (!startedPythonAlready) {
+            startedPythonAlready = true;
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        if (!Python.isStarted()) {
+                            Python.start(new AndroidPlatform(getApplicationContext()));
+                        }
+                        Python python = Python.getInstance();
+                        String filesDir = getApplicationContext().getFilesDir().getAbsolutePath();
+                        Log.i(TAG, "Starting embedded Python proxiesembed server, filesDir=" + filesDir);
+                        python.getModule("mobile_entry").callAttr("start", filesDir);
+                    } catch (PyException e) {
+                        Log.e(TAG, "proxiesembed Python server crashed", e);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Failed to start embedded Python proxiesembed server", e);
+                    }
                 }
             }).start();
         }

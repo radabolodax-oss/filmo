@@ -1,0 +1,70 @@
+# Chaquopy (embedded Android Python) requirements for the on-device port of
+# API/proxiesembed/requirements.txt. See android-app/android/app/src/main/python/proxiesembed/
+# for the adapted source and MOBILE_PORT_NOTES below for what changed and why.
+#
+# Trimmed vs. the desktop requirements.txt:
+#   - curl_cffi   : needs native compilation Chaquopy doesn't support (confirmed against
+#                   Chaquopy's own GitHub issues). Used only by drmproxy/services/canalplus_com.py,
+#                   which the existing service loader (drmproxy/utils/tools/service.py
+#                   get_all_services_classes()) already skips gracefully on import failure --
+#                   same "known gap" category as the already-accepted FlareSolverr/cycletls
+#                   exclusions on the Node side.
+#   - chompjs     : has a C extension; PyPI only ships manylinux/win/mac wheels (Android's Bionic
+#                   libc is not manylinux-compatible) and it is not in Chaquopy's prebuilt mirror.
+#                   Used only by drmproxy/services/veeps_com.py -- same graceful-skip path as
+#                   curl_cffi/canalplus_com.py above.
+#   - aiomysql    : only used by server.py's _init_mysql() for direct VIP/access-key verification
+#                   against a MySQL table -- the entire VIP/account/payment system was already
+#                   removed from Mainapi in an earlier cleanup, so this is dead weight tied to a
+#                   feature that no longer exists. _init_mysql() is no longer called in the mobile
+#                   server.py copy (self.mysql_pool stays None; every call site already handles
+#                   that: `if not self.mysql_pool: return False`).
+#   - cloudscraper: declared upstream but zero real `import cloudscraper` usage anywhere in the
+#                   codebase (only inside .venv) -- dead dependency.
+#   - lxml        : declared upstream but zero real usage sites (no `features="lxml"` etc. found);
+#                   bs4 falls back to Python's stdlib html.parser. Chaquopy does mirror lxml, but
+#                   it's unnecessary weight since nothing imports it.
+# MOBILE PORT: pins adjusted (down, for anything with native/compiled code)
+# to exact versions confirmed present on Chaquopy's prebuilt-wheel mirror
+# (https://chaquo.com/pypi-13.1/) for the Android target -- leaving these
+# fully unconstrained sent pip's resolver backtracking through hundreds of
+# historical releases across the whole dependency graph (pywidevine <->
+# protobuf <-> m3u8 <-> pymp4 <-> aiohttp/cryptography interactions) and it
+# gave up with "resolution-too-deep". Pure-Python packages below are pinned
+# to the exact versions already verified working in the real desktop
+# API/proxiesembed/.venv, both for reproducibility and to keep the resolver
+# graph shallow. aiohttp==3.11.18 (desktop's pin) has no Android wheel on
+# the mirror -- 3.10.10 is the newest available there.
+# pymp4 (a pywidevine dependency below) hard-pins construct==2.8.8 in its
+# own metadata on every release that supports python>=3.10 -- that exact
+# version only ships a source sdist on PyPI (no wheel), and Chaquopy's pip
+# is wheel-only for the Android target (can't run an arbitrary setup.py
+# build there). construct is pure Python with no C extension though, so a
+# universal wheel was built locally once (`pip wheel --no-deps
+# construct==2.8.8`) and is vendored here -- same "prebuild once, ship the
+# artifact" idea as libnode.so, just for a pure-Python package pip can't
+# resolve automatically for this target.
+vendor-wheels/construct-2.8.8-py2.py3-none-any.whl
+
+aiohttp==3.10.10
+aiohttp-socks==0.9.1
+aiofiles==24.1.0
+beautifulsoup4==4.12.2
+requests==2.31.0
+requests[socks]
+pycryptodome==3.21.0
+python-dotenv==1.0.1
+
+# WideFrog DRM integration dependencies
+browser_cookie3==0.20.1
+numpy==1.26.2
+pycountry==26.2.16
+Unidecode==1.4.0
+xmltodict==1.0.4
+isodate==0.7.2
+python-slugify==8.0.4
+cryptography==42.0.8
+m3u8==6.0.0
+pywidevine==1.8.0
+protobuf==4.25.9
+html5lib==1.1

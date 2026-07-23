@@ -1,7 +1,7 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    
+
     repositories {
         google()
         mavenCentral()
@@ -13,6 +13,14 @@ buildscript {
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
     }
+}
+
+// Chaquopy: embeds a real CPython interpreter so app/src/main/python's
+// on-device port of API/proxiesembed/ (video-stream-URL extraction/DRM
+// proxying) can run the actual Python source instead of a rewrite. Applied
+// (not just declared) in app/build.gradle.
+plugins {
+    id("com.chaquo.python") version "17.0.0" apply false
 }
 
 apply from: "variables.gradle"
