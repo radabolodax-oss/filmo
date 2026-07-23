@@ -23,11 +23,6 @@ function keepAliveHeaders(req, res, next) {
 
 // Middleware de restriction de domaine et réponse fake pour route spécifique
 function domainRestriction(req, res, next) {
-  // Autoriser les endpoints LiveTV pour l'extension
-  if (req.path.startsWith('/api/livetv/')) {
-    return next();
-  }
-
   // Autoriser les endpoints OAuth pour les clients externes (CORS géré par le routeur OAuth)
   if (req.path.startsWith('/api/oauth/')) {
     return next();

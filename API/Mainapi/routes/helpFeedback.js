@@ -32,7 +32,6 @@ const VALID_SLUGS = new Set([
   'debrid',
   'telechargement',
   'miroirs',
-  'live-tv',
   'extraction',
   'priorite-sources',
   'dernier-lecteur',

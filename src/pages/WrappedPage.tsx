@@ -1529,10 +1529,8 @@ const SlideDetailedStats: React.FC<{
                                 {item.type === 'movie' && '🎬'}
                                 {item.type === 'tv' && '📺'}
                                 {item.type === 'anime' && '⛩️'}
-                                {item.type === 'live-tv' && '📡'}
                                 {item.type === 'movie' ? i18n.t('wrapped.moviesLabel') :
-                                 item.type === 'tv' ? i18n.t('wrapped.seriesPlural') :
-                                   item.type === 'anime' ? i18n.t('wrapped.animeType') : i18n.t('wrapped.liveTVLabel')}
+                                 item.type === 'tv' ? i18n.t('wrapped.seriesPlural') : i18n.t('wrapped.animeType')}
                             </span>
                             <span className="text-white/50 text-xs">{item.count} • {Math.round(item.minutes / 60)}h</span>
                         </div>

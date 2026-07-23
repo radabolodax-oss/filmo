@@ -144,11 +144,8 @@ router.get(/^\/(.*)/, async (req, res) => {
     // Headers spécifiques pour vmwesa/vidmoly et certains CDN (ex: getromes.space)
     const isVmwesa = /vmwesa\.online|vidmoly|getromes\.space/i.test(targetUrl);
 
-    // Proxy PHP webflix (video_proxy.php) ou CDN série — requiert Referer webflix.lol
-    const isFastfluxSeries = /cdn\.fastflux\.xyz\/series\//i.test(targetUrl);
-    const isFastfluxMovie = !isFastfluxSeries && /fastflux\.xyz\/api\/video_proxy\.php/i.test(targetUrl);
     // CDN Nakios films (cdn.fastflux.xyz/movies) — requiert Referer nakios.click
-    const isFastflux = !isFastfluxMovie && !isFastfluxSeries && /fastflux\.xyz/i.test(targetUrl);
+    const isFastflux = /fastflux\.xyz/i.test(targetUrl);
 
     // Headers spécifiques pour dropcdn
     const isDropcdn = /dropcdn/i.test(targetUrl);
@@ -159,18 +156,7 @@ router.get(/^\/(.*)/, async (req, res) => {
     // Headers spécifiques pour coflix
     const isCoflix = /coflix\.(bet|si|boo|io)/i.test(targetUrl);
 
-    const headers = (isFastfluxMovie || isFastfluxSeries) ? {
-      'Accept': '*/*',
-      'Accept-Encoding': 'identity;q=1, *;q=0',
-      'Accept-Language': 'fr-FR,fr;q=0.9',
-      'Connection': 'keep-alive',
-      'Origin': 'https://webflix.lol',
-      'Referer': 'https://webflix.lol/',
-      'Sec-Fetch-Dest': 'video',
-      'Sec-Fetch-Mode': 'no-cors',
-      'Sec-Fetch-Site': 'cross-site',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-    } : isFastflux ? {
+    const headers = isFastflux ? {
       'Accept': '*/*',
       'Accept-Encoding': 'gzip, deflate, br, zstd',
       'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
@@ -260,64 +246,6 @@ router.get(/^\/(.*)/, async (req, res) => {
 
     // Détecter si c'est un .m3u8 (playlist HLS)
     const isM3U8 = targetUrl.toLowerCase().includes('.m3u8') || (req.headers.accept && req.headers.accept.includes('application/vnd.apple.mpegurl'));
-
-    // === FASTFLUX PHP PROXY — deux étapes ===
-    // Étape 1 : hit le PHP proxy sans webflix referer pour obtenir le vrai slug CDN (302)
-    // Étape 2 : hit le CDN avec Referer webflix.lol pour obtenir la vidéo
-    if (isFastfluxMovie) {
-      const phpHeaders = {
-        'Accept': '*/*',
-        'Accept-Encoding': 'identity;q=1, *;q=0',
-        'Accept-Language': 'fr-FR,fr;q=0.9',
-        'Connection': 'keep-alive',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-      };
-      const phpResp = await axios.get(targetUrl, {
-        maxRedirects: 0,
-        validateStatus: s => s >= 200 && s < 400,
-        headers: phpHeaders,
-        timeout: 15000,
-      }).catch(err => err.response || null);
-
-      const cdnUrl = phpResp?.headers?.location;
-      if (cdnUrl) {
-        const cdnHeaders = {
-          'Accept': '*/*',
-          'Accept-Encoding': 'identity;q=1, *;q=0',
-          'Accept-Language': 'fr-FR,fr;q=0.9',
-          'Connection': 'keep-alive',
-          'Origin': 'https://webflix.lol',
-          'Referer': 'https://webflix.lol/',
-          'Sec-Fetch-Dest': 'video',
-          'Sec-Fetch-Mode': 'no-cors',
-          'Sec-Fetch-Site': 'cross-site',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
-        };
-        if (req.headers['range']) cdnHeaders['Range'] = req.headers['range'];
-        const cdnResp = await axios({
-          method: 'get',
-          url: cdnUrl,
-          responseType: 'stream',
-          headers: cdnHeaders,
-          timeout: 30000,
-          maxRedirects: 5,
-          validateStatus: () => true,
-        });
-        Object.entries(cdnResp.headers).forEach(([key, value]) => {
-          if (!['transfer-encoding', 'connection', 'content-encoding'].includes(key.toLowerCase())) {
-            res.setHeader(key, value);
-          }
-        });
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
-        res.status(cdnResp.status);
-        cdnResp.data.on('error', () => {});
-        res.on('close', () => { if (!cdnResp.data.destroyed) cdnResp.data.destroy(); });
-        cdnResp.data.pipe(res);
-        return;
-      }
-      // Fallback : si pas de redirect, continuer avec la logique normale ci-dessous
-    }
 
     // Faire la requête distante avec l'agent de streaming pour le proxy
     const response = await axios({

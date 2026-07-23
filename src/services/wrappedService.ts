@@ -26,7 +26,7 @@ export interface WrappedPersona {
 export interface WrappedTopContent {
     rank: number;
     title: string;
-    type: 'movie' | 'tv' | 'anime' | 'live-tv';
+    type: 'movie' | 'tv' | 'anime';
     minutes: number;
     hours: number;
     durationLabel?: string;
@@ -36,7 +36,7 @@ export interface WrappedTopContent {
 }
 
 export interface WrappedTypeStats {
-    type: 'movie' | 'tv' | 'anime' | 'live-tv';
+    type: 'movie' | 'tv' | 'anime';
     minutes: number;
     count: number;
     percent: number;

@@ -1,10 +1,10 @@
 // src/utils/lastPlayerPref.ts
 //
 // Persistance de la préférence "se souvenir du dernier lecteur choisi".
-// Quand activée, le dernier `TopLevelSourceId` sélectionné manuellement par
-// l'utilisateur prend priorité sur l'ordre des sources lors du chargement
-// d'un nouveau film/épisode — *si* ce lecteur est disponible. Sinon on
-// retombe sur le système de priorité existant.
+// Quand activée (vrai par défaut, opt-out), le dernier `TopLevelSourceId`
+// sélectionné manuellement par l'utilisateur prend priorité sur l'ordre des
+// sources lors du chargement d'un nouveau film/épisode — *si* ce lecteur est
+// disponible. Sinon on retombe sur le système de priorité existant.
 //
 // Storage : 2 clés localStorage indépendantes (toggle + valeur).
 import { TOP_LEVEL_SOURCE_IDS, type TopLevelSourceId } from '../types/sourcePriority';
@@ -18,12 +18,14 @@ const CHANGE_EVENT = 'movix-last-player-changed';
 
 const VALID_IDS = new Set<string>(TOP_LEVEL_SOURCE_IDS);
 
-/** Toggle on/off — défaut false (opt-in). */
+/** Toggle on/off — défaut true (opt-out) si jamais réglé explicitement par l'utilisateur. */
 export function getRememberLastPlayer(): boolean {
   try {
-    return localStorage.getItem(TOGGLE_KEY) === 'true';
+    const v = localStorage.getItem(TOGGLE_KEY);
+    if (v === null) return true;
+    return v === 'true';
   } catch {
-    return false;
+    return true;
   }
 }
 

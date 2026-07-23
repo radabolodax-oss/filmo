@@ -155,9 +155,6 @@ const COPY = {
     providerBrowseTitle: "Où regarder - Movix",
     providerBrowseDescription:
       "Explorez les catalogues par plateforme de streaming sur Movix.",
-    liveTvTitle: "Live TV - Movix",
-    liveTvDescription:
-      "Accédez aux chaînes en direct et au direct TV sur Movix.",
     extensionTitle: "Extension - Movix",
     extensionDescription:
       "Installez l’extension navigateur Movix et ses intégrations.",
@@ -266,8 +263,6 @@ const COPY = {
     providerBrowseTitle: "Where to Watch - Movix",
     providerBrowseDescription:
       "Explore streaming catalogs by platform on Movix.",
-    liveTvTitle: "Live TV - Movix",
-    liveTvDescription: "Access live channels and TV streams on Movix.",
     extensionTitle: "Extension - Movix",
     extensionDescription:
       "Install the Movix browser extension and integrations.",
@@ -974,11 +969,6 @@ function buildStaticMetadata(requestUrl, previewLanguage) {
       return buildBaseMetadata(requestUrl, previewLanguage, {
         title: copy.suggestionTitle,
         description: copy.suggestionDescription,
-      });
-    case "/live-tv":
-      return buildBaseMetadata(requestUrl, previewLanguage, {
-        title: copy.liveTvTitle,
-        description: copy.liveTvDescription,
       });
     case "/extension":
       return buildBaseMetadata(requestUrl, previewLanguage, {

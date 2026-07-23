@@ -10,22 +10,16 @@ export const M3U8_EXTRACTOR_KEYS = [
   'voe', 'fsvid', 'vidzy', 'vidmoly', 'sibnet', 'uqload', 'doodstream', 'seekstreaming',
 ] as const;
 
-export const LIVETV_SOURCE_KEYS = [
-  'linkzy', 'wiflix', 'sosplay', 'livetv', 'matches',
-] as const;
-
 export const EXTRACTION_METHOD_KEYS = [
   'server', 'extension', 'userscript',
 ] as const;
 
 export type M3u8ExtractorKey = typeof M3U8_EXTRACTOR_KEYS[number];
-export type LiveTvSourceKey = typeof LIVETV_SOURCE_KEYS[number];
 export type ExtractionMethod = typeof EXTRACTION_METHOD_KEYS[number];
 
 export interface ExtractionPrefs {
   version: 1;
   m3u8: Record<M3u8ExtractorKey, boolean>;
-  livetv: Record<LiveTvSourceKey, boolean>;
   /**
    * Méthode d'extraction choisie par l'utilisateur. Aucune bascule automatique :
    * l'utilisateur sélectionne explicitement une seule des 3 méthodes.
@@ -43,12 +37,9 @@ const CHANGE_EVENT = 'movix-extraction-prefs-changed';
 function buildDefaults(): ExtractionPrefs {
   const m3u8 = {} as Record<M3u8ExtractorKey, boolean>;
   M3U8_EXTRACTOR_KEYS.forEach((k) => { m3u8[k] = true; });
-  const livetv = {} as Record<LiveTvSourceKey, boolean>;
-  LIVETV_SOURCE_KEYS.forEach((k) => { livetv[k] = true; });
   return {
     version: 1,
     m3u8,
-    livetv,
     method: 'server',
     updatedAt: Date.now(),
   };
@@ -68,9 +59,7 @@ function isValid(obj: unknown): obj is ExtractionPrefs {
   const p = obj as Partial<ExtractionPrefs>;
   if (p.version !== 1) return false;
   if (!p.m3u8 || typeof p.m3u8 !== 'object') return false;
-  if (!p.livetv || typeof p.livetv !== 'object') return false;
-  return M3U8_EXTRACTOR_KEYS.every((k) => typeof p.m3u8![k] === 'boolean')
-    && LIVETV_SOURCE_KEYS.every((k) => typeof p.livetv![k] === 'boolean');
+  return M3U8_EXTRACTOR_KEYS.every((k) => typeof p.m3u8![k] === 'boolean');
 }
 
 export function getExtractionPrefs(): ExtractionPrefs {
@@ -85,7 +74,6 @@ export function getExtractionPrefs(): ExtractionPrefs {
     return {
       version: 1,
       m3u8: { ...defaults.m3u8, ...parsed.m3u8 },
-      livetv: { ...defaults.livetv, ...parsed.livetv },
       method: normalizeMethod(parsedMethod),
       updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
     };
@@ -110,10 +98,6 @@ export function resetExtractionPrefs(): void {
 
 export function isM3u8ExtractorEnabled(key: M3u8ExtractorKey): boolean {
   return getExtractionPrefs().m3u8[key] !== false;
-}
-
-export function isLiveTvSourceEnabled(key: LiveTvSourceKey): boolean {
-  return getExtractionPrefs().livetv[key] !== false;
 }
 
 /** Retourne la méthode d'extraction choisie par l'utilisateur. */

@@ -19,16 +19,18 @@ const {
 const {
   makeWiflixRequest,
 } = require("../utils/proxyManager");
+const { renderViaFlareSolverr } = require("../utils/cloudflareSession");
 const { acquireRedisLock } = require("../utils/redisLock");
 const {
   fetchTmdbDetails,
   fetchTmdbSeason,
   fetchTmdbFrenchReleaseYear,
 } = require("../utils/tmdbCache");
+const { fetchCinestreamMovieData } = require("./cinestream");
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "";
 const TMDB_API_URL = "https://api.themoviedb.org/3";
-const WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || "https://flemmix.farm";
+const WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || "https://flemmix.garden";
 
 // === Cache helpers (local, since getFromCacheNoExpiration is not yet in cacheManager) ===
 const getFromCacheNoExpiration = async (cacheDir, key) => {
@@ -156,12 +158,37 @@ async function searchWiflixMovie(title, baseUrl = WIFLIX_BASE_URL) {
       responseBody = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
       console.log(`[WIFLIX SEARCH] OK via proxy`);
     } catch (err) {
-      console.log(`[WIFLIX SEARCH] Echec: ${err.message}`);
+      console.log(`[WIFLIX SEARCH] Echec proxy: ${err.message}`);
+    }
+
+    // Fallback FlareSolverr si le proxy classique a echoue ou s'est heurte au bot
+    // shield du site (resiste aux proxies gratuits / CF Workers). Le rendu passe par
+    // un vrai navigateur (JS execute) car la recherche de ce site est cote client —
+    // un simple replay de cookies via axios reste bloque sur l'ecran de chargement.
+    // Un 2e palier ("Un instant, s'il vous plait...") se recharge tout seul cote
+    // client apres 5s — on retente jusqu'a 2 fois avec un delai avant d'abandonner.
+    const isWaitingRoom = (body) => body && body.includes("Un instant, s'il vous pla");
+    if (!responseBody || responseBody.includes('Bot shield active')) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          responseBody = await renderViaFlareSolverr(searchUrl, { method: 'POST', postData: payload });
+          console.log(`[WIFLIX SEARCH] OK via FlareSolverr (tentative ${attempt + 1})`);
+        } catch (err) {
+          console.log(`[WIFLIX SEARCH] Echec FlareSolverr (tentative ${attempt + 1}): ${err.message}`);
+          break;
+        }
+        if (!isWaitingRoom(responseBody)) break;
+        console.log(`[WIFLIX SEARCH] Salle d'attente detectee, nouvelle tentative dans 6s...`);
+        await new Promise((r) => setTimeout(r, 6000));
+      }
+    }
+
+    if (!responseBody) {
       return { url: null, debugHtml: 'Erreur: service temporairement indisponible' };
     }
 
-    if (!responseBody || responseBody.includes("Un instant, s'il vous plait")) {
-      return { url: null, debugHtml: responseBody || 'Challenge Cloudflare non resolu' };
+    if (isWaitingRoom(responseBody) || responseBody.includes('Bot shield active')) {
+      return { url: null, debugHtml: responseBody };
     }
 
     const $ = cheerio.load(responseBody);
@@ -700,9 +727,22 @@ const updateWiflixCache = async (
     const existingCache = await getFromCacheNoExpiration(cacheDir, cacheKey);
 
     let newData;
-    if (type === "movie")
+    if (type === "movie") {
       newData = await fetchWiflixMovieData(tmdbId, existingCache);
-    else if (type === "tv")
+      // Flemmix peut rester bloque par son bot-shield meme via FlareSolverr —
+      // cinestream.info sert de roue de secours (films uniquement, les series
+      // restent sur flemmix). On ne bascule que si wiflix a vraiment echoue.
+      if (newData && newData.success === false) {
+        try {
+          const cinestreamData = await fetchCinestreamMovieData(tmdbId, null);
+          if (cinestreamData && cinestreamData.success) {
+            newData = cinestreamData;
+          }
+        } catch (err) {
+          console.error(`[CINESTREAM FALLBACK] ${tmdbId}: ${err.message}`);
+        }
+      }
+    } else if (type === "tv")
       newData = await fetchWiflixTvData(tmdbId, season, existingCache);
     else throw new Error(`Type non supporte: ${type}`);
 

@@ -209,7 +209,6 @@ function scheduleBackgroundRefresh(key, refreshTask) {
  * Fetch TMDB details for enrichment via shared Redis cache.
  */
 async function fetchTMDBDetails(contentId, contentType) {
-  if (contentType === "live-tv") return null;
   const mediaType = contentType === "anime" ? "tv" : contentType;
 
   const data = await fetchTmdbDetails(

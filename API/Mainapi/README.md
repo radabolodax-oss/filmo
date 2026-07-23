@@ -44,7 +44,6 @@ API/Mainapi/
 |-- commentsRoutes.js         # Commentaires
 |-- likesRoutes.js            # Likes / dislikes
 |-- sharedListsRoutes.js      # Listes partagées
-|-- liveTvRoutes.js           # Live TV
 |-- wishboardRoutes.js        # Wishboard
 |-- top10Routes.js            # Classements
 |-- wrappedRoutes.js          # Wrapped
@@ -74,7 +73,7 @@ Certaines intégrations sont très spécifiques à des sources données, par exe
 - auth et profils : `routes/authRoutes.js`, `routes/sessions.js`, `routes/profiles.js`
 - persistance frontend : `routes/sync.js`
 - recherche et catalogues : `routes/search.js`, `routes/tmdb.js`
-- scraping / lecture : `routes/cpasmal.js`, `routes/fstream.js`, `routes/wiflix.js`, `liveTvRoutes.js`
+- scraping / lecture : `routes/cpasmal.js`, `routes/fstream.js`, `routes/wiflix.js`
 - communautaire : `commentsRoutes.js`, `likesRoutes.js`, `sharedListsRoutes.js`, `wishboardRoutes.js`, `linkSubmissionsRoutes.js`
 - VIP / paiements : `utils/vipDonations.js`, `routes/vipDonations.js`
 

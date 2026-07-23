@@ -7,6 +7,7 @@ import HLSPlayer from '../../components/HLSPlayer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAdFreePopup } from '../../context/AdFreePopupContext';
 import AdFreePlayerAds from '../../components/AdFreePlayerAds';
+import EmbedPlayerChrome from '../../components/EmbedPlayerChrome';
 import { extractM3u8FromEmbed, extractVoeM3u8, extractUqloadFile, extractVidzyM3u8, extractFsvidM3u8, extractOneUploadSources, isOneUploadEmbed, isVoeEmbed, extractDoodStreamFile, extractSeekStreamingM3u8, isDoodStreamEmbed, isSeekStreamingEmbed, isDoodStreamExtractionEnabled, isSeekStreamingExtractionEnabled, type M3u8Result } from '../../utils/extractM3u8';
 import { pickAutoSelectedSource, sortHostersByPriority, type SourceAvailability } from '../../utils/sourceAutoSelect';
 import type { TopLevelSourceId } from '../../types/sourcePriority';
@@ -3270,41 +3271,11 @@ const WatchMovie: React.FC = () => {
           </div>
         </div>
       ) : selectedSource === 'fstream' && fstreamSources.length > 0 && (!adPopupTriggered || shouldLoadIframe || hasClickedAd) ? (
-        <div className="w-full h-full flex items-center justify-center">
-          {/* Back to Info Button */}
-          <button
-            onClick={() => navigate(`/movie/${id}`)}
-            className="absolute top-3 left-3 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 hover:bg-black/90 text-white shadow-lg transition-all duration-200"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            {t('watch.back')}
-          </button>
-
-          {/* Boutons en haut à droite */}
-          <div className="absolute top-16 right-3 z-[10000] flex items-center gap-2">
-            {/* Bouton Ouvrir dans une nouvelle page */}
-            <button
-              onClick={() => window.open(embedUrl || '', '_blank', 'noopener')}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/90 border border-gray-600 hover:bg-gray-700/90 text-white font-medium text-sm transition-all duration-200"
-              title={t('watch.openInNewPage')}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </button>
-
-            {/* Bouton Changer de source */}
-            <button
-              onClick={() => setShowEmbedQuality(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/90 border border-gray-700 hover:bg-gray-800/80 text-white font-medium text-sm transition-all duration-200"
-            >
-              <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-              <span className="hidden sm:inline">{t('watch.sources')}</span>
-            </button>
-          </div>
-
+        <EmbedPlayerChrome
+          onBack={() => navigate(`/movie/${id}`)}
+          onOpenNewTab={() => window.open(embedUrl || '', '_blank', 'noopener')}
+          onChangeSource={() => setShowEmbedQuality(true)}
+        >
           {/* Iframe pour les sources FStream */}
           <iframe
             key={`iframe-fstream-${embedUrl || ''}`}
@@ -3372,7 +3343,7 @@ const WatchMovie: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </EmbedPlayerChrome>
       ) : selectedSource === 'darkino' && darkinoSources.length > 0 && (!adPopupTriggered || shouldLoadIframe || hasClickedAd) ? (
         <div className="w-full h-full flex items-center justify-center">
           <HLSPlayer
@@ -4082,41 +4053,11 @@ const WatchMovie: React.FC = () => {
           </AnimatePresence>
         </div>
       ) : embedUrl ? (
-        <div className="w-full h-full flex flex-col items-center justify-center relative">
-          {/* Back to Info Button */}
-          <button
-            onClick={() => navigate(`/movie/${id}`)}
-            className="absolute top-3 left-3 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 hover:bg-black/90 text-white shadow-lg transition-all duration-200"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            {t('watch.back')}
-          </button>
-
-          {/* Boutons en haut à droite */}
-          <div className="absolute top-16 right-3 z-[10000] flex items-center gap-2">
-            {/* Bouton Ouvrir dans une nouvelle page */}
-            <button
-              onClick={() => window.open(embedUrl || '', '_blank', 'noopener')}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/90 border border-gray-600 hover:bg-gray-700/90 text-white font-medium text-sm transition-all duration-200"
-              title={t('watch.openInNewPage')}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </button>
-
-            {/* Bouton Changer de source */}
-            <button
-              onClick={() => setShowEmbedQuality(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/90 border border-gray-700 hover:bg-gray-800/80 text-white font-medium text-sm transition-all duration-200"
-            >
-              <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-              <span className="hidden sm:inline">{t('watch.sources')}</span>
-            </button>
-          </div>
-
+        <EmbedPlayerChrome
+          onBack={() => navigate(`/movie/${id}`)}
+          onOpenNewTab={() => window.open(embedUrl || '', '_blank', 'noopener')}
+          onChangeSource={() => setShowEmbedQuality(true)}
+        >
           {/* Iframe pour les sources embed */}
           <iframe
             key={`iframe-${embedType || ''}-${embedUrl || ''}`}
@@ -4202,43 +4143,14 @@ const WatchMovie: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </EmbedPlayerChrome>
       ) : (
         // Show VO/VOSTFR when nothing else is available
-        <div className="w-full h-full flex flex-col items-center justify-center relative">
-          {/* Back to Info Button */}
-          <button
-            onClick={() => navigate(`/movie/${id}`)}
-            className="absolute top-3 left-3 z-[9999] flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 hover:bg-black/90 text-white shadow-lg transition-all duration-200"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            {t('watch.back')}
-          </button>
-
-          {/* Boutons en haut à droite */}
-          <div className="absolute top-16 right-3 z-[10000] flex items-center gap-2">
-            {/* Bouton Ouvrir dans une nouvelle page */}
-            <button
-              onClick={() => window.open(selectedSource === 'vostfr' ? `https://player.videasy.net/movie/${id}` : `https://frembed.click/api/film.php?id=${id}`, '_blank', 'noopener')}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800/90 border border-gray-600 hover:bg-gray-700/90 text-white font-medium text-sm transition-all duration-200"
-              title={t('watch.openInNewPage')}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </button>
-
-            {/* Bouton Changer de source */}
-            <button
-              onClick={() => setShowEmbedQuality(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/90 border border-gray-700 hover:bg-gray-800/80 text-white font-medium text-sm transition-all duration-200"
-            >
-              <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-              <span className="hidden sm:inline">{t('watch.sources')}</span>
-            </button>
-          </div>
+        <EmbedPlayerChrome
+          onBack={() => navigate(`/movie/${id}`)}
+          onOpenNewTab={() => window.open(selectedSource === 'vostfr' ? `https://player.videasy.net/movie/${id}` : `https://frembed.click/api/film.php?id=${id}`, '_blank', 'noopener')}
+          onChangeSource={() => setShowEmbedQuality(true)}
+        >
 
           <iframe
             src={selectedSource === 'vostfr' ? `https://player.videasy.net/movie/${id}` : `https://frembed.click/api/film.php?id=${id}`}
@@ -4303,7 +4215,7 @@ const WatchMovie: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+        </EmbedPlayerChrome>
       )}
 
       {/* Ad popup rendered as an overlay (not in the player/loading branch) so

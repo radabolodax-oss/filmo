@@ -10,7 +10,7 @@ const SEND_INTERVAL_MS = 30_000;
 const MIN_SECONDS_TO_SEND = 5;
 
 interface ViewingData {
-    contentType: 'movie' | 'tv' | 'anime' | 'live-tv';
+    contentType: 'movie' | 'tv' | 'anime';
     contentId: string;
     contentTitle?: string;
     seasonNumber?: number;

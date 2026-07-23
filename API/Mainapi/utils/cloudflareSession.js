@@ -215,7 +215,10 @@ async function requestWithSession(axiosInstance, baseUrl, config) {
   try {
     const response = await axiosInstance(mergedConfig);
 
-    if (typeof response.data === 'string' && response.data.includes("Un instant, s'il vous plait")) {
+    if (
+      typeof response.data === 'string' &&
+      (response.data.includes("Un instant, s'il vous plait") || response.data.includes('Bot shield active'))
+    ) {
       console.log('[CF SESSION] Challenge detecte dans la reponse, re-resolution...');
       await invalidateSession();
       const newSession = await ensureSession(baseUrl);
@@ -242,8 +245,38 @@ async function requestWithSession(axiosInstance, baseUrl, config) {
   }
 }
 
+/**
+ * Rend une page via FlareSolverr (vrai navigateur, JS execute) et retourne le HTML
+ * final. A utiliser (au lieu de requestWithSession) quand le site rend son contenu
+ * cote client (ex. Wiflix/flemmix : la recherche affiche juste un spinner tant que
+ * le JS n'a pas tourne — un simple replay de cookies via axios reste bloque dessus).
+ *
+ * Plus lent qu'un axios classique (navigateur reel a chaque appel), a reserver aux
+ * endpoints qui en ont vraiment besoin (ex. recherche Wiflix).
+ */
+async function renderViaFlareSolverr(targetUrl, { method = 'GET', postData } = {}) {
+  await createSession();
+
+  const body = {
+    cmd: method === 'POST' ? 'request.post' : 'request.get',
+    url: targetUrl,
+    session: SESSION_NAME,
+    maxTimeout: FLARESOLVERR_TIMEOUT,
+  };
+  if (postData) body.postData = postData;
+  if (PROXY) body.proxy = PROXY;
+
+  const result = await flaresolverrPost(body);
+  const solution = result.solution;
+  if (!solution || solution.status >= 400) {
+    throw new Error(`FlareSolverr render echouee: status=${solution?.status || 'unknown'}`);
+  }
+  return solution.response;
+}
+
 module.exports = {
   ensureSession,
   invalidateSession,
   requestWithSession,
+  renderViaFlareSolverr,
 };

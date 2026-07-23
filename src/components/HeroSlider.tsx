@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
-import { Play, Info, Star, Calendar } from 'lucide-react';
+import { Play, Star, Calendar } from 'lucide-react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -332,28 +332,20 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
                               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
                                 <Link
                                   to={`/${item.media_type}/${encodeId(item.id)}?autoplay=true`}
-                                  className="inline-flex items-center gap-2 text-white px-4 sm:px-6 md:px-7 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl text-sm sm:text-base font-semibold transition-all"
-                                  style={{ background: 'linear-gradient(135deg,#00e676,#a855f7)' }}
+                                  className="inline-flex items-center gap-2 text-white px-5 sm:px-7 md:px-8 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl text-sm sm:text-base font-semibold transition-all"
+                                  style={{
+                                    background: 'linear-gradient(135deg, rgba(0,230,118,0.35) 0%, rgba(168,85,247,0.35) 100%)',
+                                    backdropFilter: 'blur(20px) saturate(180%)',
+                                    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                                    borderTop: '1px solid rgba(255,255,255,0.28)',
+                                    borderLeft: '1px solid rgba(255,255,255,0.16)',
+                                    borderRight: '1px solid rgba(255,255,255,0.07)',
+                                    borderBottom: '1px solid rgba(0,0,0,0.22)',
+                                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.12), 0 0 0 1px rgba(168,85,247,0.18)',
+                                  }}
                                 >
                                   <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />
-                                  {t('home.hero.play')}
-                                </Link>
-                              </motion.div>
-                              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                                <Link
-                                  to={`/${item.media_type}/${encodeId(item.id)}`}
-                                  className="inline-flex items-center gap-2 bg-white/15 text-white px-4 sm:px-6 md:px-7 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl text-sm sm:text-base font-medium border border-white/20 transition-all"
-                                  onMouseEnter={e => {
-                                    const span = e.currentTarget.querySelector('span.hero-info-text') as HTMLElement | null;
-                                    if (span) span.style.cssText = 'background:linear-gradient(135deg,#00e676,#a855f7);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent';
-                                  }}
-                                  onMouseLeave={e => {
-                                    const span = e.currentTarget.querySelector('span.hero-info-text') as HTMLElement | null;
-                                    if (span) span.style.cssText = '';
-                                  }}
-                                >
-                                  <Info className="w-4 h-4 sm:w-5 sm:h-5" />
-                                  <span className="hero-info-text">{t('home.hero.moreInfo')}</span>
+                                  {t('home.hero.watch')}
                                 </Link>
                               </motion.div>
                             </div>

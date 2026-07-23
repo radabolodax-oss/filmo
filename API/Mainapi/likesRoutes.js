@@ -220,7 +220,7 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     // Whitelist contentType to prevent data pollution
-    const allowedContentTypes = ['movie', 'tv', 'anime', 'live-tv', 'comment', 'reply', 'shared-list'];
+    const allowedContentTypes = ['movie', 'tv', 'anime', 'comment', 'reply', 'shared-list'];
     if (!allowedContentTypes.includes(contentType)) {
       return res.status(400).json({ error: 'Type de contenu invalide' });
     }

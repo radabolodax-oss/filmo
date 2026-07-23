@@ -27,3 +27,8 @@ export const buildApiProxyUrl = (url: string): string => {
   if (!API_PROXY_BASE_URL) return url;
   return `${API_PROXY_BASE_URL}/proxy/${url}`;
 };
+
+export const embedProxy = (url: string): string => {
+  if (!url || !PROXIES_EMBED_API) return url;
+  return `${PROXIES_EMBED_API}/embed-proxy?url=${encodeURIComponent(url)}`;
+};

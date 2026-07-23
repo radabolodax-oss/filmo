@@ -98,7 +98,10 @@ export function sortHostersByPriority<
   const langRank = (item: T) => {
     const raw = item.language ?? item.category;
     if (!raw) return Number.MAX_SAFE_INTEGER - 1; // sans langue explicite = juste après toutes les activées
-    const normalized = String(raw).toLowerCase();
+    // vfq/vff (FStream, 1jour1film) sont des variantes de VF — sans cette
+    // normalisation elles ne matchent jamais 'vf' et finissent toujours en fin de liste.
+    const lowered = String(raw).toLowerCase();
+    const normalized = lowered === 'vfq' || lowered === 'vff' ? 'vf' : lowered;
     const idx = langOrderEnabled.indexOf(normalized);
     return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
   };

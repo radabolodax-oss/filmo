@@ -7,13 +7,13 @@
 
 -- ---------------------------------------------
 -- Table: wrapped_viewing_data
--- Stores viewing time for movies, TV shows, anime, and live TV
+-- Stores viewing time for movies, TV shows, and anime
 -- ---------------------------------------------
 CREATE TABLE IF NOT EXISTS wrapped_viewing_data (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
     profile_id VARCHAR(255),
-    content_type ENUM('movie', 'tv', 'anime', 'live-tv') NOT NULL,
+    content_type ENUM('movie', 'tv', 'anime') NOT NULL,
     content_id VARCHAR(255) NOT NULL,
     content_title VARCHAR(255),
     season_number INT DEFAULT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS wrapped_pages_data (
 -- wrapped_pages_data:
 --   - Page visit duration
 --   - content_id for detail pages (movie-details, tv-details)
---   - Tracks: home, movies, tv-shows, movie-details, tv-details, watchparty, live-tv, wishboard
+--   - Tracks: home, movies, tv-shows, movie-details, tv-details, watchparty, wishboard
 --   - Used to calculate: browsing habits, feature usage, engagement metrics
 --
 -- ============================================

@@ -2,7 +2,7 @@
 import Snowfall from 'react-snowfall';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
-import { Film, Search, X, Star, Tv2, Users, Clapperboard, Bell, Tv, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github } from 'lucide-react';
+import { Film, Search, X, Star, Tv2, Users, Clapperboard, Bell, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NotificationsPopup from './NotificationsPopup';
 import { getUnreadNotificationsCount, getNotificationsDisabled } from '../services/apiNotificationService';
@@ -98,6 +98,20 @@ const Header: React.FC = () => {
     { name: 'Sagas', path: '/collections', icon: <LayoutGrid size={16} />, isActive: location.pathname === '/collections' },
   ], [t, location.pathname]);
 
+  // Pages de détails film/série/anime : on remplace la nav par une flèche retour
+  const isDetailsPage = /^\/(movie|tv)\/[^/]+\/?$/.test(location.pathname);
+
+  // La flèche retour ramène vers le catalogue correspondant (films / séries / anime)
+  const handleBackFromDetails = useCallback(() => {
+    if (location.pathname.startsWith('/movie/')) {
+      navigate('/movies');
+    } else if (location.pathname.startsWith('/tv/')) {
+      navigate((window as any).__currentIsAnime ? '/anime' : '/tv-shows');
+    } else {
+      navigate(-1);
+    }
+  }, [location.pathname, navigate]);
+
   // Groupes du mega menu — 4 colonnes équilibrées, tout sur 1 ligne
   const exploreGroups: ExploreGroup[] = useMemo(() => [
     {
@@ -121,7 +135,6 @@ const Header: React.FC = () => {
       title: t('nav.live'),
       items: [
         { name: t('nav.watchParty'), path: '/watchparty/list', icon: <Users size={20} />, color: 'orange', desc: t('nav.watchPartyDesc') },
-        { name: t('nav.liveTV'), path: '/live-tv', icon: <Tv size={20} />, color: 'red', desc: t('nav.liveTVDesc') },
         ...(isVip ? [{ name: t('nav.francetv'), path: '/ftv', icon: <Radio size={20} />, color: 'sky' as const, desc: t('nav.francetvDesc') }] : []),
       ]
     },
@@ -381,51 +394,65 @@ const Header: React.FC = () => {
             <div className="relative flex items-center h-16 phone-ls:h-12 px-4 phone-ls:px-2 md:px-6 lg:px-8 gap-3 phone-ls:gap-2 md:gap-5">
 
 
-              {/* Desktop Nav: 3 items principaux + Explorer */}
+              {/* Desktop Nav: 3 items principaux + Explorer, ou flèche retour sur les pages de détails */}
               <nav className="hidden landscape:flex lg:flex items-center gap-1.5 phone-ls:gap-1">
-                {mainNavItems.map((item) => {
-                  const active = item.isActive || hoveredNav === item.path;
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      className="flex items-center gap-1.5 phone-ls:gap-1 px-3 phone-ls:px-2 py-1.5 phone-ls:py-1 text-sm phone-ls:text-xs font-medium text-white rounded-xl transition-all duration-200"
-                      style={{
-                        background: active
-                          ? 'linear-gradient(135deg, rgba(0,230,118,0.16) 0%, rgba(168,85,247,0.16) 100%)'
-                          : 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
-                        backdropFilter: 'blur(20px) saturate(180%)',
-                        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                        borderTop: '1px solid rgba(255,255,255,0.28)',
-                        borderLeft: '1px solid rgba(255,255,255,0.16)',
-                        borderRight: '1px solid rgba(255,255,255,0.07)',
-                        borderBottom: '1px solid rgba(0,0,0,0.22)',
-                        boxShadow: active
-                          ? 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.12), 0 0 0 1px rgba(168,85,247,0.18)'
-                          : 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
-                      }}
-                      onMouseEnter={() => setHoveredNav(item.path)}
-                      onMouseLeave={() => setHoveredNav(null)}
-                    >
-                      {item.icon}
-                      <span
-                        className="nav-label"
-                        style={active ? {
-                          display: 'inline-block',
-                          backgroundImage: 'linear-gradient(135deg,#00e676,#a855f7)',
-                          WebkitBackgroundClip: 'text',
-                          backgroundClip: 'text',
-                          WebkitTextFillColor: 'transparent',
-                          color: 'transparent',
-                        } : {
-                          display: 'inline-block',
-                          color: 'white',
-                          WebkitTextFillColor: 'white',
+                {isDetailsPage ? (
+                  <button
+                    type="button"
+                    onClick={handleBackFromDetails}
+                    aria-label={t('common.back') as string}
+                    className="flex items-center justify-center w-10 h-10 phone-ls:w-8 phone-ls:h-8 rounded-xl text-white transition-all duration-200"
+                    style={{
+                      background: 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
+                      backdropFilter: 'blur(20px) saturate(180%)',
+                      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                      borderTop: '1px solid rgba(255,255,255,0.28)',
+                      borderLeft: '1px solid rgba(255,255,255,0.16)',
+                      borderRight: '1px solid rgba(255,255,255,0.07)',
+                      borderBottom: '1px solid rgba(0,0,0,0.22)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
+                    }}
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+                ) : (
+                  mainNavItems.map((item) => {
+                    const active = item.isActive || hoveredNav === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className="flex items-center gap-1.5 phone-ls:gap-1 px-3 phone-ls:px-2 py-1.5 phone-ls:py-1 text-sm phone-ls:text-xs font-medium text-white rounded-xl transition-all duration-200"
+                        style={{
+                          background: active
+                            ? 'linear-gradient(135deg, rgba(0,230,118,0.16) 0%, rgba(168,85,247,0.16) 100%)'
+                            : 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
+                          backdropFilter: 'blur(20px) saturate(180%)',
+                          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                          borderTop: '1px solid rgba(255,255,255,0.28)',
+                          borderLeft: '1px solid rgba(255,255,255,0.16)',
+                          borderRight: '1px solid rgba(255,255,255,0.07)',
+                          borderBottom: '1px solid rgba(0,0,0,0.22)',
+                          boxShadow: active
+                            ? 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.12), 0 0 0 1px rgba(168,85,247,0.18)'
+                            : 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
                         }}
-                      >{item.name}</span>
-                    </Link>
-                  );
-                })}
+                        onMouseEnter={() => setHoveredNav(item.path)}
+                        onMouseLeave={() => setHoveredNav(null)}
+                      >
+                        {item.icon}
+                        <span
+                          className="nav-label"
+                          style={{
+                            display: 'inline-block',
+                            color: 'white',
+                            WebkitTextFillColor: 'white',
+                          }}
+                        >{item.name}</span>
+                      </Link>
+                    );
+                  })
+                )}
 
                 {isAprilFoolsAdminVisible && (
                   <Link

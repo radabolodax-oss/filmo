@@ -60,20 +60,12 @@ const pageStyles = `
   100% { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes expandWidth {
-  0% { width: 0; }
-  100% { width: 40px; }
-}
-
 .section-title {
   font-size: 1.5rem;
   font-weight: 700;
   position: relative;
-  background: linear-gradient(90deg, #ffffff, #e2e2e2);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0px 2px 4px rgba(0, 0, 0, 0.3);
+  color: #ffffff;
+  text-shadow: 0 2px 16px rgba(22,101,52,0.55), 0 1px 4px rgba(0,0,0,0.7);
   letter-spacing: 0.5px;
   padding-bottom: 0.5rem;
   text-transform: uppercase;
@@ -83,11 +75,8 @@ const pageStyles = `
 }
 
 .section-title:hover {
-  background: linear-gradient(90deg, #4ade80, #a855f7);
-  -webkit-background-clip: text;
-  background-clip: text;
+  text-shadow: 0 2px 24px rgba(74,222,128,0.5), 0 1px 4px rgba(0,0,0,0.7);
   transform: translateY(-2px);
-  text-shadow: 0px 4px 8px rgba(168, 85, 247, 0.4);
 }
 
 .section-title::after {
@@ -95,18 +84,10 @@ const pageStyles = `
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 40px;
-  height: 3px;
-  background: linear-gradient(90deg, #4ade80 0%, #a855f7 100%);
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #166534, #4ade80, #166534, transparent);
   border-radius: 3px;
-  animation: expandWidth 0.6s ease-out forwards 0.3s;
-  transform-origin: left;
-  transition: all 0.3s ease;
-}
-
-.section-title:hover::after {
-  width: 100%;
-  background: linear-gradient(90deg, #4ade80, #a855f7);
 }
 `;
 
@@ -502,7 +483,7 @@ const Anime: React.FC = () => {
 
   if (loading && animeShows.length === 0) {
     return (
-      <div className="min-h-screen bg-black text-white">
+      <div className="min-h-screen text-white" style={{ background: '#080808' }}>
         <div className="relative w-full">
           <HeroSkeleton />
         </div>
@@ -516,7 +497,7 @@ const Anime: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white -mt-[302px]">
+    <div className="min-h-screen text-white -mt-[302px]" style={{ background: '#080808' }}>
       <style>{pageStyles}</style>
 
       <div className="relative w-full mb-1 mt-[304px]">
@@ -527,7 +508,7 @@ const Anime: React.FC = () => {
         )}
       </div>
 
-      <div className="w-full bg-black py-2 relative mt-0 z-[20] px-4 md:px-8">
+      <div className="w-full py-2 relative mt-0 z-[20] px-4 md:px-8" style={{ background: '#080808' }}>
         <EmblaCarouselGenres
           title={<span><span className="text-white mr-2">🧭</span><span>{t('genres.findByGenre')}</span></span>}
           items={genreItems}

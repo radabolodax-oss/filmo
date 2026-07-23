@@ -70,7 +70,7 @@ function hasUsableFStreamSession() {
 }
 
 function canUseFStreamAuth() {
-  return false;
+  return Boolean(FSTREAM_LOGIN_NAME && FSTREAM_LOGIN_PASSWORD);
 }
 
 async function loginToFStream() {
@@ -1486,7 +1486,7 @@ router.get('/movie/:id', async (req, res) => {
 
       const players = await getMoviePlayersForUrl(bestResult.link);
       if (players.total === 0) {
-        return res.status(404).json({ error: 'Aucun lecteur video trouve', searchQuery, bestResult: bestResult.title });
+        return { success: false, error: 'Aucun lecteur video trouve', searchQuery, bestResult: bestResult.title };
       }
 
       return {
@@ -1498,6 +1498,9 @@ router.get('/movie/:id', async (req, res) => {
     });
 
     await saveFStreamToCache(cacheKey, result);
+    if (result && result.success === false && result.error === 'Aucun lecteur video trouve') {
+      return res.status(404).json(result);
+    }
     res.status(200).json(result);
 
   } catch (error) {
@@ -1895,6 +1898,32 @@ router.get('/test/recent-series', async (req, res) => {
     res.status(200).json({ success: true, count: recentSeries.length, series: recentSeries.slice(0, 10), timestamp: new Date().toISOString() });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message, timestamp: new Date().toISOString() });
+  }
+});
+
+// GET /debug/players?url=...  — teste film_api.php + HTML fallback sur une URL donnée
+router.get('/debug/players', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'Paramètre url manquant' });
+  try {
+    const apiResult = await fetchMoviePlayersFromApi(url);
+    const pageId = extractPageIdFromUrl(url);
+    res.json({ url, pageId, apiResult: apiResult || null, apiPlayerCount: apiResult?.length ?? 0 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /debug/search?q=...  — teste la recherche + extraction de l'URL
+router.get('/debug/search', async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ error: 'Paramètre q manquant' });
+  try {
+    const html = await searchFStreamDirect(q);
+    const results = filterFStreamResults(html, q, null);
+    res.json({ query: q, resultCount: results.length, results: results.slice(0, 5) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

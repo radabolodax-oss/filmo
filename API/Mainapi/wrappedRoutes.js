@@ -174,7 +174,7 @@ function extractWrappedFields(data) {
  * Fetch details from TMDB (via tmdbCache Redis centralisé)
  */
 async function fetchTMDBDetails(contentId, contentType) {
-    // Skip live-tv as it's not from TMDB
+    // Legacy rows from the removed Live TV feature aren't TMDB-backed content.
     if (contentType === 'live-tv') {
         return { title: `Live TV #${contentId}`, poster_path: null, genres: [] };
     }
@@ -245,7 +245,7 @@ async function initTables() {
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL,
         profile_id VARCHAR(255),
-        content_type ENUM('movie', 'tv', 'anime', 'live-tv') NOT NULL,
+        content_type ENUM('movie', 'tv', 'anime') NOT NULL,
         content_id VARCHAR(255) NOT NULL,
         content_title VARCHAR(255),
         season_number INT DEFAULT NULL,

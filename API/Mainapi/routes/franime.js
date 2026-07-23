@@ -22,6 +22,25 @@ function slugify(name) {
     .replace(/^-+|-+$/g, '');
 }
 
+// Retire les marqueurs de saison/partie et articles courants avant slugification
+function normalizeTitle(name) {
+  return name
+    .replace(/\s*:\s*.+$/, '')           // sous-titre après ":"
+    .replace(/\b(saison|season|partie|part|cour)\s*\d+\b/gi, '')
+    .replace(/\b(le|la|les|l|un|une|the|a|an)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function wordOverlapScore(slugA, slugB) {
+  const wordsA = new Set(slugA.split('-').filter(w => w.length > 1));
+  const wordsB = new Set(slugB.split('-').filter(w => w.length > 1));
+  if (!wordsA.size || !wordsB.size) return 0;
+  let overlap = 0;
+  for (const w of wordsA) if (wordsB.has(w)) overlap++;
+  return overlap / Math.max(wordsA.size, wordsB.size);
+}
+
 async function loadSitemap() {
   const now = Date.now();
   if (_sitemapData && (now - _sitemapFetchedAt) < SITEMAP_TTL) {
@@ -74,26 +93,44 @@ router.get('/lookup', async (req, res) => {
 
   try {
     const data = await loadSitemap();
-    const targetSlug = slugify(decodeURIComponent(query));
-
-    // 1. Exact match
-    if (data[targetSlug]) {
-      return res.json(data[targetSlug]);
-    }
+    const rawQuery = decodeURIComponent(query);
+    const targetSlug = slugify(rawQuery);
+    const normalSlug = slugify(normalizeTitle(rawQuery));
 
     const slugKeys = Object.keys(data);
 
-    // 2. Our slug is a prefix of a franime slug (e.g. "dr-stone" → "dr-stone-science-future")
-    const prefixMatch = slugKeys.find(k => k.startsWith(targetSlug + '-'));
-    if (prefixMatch) {
-      return res.json(data[prefixMatch]);
-    }
+    // 1. Exact match (original ou normalisé)
+    if (data[targetSlug]) return res.json(data[targetSlug]);
+    if (normalSlug !== targetSlug && data[normalSlug]) return res.json(data[normalSlug]);
 
-    // 3. Franime slug is a prefix of our slug (e.g. "boruto" ↔ "boruto-naruto-next-generations")
-    const reversePrefixMatch = slugKeys.find(k => targetSlug.startsWith(k + '-'));
-    if (reversePrefixMatch) {
-      return res.json(data[reversePrefixMatch]);
+    // 2. Prefix notre slug → franime (ex: "dr-stone" → "dr-stone-science-future")
+    const prefixMatch = slugKeys.find(k => k.startsWith(targetSlug + '-'))
+      ?? (normalSlug !== targetSlug ? slugKeys.find(k => k.startsWith(normalSlug + '-')) : null);
+    if (prefixMatch) return res.json(data[prefixMatch]);
+
+    // 3. Prefix franime → notre slug (ex: "boruto" ↔ "boruto-naruto-next-generations")
+    const reversePrefixMatch = slugKeys.find(k => targetSlug.startsWith(k + '-'))
+      ?? (normalSlug !== targetSlug ? slugKeys.find(k => normalSlug.startsWith(k + '-')) : null);
+    if (reversePrefixMatch) return res.json(data[reversePrefixMatch]);
+
+    // 4. Substring (l'un contient l'autre)
+    const containsMatch = slugKeys.find(k => targetSlug.includes(k) || k.includes(targetSlug))
+      ?? (normalSlug !== targetSlug
+        ? slugKeys.find(k => normalSlug.includes(k) || k.includes(normalSlug))
+        : null);
+    if (containsMatch) return res.json(data[containsMatch]);
+
+    // 5. Meilleur score de recouvrement de mots (seuil 0.6)
+    let bestKey = null;
+    let bestScore = 0.6;
+    for (const k of slugKeys) {
+      const score = Math.max(
+        wordOverlapScore(targetSlug, k),
+        wordOverlapScore(normalSlug, k)
+      );
+      if (score > bestScore) { bestScore = score; bestKey = k; }
     }
+    if (bestKey) return res.json(data[bestKey]);
 
     return res.status(404).json({ error: 'Anime not found on FRAnime' });
   } catch (err) {

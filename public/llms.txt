@@ -1,6 +1,6 @@
 # Movix
 
-> Movix est une plateforme française de streaming multimédia. Elle propose des films, séries, TV en direct, et des fonctionnalités sociales comme les Watch Parties synchronisées. Interface moderne, compatible multi-appareils, avec support navigateur et extensions.
+> Movix est une plateforme française de streaming multimédia. Elle propose des films, séries, et des fonctionnalités sociales comme les Watch Parties synchronisées. Interface moderne, compatible multi-appareils, avec support navigateur et extensions.
 
 ## Pages principales
 
@@ -8,7 +8,6 @@
 - [Films](https://movix.llc/movies) : catalogue complet de films
 - [Séries TV](https://movix.llc/tv-shows) : catalogue des séries et épisodes
 - [Recherche](https://movix.llc/search) : recherche multimédia
-- [TV en direct](https://movix.llc/live-tv) : chaînes en direct
 - [Collections](https://movix.llc/collections) : collections thématiques
 - [Roulette](https://movix.llc/roulette) : découverte aléatoire
 - [Watch Parties](https://movix.llc/watchparty/list) : visionnage synchronisé entre amis

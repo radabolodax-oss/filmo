@@ -79,7 +79,7 @@ Le routeur principal est dans `src/App.tsx`. Les grandes familles de routes sont
 - social / communautaire : `/wishboard`, `/list/:shareCode`, `/top10`, `/wrapped`
 - compte / profils / VIP : `/profile`, `/profile-selection`, `/settings`, `/vip`, `/vip/don`
 - temps réel : `/watchparty/create`, `/watchparty/join`, `/watchparty/room/:roomId`
-- services annexes : `/live-tv`, `/debrid`, `/extension`, `/ftv`
+- services annexes : `/debrid`, `/extension`, `/ftv`
 
 ## État global
 
