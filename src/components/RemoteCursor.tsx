@@ -2,13 +2,33 @@ import React, { useEffect, useRef, useState } from 'react';
 
 const STEP = 48;
 
+type Dir = 'up' | 'down' | 'left' | 'right';
+
+declare global {
+  interface Window {
+    __remoteCursor?: {
+      move: (dir: Dir) => void;
+      select: () => void;
+      back: () => void;
+    };
+  }
+}
+
 /**
  * Visible mouse-style cursor for D-pad/remote input (Android TV), like the
  * pointer Google TV shows for apps that aren't built with focus-based
  * (leanback) navigation. Arrow keys glide the dot around the screen,
  * OK/Enter "clicks" whatever DOM element is currently under it. Hidden
- * until the first arrow-key press so touch/mouse users never see it, and
- * hides again on the first touch in case input switches mid-session.
+ * until first used so touch/mouse users never see it, and hides again on
+ * the first touch in case input switches mid-session.
+ *
+ * Two input paths, both wired to the same logic:
+ *  1. Standard `keydown` — works when the WebView already has focus and
+ *     forwards hardware D-pad keys as ArrowUp/Down/Left/Right/Enter.
+ *  2. window.__remoteCursor.{move,select,back} — a bridge MainActivity's
+ *     dispatchKeyEvent() calls directly via evaluateJavascript(), for
+ *     devices/OEM WebViews where D-pad events get eaten by native view
+ *     focus before ever reaching page JS.
  */
 const RemoteCursor: React.FC = () => {
   const [active, setActive] = useState(false);
@@ -21,26 +41,42 @@ const RemoteCursor: React.FC = () => {
   useEffect(() => {
     const clamp = (v: number, max: number) => Math.max(0, Math.min(max, v));
 
+    const move = (dir: Dir) => {
+      setActive(true);
+      setPos(prev => {
+        let { x, y } = prev;
+        if (dir === 'up') y = clamp(y - STEP, window.innerHeight - 1);
+        if (dir === 'down') y = clamp(y + STEP, window.innerHeight - 1);
+        if (dir === 'left') x = clamp(x - STEP, window.innerWidth - 1);
+        if (dir === 'right') x = clamp(x + STEP, window.innerWidth - 1);
+        return { x, y };
+      });
+    };
+
+    const select = () => {
+      if (!activeRef.current) return;
+      const { x, y } = posRef.current;
+      const el = document.elementFromPoint(x, y) as HTMLElement | null;
+      el?.click();
+    };
+
+    const back = () => {
+      if (!activeRef.current) return;
+      window.history.back();
+    };
+
+    window.__remoteCursor = { move, select, back };
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        setActive(true);
-        setPos(prev => {
-          let { x, y } = prev;
-          if (e.key === 'ArrowUp') y = clamp(y - STEP, window.innerHeight - 1);
-          if (e.key === 'ArrowDown') y = clamp(y + STEP, window.innerHeight - 1);
-          if (e.key === 'ArrowLeft') x = clamp(x - STEP, window.innerWidth - 1);
-          if (e.key === 'ArrowRight') x = clamp(x + STEP, window.innerWidth - 1);
-          return { x, y };
-        });
+        move(e.key === 'ArrowUp' ? 'up' : e.key === 'ArrowDown' ? 'down' : e.key === 'ArrowLeft' ? 'left' : 'right');
         e.preventDefault();
         return;
       }
 
       if (e.key === 'Enter' || e.key === ' ') {
         if (!activeRef.current) return;
-        const { x, y } = posRef.current;
-        const el = document.elementFromPoint(x, y) as HTMLElement | null;
-        el?.click();
+        select();
         e.preventDefault();
         return;
       }
@@ -52,7 +88,7 @@ const RemoteCursor: React.FC = () => {
         const inTextInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
         if (inTextInput) return;
         e.preventDefault();
-        window.history.back();
+        back();
       }
     };
 
@@ -63,6 +99,7 @@ const RemoteCursor: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('touchstart', onTouchStart);
+      delete window.__remoteCursor;
     };
   }, []);
 

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.webkit.WebView;
 
 import androidx.activity.OnBackPressedCallback;
@@ -126,6 +127,50 @@ public class MainActivity extends BridgeActivity {
                 }
             }).start();
         }
+    }
+
+    /**
+     * Some OEM Android TV WebViews swallow hardware D-pad key events into
+     * their own native view-focus navigation before the events ever reach
+     * the page's JS `keydown` listener (RemoteCursor.tsx normally relies on
+     * that listener alone, which is enough on stock/emulator WebViews).
+     * As a guaranteed-delivery fallback, intercept D-pad/OK here and push
+     * them straight into the page via the window.__remoteCursor bridge.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        String jsCall = null;
+        switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                jsCall = "window.__remoteCursor && window.__remoteCursor.move('up')";
+                break;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                jsCall = "window.__remoteCursor && window.__remoteCursor.move('down')";
+                break;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                jsCall = "window.__remoteCursor && window.__remoteCursor.move('left')";
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                jsCall = "window.__remoteCursor && window.__remoteCursor.move('right')";
+                break;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+                jsCall = "window.__remoteCursor && window.__remoteCursor.select()";
+                break;
+            default:
+                return super.dispatchKeyEvent(event);
+        }
+        // Recognized D-pad/OK key: consume both ACTION_DOWN and ACTION_UP so Android's
+        // native view-focus navigation never gets a chance to also react to it, and only
+        // push the JS call once, on ACTION_DOWN.
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            WebView webView = getBridge().getWebView();
+            if (webView != null) {
+                webView.evaluateJavascript(jsCall, null);
+            }
+        }
+        return true;
     }
 
     public native Integer startNodeWithArguments(String[] arguments);
