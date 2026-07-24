@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const STEP = 48;
+const STEP = 24;
 
 type Dir = 'up' | 'down' | 'left' | 'right';
 
