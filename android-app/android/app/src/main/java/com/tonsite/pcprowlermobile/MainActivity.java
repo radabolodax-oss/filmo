@@ -6,8 +6,10 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.webkit.WebView;
 
 import androidx.activity.OnBackPressedCallback;
@@ -16,6 +18,9 @@ import com.chaquo.python.PyException;
 import com.chaquo.python.Python;
 import com.chaquo.python.android.AndroidPlatform;
 import com.getcapacitor.BridgeActivity;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -156,12 +161,16 @@ public class MainActivity extends BridgeActivity {
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                jsCall = "window.__remoteCursor && window.__remoteCursor.select()";
-                break;
+                // OK/Enter is handled separately below via a synthetic touch tap
+                // instead of a scripted call -- see dispatchSyntheticTapAtCursor().
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    dispatchSyntheticTapAtCursor();
+                }
+                return true;
             default:
                 return super.dispatchKeyEvent(event);
         }
-        // Recognized D-pad/OK key: consume both ACTION_DOWN and ACTION_UP so Android's
+        // Recognized D-pad key: consume both ACTION_DOWN and ACTION_UP so Android's
         // native view-focus navigation never gets a chance to also react to it, and only
         // push the JS call once, on ACTION_DOWN.
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -171,6 +180,50 @@ public class MainActivity extends BridgeActivity {
             }
         }
         return true;
+    }
+
+    /**
+     * OK/Enter used to just call window.__remoteCursor.select(), which runs
+     * el.click() from injected script. Chromium only grants "user
+     * activation" (required for window.open()-gated ad-unlock flows some
+     * video sources use -- confirmed some sources show a "click through this
+     * ad" step that a real touch satisfies but a scripted click doesn't) to
+     * genuine input events, and an evaluateJavascript() call never carries
+     * that, no matter how it was triggered. Read the cursor's tracked
+     * position back from JS, then synthesize a real touch DOWN/UP at that
+     * point so the click looks exactly like the tap that's known to work.
+     */
+    private void dispatchSyntheticTapAtCursor() {
+        WebView webView = getBridge().getWebView();
+        if (webView == null) return;
+        webView.evaluateJavascript(
+            "(function(){var p=window.__remoteCursor&&window.__remoteCursor.getPosition();"
+                + "return p?JSON.stringify(p):null;})()",
+            value -> {
+                if (value == null || "null".equals(value)) return;
+                try {
+                    String json = value;
+                    // evaluateJavascript wraps string results in an extra pair of
+                    // quotes and escapes inner ones -- unwrap before parsing.
+                    if (json.length() >= 2 && json.charAt(0) == '"') {
+                        json = json.substring(1, json.length() - 1).replace("\\\"", "\"");
+                    }
+                    JSONObject pos = new JSONObject(json);
+                    float density = getResources().getDisplayMetrics().density;
+                    float x = (float) (pos.getDouble("x") * density);
+                    float y = (float) (pos.getDouble("y") * density);
+                    long now = SystemClock.uptimeMillis();
+                    MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0);
+                    MotionEvent up = MotionEvent.obtain(now, now + 20, MotionEvent.ACTION_UP, x, y, 0);
+                    webView.dispatchTouchEvent(down);
+                    webView.dispatchTouchEvent(up);
+                    down.recycle();
+                    up.recycle();
+                } catch (JSONException e) {
+                    Log.e(TAG, "Failed to parse remote cursor position for synthetic tap", e);
+                }
+            }
+        );
     }
 
     public native Integer startNodeWithArguments(String[] arguments);

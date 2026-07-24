@@ -10,6 +10,7 @@ declare global {
       move: (dir: Dir) => void;
       select: () => void;
       back: () => void;
+      getPosition: () => { x: number; y: number };
     };
   }
 }
@@ -96,7 +97,7 @@ const RemoteCursor: React.FC = () => {
       window.history.back();
     };
 
-    window.__remoteCursor = { move, select, back };
+    window.__remoteCursor = { move, select, back, getPosition: () => posRef.current };
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
