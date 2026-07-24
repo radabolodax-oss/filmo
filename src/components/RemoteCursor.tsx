@@ -161,7 +161,8 @@ const RemoteCursor: React.FC = () => {
           borderRight: '1px solid rgba(255,255,255,0.07)',
           borderBottom: '1px solid rgba(0,0,0,0.22)',
           boxShadow:
-            'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
+            'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28), '
+            + '0 0 10px 2px rgba(0,230,118,0.65), 0 0 20px 7px rgba(168,85,247,0.45)',
         }}
       />
     </div>
