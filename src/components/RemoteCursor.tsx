@@ -140,7 +140,12 @@ const RemoteCursor: React.FC = () => {
     <div
       aria-hidden
       className="fixed z-[99999] pointer-events-none"
-      style={{ left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)' }}
+      style={{
+        left: pos.x,
+        top: pos.y,
+        transform: 'translate(-50%, -50%)',
+        transition: 'left 110ms ease-out, top 110ms ease-out',
+      }}
     >
       <div className="w-8 h-8 rounded-full bg-white/90 border-2 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.8)]" />
     </div>
