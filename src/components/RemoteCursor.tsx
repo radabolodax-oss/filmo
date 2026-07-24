@@ -147,7 +147,10 @@ const RemoteCursor: React.FC = () => {
         transition: 'left 110ms ease-out, top 110ms ease-out',
       }}
     >
-      <div className="w-8 h-8 rounded-full bg-white/90 border-2 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.8)]" />
+      <div className="relative w-9 h-9 rounded-full bg-white/10 backdrop-blur-md border border-white/50 shadow-[0_4px_20px_rgba(0,0,0,0.35),inset_0_1px_1px_rgba(255,255,255,0.7),inset_0_-1px_2px_rgba(0,0,0,0.15)]">
+        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/50 via-white/5 to-transparent" />
+        <div className="absolute top-1 left-1.5 w-2 h-1.5 rounded-full bg-white/70 blur-[1px]" />
+      </div>
     </div>
   );
 };
