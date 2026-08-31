@@ -7,10 +7,10 @@ services:
     image: mysql:8
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_movix_2024
-      MYSQL_DATABASE: movix
-      MYSQL_USER: movix
-      MYSQL_PASSWORD: movix_pass
+      MYSQL_ROOT_PASSWORD: root_dawger_2024
+      MYSQL_DATABASE: dawger
+      MYSQL_USER: dawger
+      MYSQL_PASSWORD: dawger_pass
     volumes:
       - mysql_data:/var/lib/mysql
       # Alphabetical order = execution order: full schema first, then the
@@ -19,7 +19,10 @@ services:
       - ./API/Mainapi/exportscripts/schema_full_init.sql:/docker-entrypoint-initdb.d/00_schema_full_init.sql
       - ./API/Mainapi/wrapped_tables.sql:/docker-entrypoint-initdb.d/01_wrapped.sql
     ports:
-      - "3306:3306"
+      # 3307 côté hôte : le 3306 natif est déjà pris sur cette machine (MySQL
+      # local). Sans incidence sur api/proxiesembed, qui parlent au conteneur
+      # "mysql" via le réseau interne Docker sur le port 3306 quoi qu'il arrive.
+      - "3307:3306"
 
   redis:
     image: redis:7-alpine
@@ -32,7 +35,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_MAIN_API: http://localhost:25565
+        VITE_SITE_URL: http://localhost:3001
+        VITE_WATCHPARTY_API: http://localhost:25566
     restart: unless-stopped
+    # Le stage final du Dockerfile lance "npm run dev" (pas le build statique),
+    # donc les ARG/ENV du builder ne sont pas dispo au runtime, et .env est
+    # exclu du build context par .dockerignore -- sans ceci, VITE_TMDB_API_KEY
+    # et les autres VITE_* sont vides dans le conteneur (401 sur TMDB, etc).
+    env_file:
+      - ./.env
+    environment:
+      VITE_SITE_URL: http://localhost:3001
     ports:
       - "3001:3001"
     depends_on:
@@ -47,6 +62,17 @@ services:
       - "25565:25565"
     env_file:
       - ./API/Mainapi/.env
+    environment:
+      # Ecrase les valeurs locales du .env pour pointer vers les
+      # conteneurs mysql/redis de cette stack au lieu de localhost.
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: dawger
+      DB_PASSWORD: dawger_pass
+      DB_NAME: dawger
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: redis_pass
     depends_on:
       - mysql
       - redis
@@ -74,6 +100,12 @@ services:
       - "25569:25569"
     env_file:
       - ./API/proxiesembed/.env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: dawger
+      DB_PASSWORD: dawger_pass
+      DB_NAME: dawger
 
   bypass403:
     build:
