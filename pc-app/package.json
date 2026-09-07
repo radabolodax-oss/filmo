@@ -1,5 +1,5 @@
 {
-  "name": "pc_prowler",
+  "name": "pc_dawger",
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {
@@ -7,10 +7,13 @@
     "build": "electron-builder --win"
   },
   "build": {
-    "appId": "com.tonsite.pcprowler",
-    "productName": "PC Prowler",
+    "appId": "com.tonsite.pcdawger",
+    "productName": "PC Dawger",
     "win": {
-      "target": "nsis"
+      "target": ["nsis", "portable"]
+    },
+    "portable": {
+      "artifactName": "PCDawger-portable.exe"
     }
   },
   "devDependencies": {
