@@ -37,5 +37,9 @@ git push
 ```
 env-backup\restore-env.bat
 ```
-Le script demande le chemin vers la cle privee, puis recree les 3 `.env` a
-leur bon endroit. Lance ensuite `start-dawger.bat` normalement.
+Le script cherche d'abord la cle privee a
+`%USERPROFILE%\Desktop\dawger-backups-age-key.txt` et l'utilise
+automatiquement si elle y est (copie le fichier de cle a cet endroit precis
+avant de lancer le script pour eviter la saisie manuelle) ; sinon il demande
+le chemin. Il recree ensuite les 3 `.env` a leur bon endroit. Lance ensuite
+`start-dawger.bat` normalement (ou `setup-new-pc.bat` qui enchaine tout).

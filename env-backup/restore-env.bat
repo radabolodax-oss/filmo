@@ -10,7 +10,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
-set /p KEYFILE=Chemin vers la cle privee age (ex: C:\Users\toi\dawger-key.txt):
+set DEFAULT_KEYFILE=%USERPROFILE%\Desktop\dawger-backups-age-key.txt
+if exist "%DEFAULT_KEYFILE%" (
+    echo Cle privee trouvee automatiquement: %DEFAULT_KEYFILE%
+    set KEYFILE=%DEFAULT_KEYFILE%
+) else (
+    set /p KEYFILE=Chemin vers la cle privee age ^(ex: C:\Users\toi\dawger-key.txt^):
+)
 if not exist "%KEYFILE%" (
     echo ERREUR: fichier de cle introuvable: %KEYFILE%
     pause

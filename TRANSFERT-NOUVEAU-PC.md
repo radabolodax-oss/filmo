@@ -20,16 +20,36 @@ Note bien quelque part (gestionnaire de mots de passe) le chemin/contenu de
 la **cle privee age** utilisee pour `backups/` — c'est la meme qui dechiffre
 `env-backup/`. Sans elle, tout ce qui est chiffre est perdu pour de bon.
 
+**Important** : copie aussi le fichier de la cle privee lui-meme sur le
+Bureau du nouveau PC, sous le nom exact `dawger-backups-age-key.txt`
+(`%USERPROFILE%\Desktop\dawger-backups-age-key.txt`). `restore-env.bat` le
+detecte automatiquement a cet endroit et n'a rien a demander ; sinon il
+retombe sur une saisie manuelle du chemin.
+
 ## Sur le nouveau PC
 
-Prerequis : [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-installe et lance. Node.js n'est **pas** necessaire si tu lances l'appli
-Electron deja compilee (voir plus bas) ; sinon installe-le aussi.
+Prerequis (le seul qui ne s'automatise pas) :
+[Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)
+installe et lance (WSL2 + redemarrage requis, ne peut pas se faire
+silencieusement). `setup-new-pc.bat` ouvre ce lien tout seul si Docker
+manque.
 
 ```
 git clone https://github.com/radabolodax-oss/filmo.git
 cd filmo
-env-backup\restore-env.bat      REM demande le chemin de la cle privee age
+setup-new-pc.bat
+```
+
+`setup-new-pc.bat` verifie/installe `age` et Node.js (winget), verifie Docker
+(et ouvre la page d'installation si absent), puis enchaine automatiquement
+`env-backup\restore-env.bat` (cle recuperee automatiquement depuis le Bureau,
+voir plus haut) et `start-dawger.bat`.
+
+Pour ne faire qu'une etape a la fois (ou si tu preferes tout controler a la
+main), les scripts individuels marchent aussi :
+
+```
+env-backup\restore-env.bat      REM cle auto-detectee sur le Bureau, sinon demandee
 start-dawger.bat                REM Docker + attend le site + ouvre l'appli
 ```
 
