@@ -1,0 +1,22 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+ARG VITE_MAIN_API=http://10.37.183.197:25565
+ARG VITE_TMDB_API_KEY=b0dc8a1e621bd0e9a3f906c11e312162
+ARG VITE_SITE_URL=http://10.37.183.197:3001
+ARG VITE_WATCHPARTY_API=http://10.37.183.197:25566
+ARG VITE_NAKIOS_PROXY=https://nakios-proxy.radabolodax.workers.dev
+ENV VITE_MAIN_API=$VITE_MAIN_API
+ENV VITE_TMDB_API_KEY=$VITE_TMDB_API_KEY
+ENV VITE_SITE_URL=$VITE_SITE_URL
+ENV VITE_WATCHPARTY_API=$VITE_WATCHPARTY_API
+ENV VITE_NAKIOS_PROXY=$VITE_NAKIOS_PROXY
+RUN npm run build
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app .
+EXPOSE 3001
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3001"]

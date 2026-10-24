@@ -1,0 +1,1 @@
+import{i as e}from"./i18n-DM1sjKrb.js";var t=e=>e.normalize(`NFD`).replace(/[\u0300-\u036f]/g,``).toLowerCase().trim(),n=async(t,n=e(),r=8)=>(t.trim(),[]),r=async(n,r=e())=>(t(n),null),i=async(e,t)=>[];export{r as n,n as r,i as t};

@@ -1,0 +1,1 @@
+var e=`settings_sound_effects_enabled`,t=`settings_sound_effects_changed`,n=()=>{if(typeof window>`u`)return!0;try{return window.localStorage.getItem(e)!==`false`}catch{return!0}},r=n=>{if(!(typeof window>`u`)){try{window.localStorage.setItem(e,String(n))}catch{return}window.dispatchEvent(new CustomEvent(t,{detail:{enabled:n}}))}};export{n,r,t};

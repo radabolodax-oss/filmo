@@ -1,0 +1,23 @@
+{
+  "name": "pc_dawger",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.tonsite.pcdawger",
+    "productName": "PC Dawger",
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "portable": {
+      "artifactName": "PCDawger-portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3"
+  }
+}

@@ -1,0 +1,123 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.chaquo.python'
+
+android {
+    namespace = "com.tonsite.pcprowlermobile"
+    ndkVersion = "27.2.12479018"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.tonsite.pcprowlermobile"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
+        ndk {
+            // nodejs-mobile v18.20.4 Android release ships armeabi-v7a,
+            // arm64-v8a, x86_64 (no x86). Pixel_Tablet emulator is x86_64.
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86_64"
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+        }
+    }
+    // Package the prebuilt libnode.so per-ABI alongside our own native-lib.so.
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libnode/bin']
+        }
+    }
+}
+
+// Chaquopy: on-device Python interpreter running app/src/main/python's port
+// of API/proxiesembed/ (stream-URL extraction/DRM proxying, ~67 sources).
+// Same ABI set as the ndk.abiFilters above (Chaquopy needs its own
+// per-ABI native Python interpreter) -- default Python version (3.10)
+// supports both 32- and 64-bit ABIs (3.12+ dropped 32-bit support), so
+// armeabi-v7a stays covered alongside arm64-v8a/x86_64.
+chaquopy {
+    defaultConfig {
+        // Host-machine Python used only to run pip at build time (resolves/
+        // downloads wheels for the target Android ABIs) -- must match the
+        // in-app `version` below exactly.
+        buildPython("C:/Python311/python.exe")
+        // 3.11 (not the 3.10 default): m3u8's `backports-datetime-
+        // fromisoformat` dependency (needed only for python_version < 3.11)
+        // has no Android-compatible wheel anywhere, and building its C
+        // extension from sdist isn't supported here (same category as
+        // curl_cffi). 3.11 is still <=3.11, i.e. still within Chaquopy's
+        // "supports both 32- and 64-bit ABIs" range, so armeabi-v7a stays
+        // covered (3.12+ dropped 32-bit ABI support entirely).
+        version = "3.11"
+        pip {
+            install("-r", "requirements-mobile.txt")
+        }
+        // Python modules are loaded straight out of the APK by default and
+        // don't exist as real files -- our code needs real files on disk
+        // for __file__-relative sys.path/os.chdir/os.listdir tricks
+        // (server.py's _DRMPROXY_DIR resolution, drmproxy's service-file
+        // discovery). See src/main/python/mobile_entry.py's docstring.
+        extractPackages(
+            "proxiesembed",
+            "proxiesembed.drmproxy",
+            "proxiesembed.drmproxy.services",
+            "proxiesembed.drmproxy.utils",
+            "proxiesembed.drmproxy.utils.tools",
+            "proxiesembed.drmproxy.utils.constants",
+            "proxiesembed.drmproxy.utils.pssh_box"
+        )
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        outputFileName = "prowler.apk"
+    }
+}
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

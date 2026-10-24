@@ -1,0 +1,102 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Auto-generated entries
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment files
+.env
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Sensitive files (auto-detected)
+.env
+dist
+node_modules
+.env
+
+# Local DB/cache backups (mysqldump, Memurai/Redis RDB snapshots) — contain
+# real user data/secrets, never commit. See backups/README.md.
+backups/*.sql
+backups/*.rdb
+
+# Project runtime caches and local data
+API/cache/
+API/data/
+API/Mainapi/cache/
+API/Mainapi/data/
+
+# Discord bot (private; published separately)
+API/BOT/
+
+# Claude Code / superpowers local state
+.claude/
+.superpowers/
+
+# Python artifacts
+**/__pycache__/
+*.pyc
+*.pyo
+**/.venv/
+
+# Android app (android-app/) — generated/downloaded content, not source.
+# Rebuild via: npm run build --mode mobile (repo root) -> android-app/scripts/prepare-www.mjs,
+# then npx cap sync android. libnode/ is downloaded from nodejs-mobile releases (see cpp/README
+# or agent notes) — not redistributed in git.
+android-app/www/
+android-app/android/app/src/main/assets/public/
+android-app/android/app/src/main/assets/nodejs-project/
+android-app/android/app/src/main/assets/nodejs-project.zip
+android-app/android/app/libnode/
+android-app/android/app/.cxx/
+android-app/android/.gradle/
+android-app/android/**/build/
+android-app/android/local.properties
+android-app/android/capacitor-cordova-android-plugins/
+*.apk
+*.aab
+.env.mobile

@@ -1,0 +1,1 @@
+import{a as e}from"./rolldown-runtime-BYbx6iT9.js";import{y as t}from"./react-vendor-B6XY49oK.js";import{H as n}from"./index-t7afhX3U.js";var r=e(t(),1),i=({onAccept:e})=>{let{handlePopupAccept:t}=n(),i=e||t;return(0,r.useEffect)(()=>{i()},[]),null};export{i as t};

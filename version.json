@@ -1,0 +1,35 @@
+{
+  "version": "1.0.1",
+  "versionCode": 2,
+  "minRequiredVersion": "1.0.0",
+  "releaseDate": "2026-10-22",
+  "title": "Mise à jour v1.0.1",
+  "changelog": [
+    "Nouveau lecteur vidéo tactile optimisé pour mobile",
+    "Mise à jour automatique in-app sans passer par le site web",
+    "Amélioration des contrôles plein écran et disparition fluide de l'interface",
+    "Compatibilité optimisée avec Android TV et télécommandes"
+  ],
+  "platforms": {
+    "android": {
+      "url": "http://localhost:8080/downloads/dawger.apk",
+      "fallbackUrl": "https://github.com/dawgercorp/DawgerOpenSource/releases/latest/download/dawger.apk",
+      "size": "11.4 Mo"
+    },
+    "android_tv": {
+      "url": "http://localhost:8080/downloads/dawger-tv.apk",
+      "fallbackUrl": "https://github.com/dawgercorp/DawgerOpenSource/releases/latest/download/dawger-tv.apk",
+      "size": "11.4 Mo"
+    },
+    "windows": {
+      "url": "http://localhost:8080/downloads/PCDawger-Setup.exe",
+      "fallbackUrl": "https://github.com/dawgercorp/DawgerOpenSource/releases/latest/download/PCDawger-Setup.exe",
+      "size": "85 Mo"
+    },
+    "mac": {
+      "url": "http://localhost:8080/downloads/Dawger.dmg",
+      "fallbackUrl": "https://github.com/dawgercorp/DawgerOpenSource/releases/latest/download/Dawger.dmg",
+      "size": "92 Mo"
+    }
+  }
+}

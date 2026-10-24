@@ -1,0 +1,1 @@
+function e(){return{userType:null,userId:null,accountProvider:null,authMethod:null,manageWithProvider:null}}function t(){return null}function n(){}function r(){}function i(e,t){}export{i as a,t as i,n,e as r,r as t};

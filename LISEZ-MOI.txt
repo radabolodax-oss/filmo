@@ -1,0 +1,35 @@
+==================================================
+              DAWGER - GUIDE RAPIDE
+==================================================
+
+ETAPE 1 :
+Double-clique sur le raccourci "installer-prerequis"
+(Installe Docker Desktop et Node.js automatiquement).
+
+ETAPE 2 :
+Ouvre "Docker Desktop" depuis ton menu Demarrer
+(Attends 1 minute que la petite baleine soit prete).
+
+ETAPE 3 :
+Double-clique sur le raccourci "start-dawger"
+(L'application Dawger se lance toute seule !).
+
+==================================================
+Au quotidien : lance simplement "start-dawger".
+==================================================
+
+--------------------------------------------------
+SI DOCKER DEMANDE WSL OU LA VIRTUALISATION :
+--------------------------------------------------
+Ouvre PowerShell (clic droit -> Executer en administrateur)
+et tape ces 2 commandes :
+
+  1. wsl --install --no-distribution
+  2. wsl --update
+
+(Redemarre ton PC si Windows le demande).
+
+Note : Si Docker indique que la virtualisation est
+desactivee, active "Intel Virtualization (VT-x)" ou
+"AMD SVM" dans le BIOS de ton PC au demarrage.
+==================================================
