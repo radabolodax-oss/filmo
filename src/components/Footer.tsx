@@ -374,7 +374,7 @@ const Footer: React.FC = () => {
             {/* COLONNE DROITE (7 cols) : 3 COLONNES DE NAVIGATION */}
             <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-8">
 
-              {/* 1. DÉCOUVRIR */}
+                            {/* 1. DÉCOUVRIR */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-4 flex items-center gap-1.5">
                   <Compass className="w-3.5 h-3.5" />
@@ -392,18 +392,28 @@ const Footer: React.FC = () => {
                     </Link>
                   </li>
                   <li>
-                    <Link to="/tv-shows" className="text-zinc-400 hover:text-white transition-colors">
+                    <Link to="/series" className="text-zinc-400 hover:text-white transition-colors">
                       Séries
                     </Link>
                   </li>
                   <li>
-                    <Link to="/anime" className="text-zinc-400 hover:text-white transition-colors">
+                    <Link to="/animes" className="text-zinc-400 hover:text-white transition-colors">
                       Animés
                     </Link>
                   </li>
                   <li>
+                    <Link to="/sagas" className="text-zinc-400 hover:text-white transition-colors">
+                      Sagas
+                    </Link>
+                  </li>
+                  <li>
                     <Link to="/collections" className="text-zinc-400 hover:text-white transition-colors">
-                      Sagas & Collections
+                      Collections
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/acteurs" className="text-zinc-400 hover:text-white transition-colors">
+                      Acteurs & Réalisateurs
                     </Link>
                   </li>
                   <li>
@@ -412,32 +422,15 @@ const Footer: React.FC = () => {
                     </Link>
                   </li>
                   <li>
-                    <Link to="/top10" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5">
-                      <span>Top 10 & Tendances</span>
+                    <Link to="/prochainement" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5">
+                      <span>Prochainement</span>
                       <Sparkles className="w-3 h-3 text-amber-400" />
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/roulette" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5">
-                      <span>Roulette Aléatoire</span>
-                      <Dice5 className="w-3 h-3 text-emerald-400" />
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/search" className="text-zinc-400 hover:text-white transition-colors">
-                      Retrouver un film
-                    </Link>
-                  </li>
-                  <li>
-                    <Link to="/wishboard" className="text-zinc-400 hover:text-emerald-400 transition-colors flex items-center gap-1">
-                      <span>Demander un titre</span>
-                      <PlusCircle className="w-3 h-3 text-emerald-400" />
                     </Link>
                   </li>
                 </ul>
               </div>
 
-              {/* 2. MON ESPACE & OUTILS */}
+{/* 2. MON ESPACE & OUTILS */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-4 flex items-center gap-1.5">
                   <Smartphone className="w-3.5 h-3.5" />
@@ -491,22 +484,26 @@ const Footer: React.FC = () => {
                 </ul>
               </div>
 
-              {/* 3. LÉGAL & AIDE */}
+                            {/* 3. LÉGAL & AIDE */}
               <div className="col-span-2 sm:col-span-1">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-4 flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5" />
-                  Légal & Aide
+                  Légal & aide
                 </h3>
                 <ul className="space-y-2.5 text-xs sm:text-sm">
                   <li>
-                    <Link to="/help" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5">
-                      <span>Centre d'aide & Tutos</span>
-                      <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                    <Link to="/confidentialite" className="text-zinc-400 hover:text-white transition-colors">
+                      Confidentialité
                     </Link>
                   </li>
                   <li>
-                    <Link to="/help/extension" className="text-zinc-400 hover:text-white transition-colors">
-                      Bloquer les pubs
+                    <Link to="/conditions" className="text-zinc-400 hover:text-white transition-colors">
+                      Conditions d'utilisation
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/donnees" className="text-zinc-400 hover:text-white transition-colors">
+                      Données & cookies
                     </Link>
                   </li>
                   <li>
@@ -515,35 +512,35 @@ const Footer: React.FC = () => {
                     </Link>
                   </li>
                   <li>
-                    <Link to="/privacy" className="text-zinc-400 hover:text-white transition-colors">
-                      Confidentialité
+                    <Link to="/valeurs" className="text-zinc-400 hover:text-white transition-colors">
+                      Nos valeurs
                     </Link>
                   </li>
                   <li>
-                    <Link to="/terms-of-service" className="text-zinc-400 hover:text-white transition-colors">
-                      Conditions d'utilisation
+                    <Link to="/bloquer-les-pubs" className="text-zinc-400 hover:text-white transition-colors">
+                      Bloquer les pubs
                     </Link>
                   </li>
                   <li>
-                    <a
-                      href="https://github.com/radabolodax-oss/filmo"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5"
-                    >
-                      <Github className="w-3.5 h-3.5" />
-                      <span>Code source & MIT</span>
-                    </a>
+                    <Link to="/support" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5">
+                      <span>Aide & tickets</span>
+                      <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                    </Link>
                   </li>
                   <li>
-                    <Link to="/about" className="text-zinc-400 hover:text-white transition-colors">
-                      À propos de Dawger
+                    <Link to="/contact" className="text-zinc-400 hover:text-white transition-colors">
+                      Contact
+                    </Link>
+                  </li>
+                  <li>
+                    <Link to="/influenceurs" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5">
+                      <span>Influenceurs</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Collab</span>
                     </Link>
                   </li>
                 </ul>
               </div>
-
-            </div>
+</div>
           </div>
 
           {/* ==================== 3. BARRE INFÉRIEURE COPYRIGHT ==================== */}
