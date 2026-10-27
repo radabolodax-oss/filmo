@@ -5,13 +5,33 @@ const path = require('path');
 const fs = require('fs');
 
 const ALLOWED_ORIGINS = ['http://localhost:3000', 'http://localhost:3001'];
-const MOVIX_DIR = path.join(__dirname, '..');
+
+function getMovixDir() {
+  const candidates = [
+    path.join(__dirname, '..'),
+    process.env.PORTABLE_EXECUTABLE_DIR ? path.resolve(process.env.PORTABLE_EXECUTABLE_DIR, '..', '..') : null,
+    process.env.PORTABLE_EXECUTABLE_DIR ? path.resolve(process.env.PORTABLE_EXECUTABLE_DIR, '..') : null,
+    path.resolve(process.execPath, '..', '..', '..'),
+    'C:\\Users\\PC\\Desktop\\dawger\\MovixOpenSource-main',
+  ].filter(Boolean);
+
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(path.join(c, 'package.json')) && fs.existsSync(path.join(c, 'API', 'Mainapi'))) {
+        return c;
+      }
+    } catch (_) {}
+  }
+  return path.join(__dirname, '..');
+}
+
+const MOVIX_DIR = getMovixDir();
 const API_DIR = path.join(MOVIX_DIR, 'API', 'Mainapi');
 const PROXIESEMBED_DIR = path.join(MOVIX_DIR, 'API', 'proxiesembed');
 const MISCS_DIR = path.join(MOVIX_DIR, 'API', 'miscs');
 const PYTHON_BIN = 'python';
 
-// Démarre automatiquement le backend/frontend Movix en local dev si présent
+// Démarre automatiquement le backend/frontend Movix en local si les dossiers existent
 const AUTO_START_SERVERS = true;
 
 function getLogDir() {
@@ -141,6 +161,11 @@ async function createWindow() {
 
   win.setMenu(null);
 
+  // Maintient strictement le titre "Dawger" sans laisser le navigateur le renommer
+  win.on('page-title-updated', (e) => {
+    e.preventDefault();
+  });
+
   const targetOrigin = await findActiveOrigin(30000);
   win.loadURL(targetOrigin).catch(() => {});
 
@@ -159,7 +184,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  if (AUTO_START_SERVERS && !app.isPackaged && fs.existsSync(API_DIR)) {
+  if (AUTO_START_SERVERS && fs.existsSync(API_DIR)) {
     await Promise.all([startBackend(), startFrontend(), startProxiesembed(), startMiscs()]);
   }
   createWindow();
