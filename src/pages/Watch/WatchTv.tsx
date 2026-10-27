@@ -4535,13 +4535,13 @@ const WatchTv: React.FC = () => {
             {showEmbedQuality && (
               <motion.div
                 key="embed-quality-menu"
-                initial={{ opacity: 0, x: 300 }}
+                initial={{ opacity: 0, x: -300 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 300 }}
+                exit={{ opacity: 0, x: -300 }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
-                className="absolute inset-0 z-[10001] bg-black/60 flex justify-end pointer-events-auto"
+                className="absolute inset-0 z-[10001] bg-black/60 flex justify-start pointer-events-auto"
               >
-                <div className="bg-black/95 border-l border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10002]">
+                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10002]">
                   <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
                     <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
                     <button
@@ -4654,13 +4654,13 @@ const WatchTv: React.FC = () => {
             {showEmbedQuality && (
               <motion.div
                 key="embed-quality-menu"
-                initial={{ opacity: 0, x: 300 }}
+                initial={{ opacity: 0, x: -300 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 300 }}
+                exit={{ opacity: 0, x: -300 }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
-                className="absolute inset-0 z-[10001] bg-black/60 flex justify-end pointer-events-auto"
+                className="absolute inset-0 z-[10001] bg-black/60 flex justify-start pointer-events-auto"
               >
-                <div className="bg-black/95 border-l border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10002]">
+                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10002]">
                   <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
                     <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
                     <button

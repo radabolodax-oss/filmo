@@ -2373,14 +2373,14 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
           {/* Source Selection Panel */}
           <AnimatePresence>
             {showEmbedQuality && (
-              <div className="absolute inset-0 z-[10001] bg-black/50 flex justify-end pointer-events-none">
+              <div className="absolute inset-0 z-[10001] bg-black/50 flex justify-start pointer-events-none">
                 <motion.div
                   key="embed-quality-menu"
-                  initial={{ opacity: 0, x: 300 }}
+                  initial={{ opacity: 0, x: -300 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 300 }}
+                  exit={{ opacity: 0, x: -300 }}
                   transition={{ duration: 0.3, ease: 'easeOut' }}
-                  className="bg-black/95 border-l border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto pointer-events-auto"
+                  className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto pointer-events-auto"
                   data-lenis-prevent
                 >
                   <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
