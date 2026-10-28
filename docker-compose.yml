@@ -37,6 +37,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_MAIN_API: http://localhost:25565
+        VITE_TMDB_API_KEY: 15d2ea6d0dc1d476efbca3eba2b9bbfb
         VITE_SITE_URL: http://localhost:3001
         VITE_WATCHPARTY_API: http://localhost:25566
     restart: unless-stopped
