@@ -908,6 +908,28 @@ async function extractFStreamPlayers(htmlContent, isSeries = false, pageUrl = nu
         }
       }
 
+      // Extraction via .option[data-url] (French-Stream modern layout)
+      $('.option[data-url], div[data-url]').each((_, element) => {
+        const $el = $(element);
+        const dataUrl = $el.attr('data-url');
+        if (dataUrl && dataUrl.startsWith('http')) {
+          const text = $el.text().trim().toUpperCase();
+          let version = 'Default';
+          if (text.includes('TRUEFRENCH') || text.includes('VFF')) version = 'VFF';
+          else if (text.includes('VFQ')) version = 'VFQ';
+          else if (text.includes('VOSTFR') || text.includes('VOST')) version = 'VOSTFR';
+          else if (text.includes('FRENCH') || text.includes('VF')) version = 'VFF';
+
+          let player = 'Lecteur';
+          if (dataUrl.includes('vidzy')) player = 'Vidzy';
+          else if (dataUrl.includes('uqload')) player = 'Uqload';
+          else if (dataUrl.includes('voe')) player = 'VOE';
+          else if (dataUrl.includes('dood')) player = 'Dood';
+
+          players.push({ url: dataUrl, type: 'embed', quality: 'HD', player, version });
+        }
+      });
+
       // Pour les films - extraction via #film-data
       const filmData = $('#film-data');
       if (players.length === 0 && filmData.length > 0) {

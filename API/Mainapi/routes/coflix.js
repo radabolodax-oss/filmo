@@ -143,56 +143,39 @@ async function searchCoflixByTitle(title, mediaType, releaseYear) {
     let coflixTypes = [];
 
     if (mediaType === "movie") {
-      coflixTypes = ["movies"];
+      coflixTypes = ["movies", "Film", "film"];
     } else if (mediaType === "tv") {
-      coflixTypes = ["series", "animes", "doramas"];
+      coflixTypes = ["series", "animes", "doramas", "Série", "serie", "Séries"];
     } else if (mediaType === "anime") {
-      coflixTypes = ["animes"];
+      coflixTypes = ["animes", "Anime", "anime"];
     } else {
-      coflixTypes = ["movies", "series", "animes", "doramas"];
+      coflixTypes = ["movies", "series", "animes", "doramas", "Film", "film", "Série", "serie"];
     }
 
     let filteredResults = mediaType
-      ? results.filter((item) => coflixTypes.includes(item.post_type))
+      ? results.filter((item) =>
+          coflixTypes.includes(item.post_type) ||
+          coflixTypes.includes(item.type) ||
+          (item.post_type && coflixTypes.some((t) => t.toLowerCase() === item.post_type.toLowerCase())) ||
+          (item.type && coflixTypes.some((t) => t.toLowerCase() === item.type.toLowerCase()))
+        )
       : results;
 
     filteredResults.sort((a, b) => b.similarity - a.similarity);
 
+    const minSimilarity = mediaType === "tv" ? 0.7 : 0.8;
     if (releaseYear) {
       const yearMatchedResults = filteredResults.filter(
         (r) => r.year === releaseYear,
       );
 
-      if (mediaType === "movie") {
-        if (
-          yearMatchedResults.length > 0 &&
-          yearMatchedResults[0].similarity >= 0.8
-        ) {
-          filteredResults = [yearMatchedResults[0]];
-        } else {
-          filteredResults = [];
-        }
-      } else if (mediaType === "tv") {
-        if (
-          yearMatchedResults.length > 0 &&
-          yearMatchedResults[0].similarity >= 0.7
-        ) {
-          filteredResults = [yearMatchedResults[0]];
-        } else {
-          filteredResults = [];
-        }
+      if (yearMatchedResults.length > 0 && yearMatchedResults[0].similarity >= minSimilarity) {
+        filteredResults = [yearMatchedResults[0]];
       } else {
-        if (
-          yearMatchedResults.length > 0 &&
-          yearMatchedResults[0].similarity >= 0.8
-        ) {
-          filteredResults = [yearMatchedResults[0]];
-        } else {
-          filteredResults = [];
-        }
+        filteredResults = filteredResults.filter((r) => r.similarity >= minSimilarity);
       }
     } else {
-      if (filteredResults.length > 0 && filteredResults[0].similarity > 0.8) {
+      if (filteredResults.length > 0 && filteredResults[0].similarity >= minSimilarity) {
         filteredResults = [filteredResults[0]];
       } else {
         filteredResults = [];
@@ -433,18 +416,28 @@ async function getMovieDataFromCoflix(url) {
       iframe = $("iframe");
     }
 
-    let iframeSrc = null;
+    let iframeSrc = iframe.length > 0 ? iframe.attr("src") : null;
+    if (!iframeSrc) {
+      const cfServersMatch = (response.data || "").match(/var\s+cfServers\s*=\s*(\[[\s\S]*?\]);/);
+      if (cfServersMatch) {
+        try {
+          const parsedServers = JSON.parse(cfServersMatch[1]);
+          if (Array.isArray(parsedServers) && parsedServers[0]?.embed_url) {
+            iframeSrc = parsedServers[0].embed_url;
+          }
+        } catch (_) {}
+      }
+    }
+
     let playerLinks = [];
 
-    if (iframe.length > 0) {
-      iframeSrc = iframe.attr("src");
-
-      if (iframeSrc) {
-        try {
-          const iframePageResponse = await deps.axiosLecteurVideoRequest({
-            method: "get",
-            url: iframeSrc,
-          });
+    if (iframeSrc) {
+      try {
+        const iframePageResponse = await deps.axiosLecteurVideoRequest({
+          method: "get",
+          url: iframeSrc,
+          headers: { ...deps.coflixHeaders, Referer: (process.env.COFLIX_BASE_URL || 'https://coflix.esq').replace(/\/?$/, '/') },
+        });
           const iframePage$ = cheerio.load(iframePageResponse.data);
 
           let playerItems = iframePage$('li[onclick*="showVideo"]');
@@ -515,7 +508,6 @@ async function getMovieDataFromCoflix(url) {
             `[COFLIX MOVIE] ❌ Erreur requête iframe ${iframeSrc} — code: ${errorCode}, message: ${iframePageError.message}`,
           );
         }
-      }
     } else {
       console.log(`Aucun iframe trouve pour l'URL ${url}`);
     }
@@ -719,6 +711,7 @@ async function getTvDataFromCoflix(url, seasonNumber, episodeNumber) {
               const iframePageResponse = await deps.axiosLecteurVideoRequest({
                 method: "get",
                 url: episodeIframeSrc,
+                headers: { ...deps.coflixHeaders, Referer: (process.env.COFLIX_BASE_URL || 'https://coflix.esq').replace(/\/?$/, '/') },
               });
               const iframePage$ = cheerio.load(iframePageResponse.data);
 
