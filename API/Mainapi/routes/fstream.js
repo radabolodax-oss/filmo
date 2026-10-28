@@ -1289,6 +1289,26 @@ function filterFStreamResults(results, originalTitle, releaseYear) {
         const linkMatch = onclickAttr.match(/location\.href=['"]([^'\"]+)['"]/);
         if (linkMatch) link = linkMatch[1];
       }
+      const dataSeasonsAttr = $el.attr('data-seasons');
+      if (dataSeasonsAttr && (!link || (onclickAttr && onclickAttr.includes('showSeasons')))) {
+        try {
+          const seasons = JSON.parse(dataSeasonsAttr);
+          if (Array.isArray(seasons)) {
+            const baseCleanTitle = title.replace(/\s*-\s*série$/i, '').trim();
+            seasons.forEach((s) => {
+              filteredResults.push({
+                title: `${baseCleanTitle} - Saison ${s.n}`,
+                originalTitle: title,
+                link: s.l,
+                seasonNumber: s.n,
+                year: null
+              });
+            });
+            return;
+          }
+        } catch (_) {}
+      }
+
       if (!title || !link) return;
 
       let cleanTitle = title;
