@@ -1,17 +1,19 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+title Dawger - Configuration Nouveau PC
 
 echo ============================================
-echo   Dawger - installation nouveau PC
+echo   DAWGER - INSTALLATION NOUVEAU PC
 echo ============================================
-echo Automatise tout sauf Docker Desktop (a installer
-echo une fois a la main, voir message ci-dessous si besoin)
-echo et la cle privee age (a fournir a la main, jamais
-echo stockee dans le repo).
+echo.
+
+REM Synchronisation automatique silencieuse de l'horloge
+net start w32time >nul 2>&1
+w32tm /resync /force >nul 2>&1
 
 echo.
-echo [1/5] Verification de Git...
+echo [1/4] Verification de Git...
 where git >nul 2>&1
 if errorlevel 1 (
     echo ERREUR: Git n'est pas installe.
@@ -19,66 +21,62 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-echo OK.
+echo [OK] Git est present.
 
 echo.
-echo [2/5] Verification de Docker Desktop...
+echo [2/4] Verification de Docker Desktop...
 docker info >nul 2>&1
 if errorlevel 1 (
     echo.
-    echo Docker Desktop n'est pas installe ou pas lance sur ce PC.
-    echo ^(necessite WSL2 + redemarrage Windows, ne peut pas s'installer
-    echo tout seul depuis ce script sans risquer de planter en cours de route^).
-    echo.
-    echo Ouverture du guide d'installation officiel dans ton navigateur...
-    start "" "https://docs.docker.com/desktop/setup/install/windows-install/"
-    echo.
-    echo Une fois Docker Desktop installe, lance et pret ^(icone baleine stable
-    echo dans la barre des taches^), relance simplement setup-new-pc.bat.
-    pause
-    exit /b 1
-)
-echo OK.
-
-echo.
-echo [3/5] Verification de age...
-where age >nul 2>&1
-if errorlevel 1 (
-    echo Installation de age via winget...
-    winget install FiloSottile.age -e --silent --accept-package-agreements --accept-source-agreements
-    where age >nul 2>&1
-    if errorlevel 1 (
-        echo ERREUR: installation de age echouee, installe-le a la main.
+    echo Docker Desktop n'est pas lance sur ce PC.
+    if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" (
+        echo Demarrage automatique de Docker Desktop...
+        start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+        echo Attente de 10 secondes...
+        ping 127.0.0.1 -n 10 >nul
+    ) else (
+        echo Docker Desktop n'est pas installe.
+        echo Ouverture du guide d'installation officiel...
+        start "" "https://docs.docker.com/desktop/setup/install/windows-install/"
+        echo Une fois installe et lance, relancez ce script.
         pause
         exit /b 1
     )
 )
-echo OK.
+echo [OK] Docker Desktop est pret.
 
 echo.
-echo [4/5] Verification de Node.js...
+echo [3/4] Verification de Node.js...
 where node >nul 2>&1
 if errorlevel 1 (
-    echo Installation de Node.js via winget...
+    echo Installation automatique de Node.js via winget...
     winget install OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements
     echo.
-    echo Node.js vient d'etre installe: ferme cette fenetre, ouvre-en une
-    echo nouvelle ^(pour recharger le PATH^), et relance setup-new-pc.bat.
+    echo Node.js vient d'etre installe : ferme cette fenetre, ouvre-en une
+    echo nouvelle (pour recharger le PATH), puis relance setup-new-pc.bat.
     pause
     exit /b 0
 )
-echo OK.
+echo [OK] Node.js est present.
 
 echo.
-echo [5/5] Restauration des .env et demarrage...
+echo [4/4] Verification des fichiers d'environnement (.env)...
 if not exist ".env" (
-    call env-backup\restore-env.bat
+    echo Fichier .env absent, tentative de restauration securisee...
+    if exist "env-backup\restore-env.bat" (
+        call env-backup\restore-env.bat
+    )
 )
+
 if not exist ".env" (
-    echo ERREUR: .env toujours absent, restauration annulee ou echouee.
+    echo.
+    echo ATTENTION: Le fichier .env principal est manquant.
+    echo Si vous venez de telecharger DAWGER_PACK_NOUVEAU_PC.zip, verifiez que le .env est bien extrait.
     pause
     exit /b 1
 )
+
+echo [OK] Configuration prete, lancement de Dawger...
 call start-dawger.bat
 
 endlocal

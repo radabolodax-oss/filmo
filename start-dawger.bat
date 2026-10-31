@@ -59,7 +59,10 @@ echo [3/3] Synchronisation et ouverture de Dawger...
 set /a tries=0
 
 :wait_frontend
-curl -s -m 1 -o nul http://localhost:3001
+curl -s -m 1 -o nul http://localhost:3001 >nul 2>&1
+if not errorlevel 1 goto lancer_electron
+
+curl -s -m 1 -o nul http://localhost:3000 >nul 2>&1
 if not errorlevel 1 goto lancer_electron
 
 set /a tries+=1
@@ -69,6 +72,7 @@ goto wait_frontend
 
 :lancer_electron
 echo Lancement de Dawger PC...
+set ELECTRON_RUN_AS_NODE=
 
 REM Priorite 1 : L'executable autonome portable tout-en-un
 if exist "pc-app\dist\PCDawger-portable.exe" (
@@ -83,6 +87,12 @@ if exist "pc-app\node_modules\electron\dist\electron.exe" (
 )
 
 REM Priorite 3 : Fallback npm start
-cd pc-app
-start /b npm start
-exit /b 0
+if exist "pc-app\package.json" (
+    cd pc-app
+    start "" npm start
+    exit /b 0
+)
+
+echo ERREUR: Impossible de lancer l'interface Electron de Dawger.
+pause
+exit /b 1
