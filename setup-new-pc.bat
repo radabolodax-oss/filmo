@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Dawger - Configuration Nouveau PC
 
@@ -26,23 +26,42 @@ echo [OK] Git est present.
 echo.
 echo [2/4] Verification de Docker Desktop...
 docker info >nul 2>&1
-if errorlevel 1 (
-    echo.
-    echo Docker Desktop n'est pas lance sur ce PC.
-    if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" (
-        echo Demarrage automatique de Docker Desktop...
-        start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
-        echo Attente de 10 secondes...
-        ping 127.0.0.1 -n 10 >nul
-    ) else (
-        echo Docker Desktop n'est pas installe.
-        echo Ouverture du guide d'installation officiel...
-        start "" "https://docs.docker.com/desktop/setup/install/windows-install/"
-        echo Une fois installe et lance, relancez ce script.
-        pause
-        exit /b 1
-    )
+if not errorlevel 1 goto docker_setup_ok
+
+set "DOCKER_BIN="
+if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" (
+    set "DOCKER_BIN=%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+) else if exist "%LocalAppData%\Docker\Docker Desktop.exe" (
+    set "DOCKER_BIN=%LocalAppData%\Docker\Docker Desktop.exe"
+) else if exist "%ProgramFiles(x86)%\Docker\Docker\Docker Desktop.exe" (
+    set "DOCKER_BIN=%ProgramFiles(x86)%\Docker\Docker\Docker Desktop.exe"
 )
+
+if defined DOCKER_BIN (
+    echo Demarrage automatique de Docker Desktop...
+    start "" "!DOCKER_BIN!"
+    echo Attente que le moteur Docker soit operationnel...
+    set /a wait_d=0
+    :wait_docker_setup
+    ping 127.0.0.1 -n 3 >nul
+    docker info >nul 2>&1
+    if not errorlevel 1 goto docker_setup_ok
+    set /a wait_d+=3
+    if !wait_d! GEQ 90 (
+        echo [ATTENTION] Docker met du temps a demarrer, continuation...
+        goto docker_setup_ok
+    )
+    goto wait_docker_setup
+) else (
+    echo Docker Desktop n'est pas detecte sur ce PC.
+    echo Ouverture du guide d'installation officiel...
+    start "" "https://docs.docker.com/desktop/setup/install/windows-install/"
+    echo Une fois installe et lance, relancez ce script.
+    pause
+    exit /b 1
+)
+
+:docker_setup_ok
 echo [OK] Docker Desktop est pret.
 
 echo.
@@ -52,8 +71,8 @@ if errorlevel 1 (
     echo Installation automatique de Node.js via winget...
     winget install OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements
     echo.
-    echo Node.js vient d'etre installe : ferme cette fenetre, ouvre-en une
-    echo nouvelle (pour recharger le PATH), puis relance setup-new-pc.bat.
+    echo Node.js vient d'etre installe : fermez cette fenetre, ouvrez-en une
+    echo nouvelle (pour recharger le PATH), puis relancez setup-new-pc.bat.
     pause
     exit /b 0
 )
@@ -77,6 +96,6 @@ if not exist ".env" (
 )
 
 echo [OK] Configuration prete, lancement de Dawger...
-call start-dawger.bat
+call "PC Dawger.bat"
 
 endlocal

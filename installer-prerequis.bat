@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Dawger - Installation des prerequis
 
@@ -22,30 +22,48 @@ if not errorlevel 1 (
     goto check_node
 )
 
+REM Si docker info echoue, verifier si l'executable Docker existe deja
+set "DOCKER_INST="
+if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" (
+    set "DOCKER_INST=%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+) else if exist "%LocalAppData%\Docker\Docker Desktop.exe" (
+    set "DOCKER_INST=%LocalAppData%\Docker\Docker Desktop.exe"
+) else if exist "%ProgramFiles(x86)%\Docker\Docker\Docker Desktop.exe" (
+    set "DOCKER_INST=%ProgramFiles(x86)%\Docker\Docker\Docker Desktop.exe"
+)
+
+if defined DOCKER_INST (
+    echo [OK] Docker Desktop est installe. Lancement automatique...
+    start "" "!DOCKER_INST!"
+    goto check_node
+)
+
 where docker >nul 2>&1
 if not errorlevel 1 (
-    echo [OK] Docker est installe mais pas encore lance.
-    echo Pense a ouvrir "Docker Desktop" depuis ton menu Demarrer.
+    echo [OK] Docker CLI est installe. Pensez a lancer Docker Desktop depuis votre menu Demarrer.
     goto check_node
 )
 
 echo Docker Desktop n'a pas ete detecte.
 echo Lancement de l'installation automatique via winget...
-echo (Une fenetre Windows peut te demander d'autoriser l'installation)
+echo (Une fenetre Windows peut vous demander d'autoriser l'installation)
 echo.
 winget install --id Docker.DockerDesktop --source winget -e --accept-package-agreements --accept-source-agreements
 
 if errorlevel 1 (
     echo.
     echo ATTENTION: L'installation automatique de Docker a rencontre un probleme.
-    echo Tu peux telecharger et installer Docker Desktop directement ici :
+    echo Vous pouvez telecharger et installer Docker Desktop directement ici :
     echo https://docs.docker.com/desktop/setup/install/windows-install/
     start "" "https://docs.docker.com/desktop/setup/install/windows-install/"
     echo.
 ) else (
     echo.
     echo [OK] Installation de Docker Desktop terminee !
-    echo IMPORTANT : Si Windows te demande de redemarrer pour activer WSL2, fais-le.
+    echo IMPORTANT : Si Windows vous demande de redemarrer pour activer WSL2, redemarrez votre PC.
+    if exist "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" (
+        start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+    )
 )
 
 :check_node
@@ -66,7 +84,7 @@ winget install --id OpenJS.NodeJS.LTS --source winget -e --accept-package-agreem
 if errorlevel 1 (
     echo.
     echo ATTENTION: L'installation automatique de Node.js a echoue.
-    echo Tu peux telecharger Node.js LTS directement ici :
+    echo Vous pouvez telecharger Node.js LTS directement ici :
     echo https://nodejs.org/
     start "" "https://nodejs.org/"
 ) else (
@@ -81,10 +99,9 @@ echo                 INSTALLATION TERMINEE !
 echo =======================================================
 echo.
 echo PROCHAINES ETAPES :
-echo 1. Ouvre "Docker Desktop" depuis ton menu Demarrer.
-echo 2. Attends 1 a 2 minutes que l'icone de la baleine soit prete.
-echo 3. Double-clique sur le raccourci "start-dawger" !
+echo 1. Assurez-vous que Docker Desktop est ouvert (icone baleine dans la barre des taches).
+echo 2. Double-cliquez simplement sur "PC Dawger.bat" !
 echo.
-echo Appuie sur une touche pour fermer cette fenetre.
+echo Appuyez sur une touche pour fermer cette fenetre.
 pause >nul
 endlocal

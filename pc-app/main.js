@@ -73,8 +73,8 @@ function isPortUp(url) {
 async function findActiveOrigin(timeoutMs = 30000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (await isPortUp('http://localhost:3001')) return 'http://localhost:3001';
     if (await isPortUp('http://localhost:3000')) return 'http://localhost:3000';
+    if (await isPortUp('http://localhost:3001')) return 'http://localhost:3001';
     await new Promise((r) => setTimeout(r, 500));
   }
   return 'http://localhost:3000';
