@@ -2803,9 +2803,11 @@ const WatchMovie: React.FC = () => {
           if (index !== -1) {
             setSelectedDarkinoSource(index);
             setSelectedSource('darkino');
+            setVideoSource(darkinoSources[index].m3u8);
           } else if (darkinoSources.length > 0) { // Fallback to first darkino if specific URL not found
             setSelectedDarkinoSource(0);
             setSelectedSource('darkino');
+            setVideoSource(darkinoSources[0].m3u8);
           }
         } else if (type === 'mp4') {
           const index = mp4Sources.findIndex(s => s.url === url);
@@ -2902,7 +2904,7 @@ const WatchMovie: React.FC = () => {
         }
       }
       // Handle Embed source selections
-      else if (['frembed', 'custom', 'vostfr', 'omega', 'coflix', 'fstream', 'wiflix', 'j1f', 'viper'].includes(type)) {
+      else if (['frembed', 'custom', 'vostfr', 'omega', 'coflix', 'fstream', 'wiflix', 'moviez', 'vidzy', 'j1f', 'viper', 'vox'].includes(type)) {
         let finalEmbedUrl = url;
         if (type === 'fstream') {
           finalEmbedUrl = getProxyUrl(url);
@@ -2938,6 +2940,7 @@ const WatchMovie: React.FC = () => {
           const index = sortedMoviez.findIndex(s => s.url === url);
           if (index !== -1) {
             setSelectedMoviezSource(index);
+            setEmbedUrl(sortedMoviez[index].url);
           } else if (sortedMoviez.length > 0) {
             setSelectedMoviezSource(0);
             setEmbedUrl(sortedMoviez[0].url);
@@ -2948,6 +2951,7 @@ const WatchMovie: React.FC = () => {
           const index = sortedVidzy.findIndex(s => s.url === url);
           if (index !== -1) {
             setSelectedVidzySource(index);
+            setEmbedUrl(sortedVidzy[index].url);
           } else if (sortedVidzy.length > 0) {
             setSelectedVidzySource(0);
             setEmbedUrl(sortedVidzy[0].url);
@@ -2991,7 +2995,7 @@ const WatchMovie: React.FC = () => {
     };
   }, [
     // State values used in logic
-    darkinoSources, mp4Sources, darkinoAvailable, nexusHlsSources, nexusFileSources, fstreamSources, wiflixSources, j1fSources, sortedFstream, sortedWiflix, sortedJ1f, viperSources, rivestreamSources, rivestreamLoaded, loadingRivestream,
+    darkinoSources, mp4Sources, darkinoAvailable, nexusHlsSources, nexusFileSources, fstreamSources, wiflixSources, moviezSources, vidzyDirectSources, sortedMoviez, sortedVidzy, j1fSources, sortedFstream, sortedWiflix, sortedJ1f, viperSources, rivestreamSources, rivestreamLoaded, loadingRivestream,
     // State setters
     setOnlyVostfrAvailable, setShowEmbedQuality, setEmbedUrl, setEmbedType,
     setSelectedSource, setSelectedDarkinoSource, setSelectedMp4Source, setSelectedNexusHlsSource, setSelectedNexusFileSource, setSelectedFstreamSource, setSelectedWiflixSource, setSelectedViperSource, setSelectedRivestreamSource, setVideoSource,
@@ -3494,10 +3498,8 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
@@ -3597,10 +3599,8 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
@@ -3648,10 +3648,8 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
@@ -3710,10 +3708,8 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
@@ -3756,10 +3752,8 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
@@ -3818,10 +3812,8 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
@@ -3869,10 +3861,8 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
@@ -3931,10 +3921,8 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
@@ -3982,10 +3970,8 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
@@ -4059,10 +4045,8 @@ const WatchMovie: React.FC = () => {
                 coflixSources={sortedCoflix}
                 fstreamSources={sortedFstream}
                 wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                 viperSources={sortedViper}
 
@@ -4107,10 +4091,8 @@ const WatchMovie: React.FC = () => {
                           coflixSources={sortedCoflix}
                           fstreamSources={sortedFstream}
                           wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                           viperSources={sortedViper}
 
@@ -4145,10 +4127,8 @@ const WatchMovie: React.FC = () => {
                 coflixSources={sortedCoflix}
                 fstreamSources={sortedFstream}
                 wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                 viperSources={sortedViper}
 
@@ -4208,10 +4188,8 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
@@ -4254,10 +4232,8 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
@@ -4350,10 +4326,8 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
@@ -4426,10 +4400,8 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      moviezSources={sortedMoviez}
-                      vidzySources={sortedVidzy}
-                      moviezSources={sortedMoviez}
-              vidzySources={sortedVidzy}
+            moviezSources={sortedMoviez}
+            vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 

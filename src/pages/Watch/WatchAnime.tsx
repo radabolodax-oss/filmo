@@ -443,6 +443,13 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
     return () => { cancelled = true; };
   }, [provider, id, season, episode, isMovieMode]);
 
+  // Désactiver showHLSPlayer si on bascule sur un provider externe
+  useEffect(() => {
+    if (provider !== 'animesama') {
+      setShowHLSPlayer(false);
+    }
+  }, [provider]);
+
   // Loading states for extractions
   const [loadingVidmolyExtraction, setLoadingVidmolyExtraction] = useState<boolean>(false);
   const [loadingSibnetExtraction, setLoadingSibnetExtraction] = useState<boolean>(false);
@@ -2429,7 +2436,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
           <div className="relative flex-1 w-full min-h-0">
 
           {/* Change Source Button */}
-          {!showHLSPlayer && (
+          {(!showHLSPlayer || provider !== 'animesama') && (
             <button
               onClick={() => setShowEmbedQuality(true)}
               className="absolute top-16 right-3 z-[10000] flex items-center gap-2 px-4 py-2 rounded-lg bg-black/90 border border-gray-700 hover:bg-gray-800/80 text-white font-medium text-sm transition-all duration-200"
@@ -2538,7 +2545,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                                 <h4 className="text-white text-md font-semibold mb-3">{t('watch.playersLabel')}</h4>
                                 <div className="space-y-2">
                                   {moviezAnimeData.players[moviezAnimeLang].map((p: any, i: number) => (
-                                    <button key={`m-${i}`} onClick={() => setMoviezAnimePlayerIdx(i)}
+                                    <button key={`m-${i}`} onClick={() => { setMoviezAnimePlayerIdx(i); setShowEmbedQuality(false); }}
                                       className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center ${moviezAnimePlayerIdx === i ? 'bg-gray-800 border-l-4 border-indigo-500 pl-3 font-medium text-indigo-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200 hover:text-white'}`}>
                                       {p.name}
                                       {moviezAnimePlayerIdx === i && (
@@ -2586,7 +2593,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                                 <h4 className="text-white text-md font-semibold mb-3">{t('watch.playersLabel')}</h4>
                                 <div className="space-y-2">
                                   {vidzyAnimeData.players[vidzyAnimeLang].map((p: any, i: number) => (
-                                    <button key={`v-${i}`} onClick={() => setVidzyAnimePlayerIdx(i)}
+                                    <button key={`v-${i}`} onClick={() => { setVidzyAnimePlayerIdx(i); setShowEmbedQuality(false); }}
                                       className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center ${vidzyAnimePlayerIdx === i ? 'bg-gray-800 border-l-4 border-cyan-500 pl-3 font-medium text-cyan-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200 hover:text-white'}`}>
                                       {p.name}
                                       {vidzyAnimePlayerIdx === i && (

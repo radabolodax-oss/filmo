@@ -64,6 +64,8 @@ import type {
 // Milestone 4 — mapping des `source.type` (top-level row) vers `TopLevelSourceId`.
 // Doit rester en phase avec `SOURCE_MAIN_TO_TOP_LEVEL` dans HLSPlayerSettingsPanel.tsx.
 const SOURCE_MAIN_TO_TOP_LEVEL: Record<string, TopLevelSourceId> = {
+  moviez_main: 'moviez',
+  vidzy_main: 'vidzy',
   darkino_main: 'darkino',
   fstream_main: 'fstream',
   wiflix_main: 'wiflix',
@@ -2316,7 +2318,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     }, 500);
 
     // Close settings panel for embed sources (keep open for HLS sources to allow quality selection)
-    const embedTypes = ['frembed', 'custom', 'omega', 'coflix', 'vostfr', 'adfree', 'fstream', 'wiflix', 'j1f', 'viper', 'vox'];
+    const embedTypes = ['frembed', 'custom', 'omega', 'coflix', 'vostfr', 'adfree', 'fstream', 'wiflix', 'moviez', 'vidzy', 'j1f', 'viper', 'vox'];
     if (embedTypes.includes(sourceType)) {
       // For embed sources, always close settings
       setShowSettings(false);
@@ -10638,6 +10640,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             showCoflixMenu,
             showFstreamMenu,
             showWiflixMenu,
+            showMoviezMenu,
+            showVidzyMenu,
             showJ1fMenu,
             showNexusMenu,
             showRivestreamMenu,
@@ -10648,6 +10652,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             coflixSources,
             fstreamSources,
             wiflixSources,
+            moviezSources,
+            vidzySources,
             j1fSources,
             rivestreamSources,
             rivestreamCaptions,

@@ -3224,11 +3224,13 @@ const WatchTv: React.FC = () => {
           if (index !== -1) {
             setSelectedDarkinoSource(index);
             setSelectedSource('darkino');
+            setVideoSource(darkinoSources[index].m3u8);
             currentSourceRef.current = 'darkino';
           } else {
             if (darkinoSources.length > 0) {
               setSelectedDarkinoSource(0);
               setSelectedSource('darkino');
+              setVideoSource(darkinoSources[0].m3u8);
               currentSourceRef.current = 'darkino';
             }
           }
@@ -3311,10 +3313,11 @@ const WatchTv: React.FC = () => {
         }
       }
       // Handle Embed source selections
-      else if (type === 'frembed' || type === 'custom' || type === 'vostfr' || type === 'omega' || type === 'coflix' || type === 'fstream' || type === 'wiflix' || type === 'j1f' || type === 'viper' || type === 'adfree' || type === 'vox') {
+      else if (type === 'frembed' || type === 'custom' || type === 'vostfr' || type === 'omega' || type === 'coflix' || type === 'fstream' || type === 'wiflix' || type === 'moviez' || type === 'vidzy' || type === 'j1f' || type === 'viper' || type === 'adfree' || type === 'vox') {
         setEmbedUrl(type === 'fstream' ? getProxyUrl(url) : url);
         setEmbedType(type as string); // type is known to be a string here
         setSelectedSource(type as PlayerSourceType);
+        setVideoSource(null);
         currentSourceRef.current = type as PlayerSourceType; // Or null for embeds if ref not used
 
         // Handle FStream source selection
@@ -3345,6 +3348,7 @@ const WatchTv: React.FC = () => {
           const index = sortedMoviez.findIndex(s => s.url === url);
           if (index !== -1) {
             setSelectedMoviezSource(index);
+            setEmbedUrl(sortedMoviez[index].url);
           } else if (sortedMoviez.length > 0) {
             setSelectedMoviezSource(0);
             setEmbedUrl(sortedMoviez[0].url);
@@ -3355,6 +3359,7 @@ const WatchTv: React.FC = () => {
           const index = sortedVidzy.findIndex(s => s.url === url);
           if (index !== -1) {
             setSelectedVidzySource(index);
+            setEmbedUrl(sortedVidzy[index].url);
           } else if (sortedVidzy.length > 0) {
             setSelectedVidzySource(0);
             setEmbedUrl(sortedVidzy[0].url);
@@ -3393,8 +3398,8 @@ const WatchTv: React.FC = () => {
         }
       }
       // Handle dropdown toggles (no state change needed here)
-      else if (type === 'darkino_main' || type === 'omega_main' || type === 'multi_main' || type === 'vostfr_main' || type === 'fstream_main' || type === 'wiflix_main') {
-        // console.log(`[WatchTv] Dropdown toggle ignored: ${type}`);
+      else if (typeof type === 'string' && type.endsWith('_main')) {
+        // Dropdown toggle ignored
       }
       // Handle unknown types
       else {
@@ -3406,7 +3411,7 @@ const WatchTv: React.FC = () => {
       window.removeEventListener('sourceChange', handleSourceChangeFromMenu as EventListener);
     };
   }, [
-    nexusHlsSources, nexusFileSources, darkinoSources, mp4Sources, adFreeM3u8Url, sibnetUrl, darkinoAvailable, fstreamSources, rivestreamSources, viperSources, voxSources, sortedFstream, sortedWiflix, sortedJ1f, j1fSources, // Data sources
+    nexusHlsSources, nexusFileSources, darkinoSources, mp4Sources, adFreeM3u8Url, sibnetUrl, darkinoAvailable, fstreamSources, rivestreamSources, viperSources, voxSources, moviezSources, vidzyDirectSources, sortedMoviez, sortedVidzy, sortedFstream, sortedWiflix, sortedJ1f, j1fSources, // Data sources
     setOnlyVostfrAvailable, setShowEmbedQuality, // State setters for visibility
     setEmbedUrl, setEmbedType, setSelectedSource, // General source setters
     setSelectedNexusHlsSource, setSelectedNexusFileSource, setSelectedDarkinoSource, setSelectedMp4Source, setSelectedFstreamSource, setVideoSource, setSelectedViperSource, // HLS specific setters
