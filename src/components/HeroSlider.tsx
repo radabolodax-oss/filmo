@@ -218,13 +218,29 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
     >
       <style>
         {`
+          @keyframes kenburns {
+            0% {
+              transform: scale(1) translate3d(0, 0, 0);
+            }
+            50% {
+              transform: scale(1.08) translate3d(-1%, -0.8%, 0);
+            }
+            100% {
+              transform: scale(1.15) translate3d(1%, 0.5%, 0);
+            }
+          }
+          .animate-kenburns {
+            animation: kenburns 24s ease-in-out infinite alternate;
+            will-change: transform;
+            transform-origin: center center;
+          }
           @keyframes hero-progress {
             from { transform: scaleX(0); }
             to   { transform: scaleX(1); }
           }
           .hero-progress-fill {
             transform-origin: left;
-            animation: hero-progress var(--hero-duration, 6000ms) linear forwards;
+            animation: hero-progress var(--hero-duration, 20000ms) linear forwards;
           }
           .hero-progress-fill.is-paused {
             animation-play-state: paused;
@@ -257,7 +273,9 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
                   <img
                     src={`https://image.tmdb.org/t/p/w1280${item.backdrop_path}`}
                     alt={item.title || item.name}
-                    className="absolute inset-0 w-full h-full object-cover z-0"
+                    className={`absolute inset-0 w-full h-full object-cover z-0 transition-transform duration-1000 ${
+                      isActive && !frozen ? 'animate-kenburns' : ''
+                    }`}
                     style={{ objectPosition: 'center 30%' }}
                     draggable={false}
                     loading={isActive ? 'eager' : 'lazy'}
@@ -358,6 +376,34 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
               );
             })}
           </div>
+        </div>
+
+        {/* Carousel Progress Indicators (hero-progress) */}
+        <div className="absolute bottom-6 sm:bottom-8 right-6 sm:right-10 md:right-14 z-30 flex items-center gap-2">
+          {items.map((item, idx) => {
+            const isActive = idx === selectedIndex;
+            return (
+              <button
+                key={`progress-${item.id}`}
+                type="button"
+                onClick={() => emblaApi?.scrollTo(idx)}
+                className={`relative h-1.5 rounded-full overflow-hidden transition-all duration-300 focus:outline-none ${
+                  isActive ? 'w-10 sm:w-14 bg-white/20 ring-1 ring-white/30' : 'w-2.5 sm:w-3.5 bg-white/15 hover:bg-white/35'
+                }`}
+                aria-label={`Aller au film ${idx + 1}`}
+              >
+                {isActive && (
+                  <span
+                    key={`fill-${item.id}-${selectedIndex}`}
+                    className={`absolute inset-0 origin-left rounded-full bg-gradient-to-r from-emerald-400 via-teal-300 to-indigo-400 hero-progress-fill ${
+                      frozen ? 'is-paused' : ''
+                    }`}
+                    style={{ '--hero-duration': `${AUTO_SLIDE_MS}ms` } as React.CSSProperties}
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

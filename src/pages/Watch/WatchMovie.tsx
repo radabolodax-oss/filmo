@@ -2752,6 +2752,53 @@ const WatchMovie: React.FC = () => {
     };
   }, []);
 
+  // Auto-Fallback & Détection de panne
+  const handleAutoFallbackNext = useCallback(() => {
+    console.log('[WatchMovie] Triggering auto-fallback to next available source...');
+    const candidates: Array<{ type: string; id: string; url: string }> = [];
+
+    // Priorité 1: Moviez
+    sortedMoviez.forEach((s, idx) => {
+      if (s.url && s.url !== embedUrl) {
+        candidates.push({ type: 'moviez', id: `moviez_${idx}`, url: s.url });
+      }
+    });
+    // Priorité 2: Vidzy
+    sortedVidzy.forEach((s, idx) => {
+      if (s.url && s.url !== embedUrl) {
+        candidates.push({ type: 'vidzy', id: `vidzy_${idx}`, url: s.url });
+      }
+    });
+    // Priorité 3: FStream
+    sortedFstream.forEach((s, idx) => {
+      if (s.url && s.url !== embedUrl) {
+        candidates.push({ type: 'fstream', id: `fstream_${idx}`, url: s.url });
+      }
+    });
+    // Priorité 4: Darkino
+    darkinoSources.forEach((s, idx) => {
+      if (s.m3u8 && s.m3u8 !== videoSource) {
+        candidates.push({ type: 'darkino', id: `darkino_${idx}`, url: s.m3u8 });
+      }
+    });
+    // Priorité 5: Wiflix
+    sortedWiflix.forEach((s, idx) => {
+      if (s.url && s.url !== embedUrl) {
+        candidates.push({ type: 'wiflix', id: `wiflix_${idx}`, url: s.url });
+      }
+    });
+
+    if (candidates.length > 0) {
+      const next = candidates[0];
+      console.log('[WatchMovie] Auto-fallback transitioning to:', next.type, next.id);
+      window.dispatchEvent(
+        new CustomEvent('sourceChange', {
+          detail: { type: next.type, id: next.id, url: next.url, origin: 'auto-fallback' },
+        })
+      );
+    }
+  }, [sortedMoviez, sortedVidzy, sortedFstream, darkinoSources, sortedWiflix, embedUrl, videoSource]);
+
   // Progress saving functionality removed
 
   useEffect(() => {
@@ -3289,6 +3336,16 @@ const WatchMovie: React.FC = () => {
               <span>{Math.floor(movieMeta.runtime / 60)}h{String(movieMeta.runtime % 60).padStart(2, '0')}</span>
             </span>
           )}
+          {!!movieMeta?.runtime && movieMeta.runtime > 0 && (() => {
+            const end = new Date(Date.now() + movieMeta.runtime * 60 * 1000);
+            const timeStr = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+            return (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-xs font-medium">
+                <span>🎬</span>
+                <span>Si tu lances maintenant, fin vers {timeStr}</span>
+              </span>
+            );
+          })()}
           {movieMeta?.release_date && !isNaN(new Date(movieMeta.release_date).getTime()) ? (
             new Date(movieMeta.release_date) > new Date() ? (
               <span
@@ -3445,6 +3502,9 @@ const WatchMovie: React.FC = () => {
           onBack={() => navigate(`/movie/${id}`)}
           onOpenNewTab={() => window.open(embedUrl || '', '_blank', 'noopener')}
           onChangeSource={() => setShowEmbedQuality(true)}
+          onFallbackNext={handleAutoFallbackNext}
+          currentSourceLabel={selectedSource || embedType || ''}
+          runtimeMinutes={movieMeta?.runtime || 0}
         >
           {/* Iframe pour les sources FStream */}
           <iframe
@@ -4255,6 +4315,9 @@ const WatchMovie: React.FC = () => {
           onBack={() => navigate(`/movie/${id}`)}
           onOpenNewTab={() => window.open(embedUrl || '', '_blank', 'noopener')}
           onChangeSource={() => setShowEmbedQuality(true)}
+          onFallbackNext={handleAutoFallbackNext}
+          currentSourceLabel={selectedSource || embedType || ''}
+          runtimeMinutes={movieMeta?.runtime || 0}
         >
           {/* Iframe pour les sources embed */}
           <iframe

@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, memo, useMemo } from 'react';
 import type HlsType from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock, Clock, SkipForward } from 'lucide-react';
+import { fetchIntroTimestamps, type MediaTimestamps } from '../services/introDbService';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type pakoType from 'pako';
@@ -3174,6 +3175,81 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       };
     }
   }, [src, autoPlay, onEnded, onError, subtitleUrl, Hls]); // REMOVED playbackSpeed
+
+  // Auto skip intro preference (TheIntroDB)
+  const [autoSkipIntro, setAutoSkipIntro] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dawger_auto_skip_intro');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dawger_auto_skip_intro', autoSkipIntro ? 'true' : 'false');
+    } catch { /* ignore */ }
+  }, [autoSkipIntro]);
+
+  // IntroDB Timestamps (TheIntroDB API v4)
+  const [introTimestamps, setIntroTimestamps] = useState<MediaTimestamps | null>(null);
+  const [showIntroSkipToast, setShowIntroSkipToast] = useState(false);
+  const hasAutoSkippedIntroRef = useRef(false);
+
+  useEffect(() => {
+    hasAutoSkippedIntroRef.current = false;
+    const tmdbIdNum = Number(movieId || tvShowId);
+    if (!tmdbIdNum || isNaN(tmdbIdNum)) {
+      setIntroTimestamps(null);
+      return;
+    }
+    let isMounted = true;
+    fetchIntroTimestamps({
+      tmdbId: tmdbIdNum,
+      season: seasonNumber != null ? Number(seasonNumber) : undefined,
+      episode: episodeNumber != null ? Number(episodeNumber) : undefined,
+    }).then((ts) => {
+      if (isMounted) {
+        setIntroTimestamps(ts);
+      }
+    });
+    return () => { isMounted = false; };
+  }, [movieId, tvShowId, seasonNumber, episodeNumber, src]);
+
+  // Intro & Credits range calculation
+  const introRange = introTimestamps?.intro;
+  const isInsideIntro = Boolean(
+    introRange &&
+    currentTime >= introRange.start &&
+    currentTime < introRange.end
+  );
+
+  const creditsRange = introTimestamps?.credits;
+  const isInsideCredits = Boolean(
+    creditsRange &&
+    creditsRange.start > 0 &&
+    currentTime >= creditsRange.start
+  );
+
+  // Auto-skip intro execution
+  useEffect(() => {
+    if (isInsideIntro && autoSkipIntro && !hasAutoSkippedIntroRef.current && videoRef.current) {
+      hasAutoSkippedIntroRef.current = true;
+      videoRef.current.currentTime = (introRange?.end || 0) + 0.5;
+      setShowIntroSkipToast(true);
+      setTimeout(() => setShowIntroSkipToast(false), 3500);
+    }
+  }, [isInsideIntro, autoSkipIntro, introRange]);
+
+  // Estimation dynamique de fin de séance
+  const sessionEndTime = useMemo(() => {
+    if (!duration || duration <= 0 || isNaN(duration)) return null;
+    const remaining = Math.max(0, (duration - currentTime) / (playbackSpeed || 1));
+    if (remaining <= 0) return null;
+    const end = new Date(Date.now() + remaining * 1000);
+    return end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+  }, [duration, currentTime, playbackSpeed]);
 
   // Auto next episode preference (must be declared before useEffect that references it)
   const [autoNextEpisodeEnabled, setAutoNextEpisodeEnabled] = useState(() => {
@@ -10166,8 +10242,17 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                   </div>
                 </div>
               </div>
-              <div className="text-white text-xs md:text-sm whitespace-nowrap min-w-[85px]">
-                {formatTime(currentTime)} / {formatTime(duration)}
+              <div className="text-white text-xs md:text-sm whitespace-nowrap min-w-[85px] flex items-center gap-2">
+                <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
+                {sessionEndTime && (
+                  <span
+                    className="hidden sm:inline-flex items-center gap-1 text-[11px] text-emerald-300 font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 backdrop-blur-sm"
+                    title="Estimation dynamique de fin de séance"
+                  >
+                    <Clock className="w-3 h-3 text-emerald-400" />
+                    <span>Fin vers {sessionEndTime}</span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -10591,6 +10676,64 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         />
       )}
 
+      {/* Floating Skip Intro Button (TheIntroDB) */}
+      <AnimatePresence>
+        {isInsideIntro && !autoSkipIntro && (
+          <motion.button
+            key="skip-intro-btn"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            onClick={() => {
+              if (videoRef.current && introRange?.end) {
+                videoRef.current.currentTime = introRange.end + 0.5;
+              }
+            }}
+            className="absolute bottom-20 right-6 z-40 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/85 hover:bg-black/95 text-white border border-emerald-500/40 hover:border-emerald-400 font-semibold text-sm backdrop-blur-md shadow-2xl transition-all active:scale-95 group"
+          >
+            <FastForward className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+            <span>Passer l'intro</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* Auto-skipped Intro Notification Toast */}
+      <AnimatePresence>
+        {showIntroSkipToast && (
+          <motion.div
+            key="auto-skip-toast"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute top-20 right-6 z-40 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-950/90 border border-emerald-500/40 text-emerald-300 text-xs font-medium backdrop-blur-md shadow-xl"
+          >
+            <FastForward className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Intro passée automatiquement (TheIntroDB)</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Credits / Next Episode Button */}
+      <AnimatePresence>
+        {isInsideCredits && onNextEpisode && nextEpisode && (
+          <motion.button
+            key="skip-credits-btn"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            onClick={() => {
+              if (nextEpisode.seasonNumber != null && nextEpisode.episodeNumber != null) {
+                onNextEpisode(nextEpisode.seasonNumber, nextEpisode.episodeNumber);
+              }
+            }}
+            className="absolute bottom-20 right-6 z-40 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600/95 hover:bg-emerald-500 text-white font-semibold text-sm shadow-2xl transition-all active:scale-95"
+          >
+            <SkipForward className="w-4 h-4" />
+            <span>Passer au générique (Épisode suivant)</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       {showNextMovieOverlay && nextMovie && nextMovieInfo && !showNextMovie && !hasIgnored && (
         <NextUpPrompt
           movie={nextMovie}
@@ -10700,6 +10843,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             setSaveProgressEnabled,
             autoNextEpisodeEnabled,
             setAutoNextEpisodeEnabled,
+            autoSkipIntro,
+            setAutoSkipIntro,
             nextContentThresholdMode,
             setNextContentThresholdMode,
             nextContentThresholdValue,

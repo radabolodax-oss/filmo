@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ExternalLink, Layers, Maximize, Minimize } from 'lucide-react';
+import { ArrowLeft, Clock, ExternalLink, Layers, Maximize, Minimize } from 'lucide-react';
+import FrameRedirectWatch from './FrameRedirectWatch';
 
 export interface EmbedPlayerChromeProps {
   onBack: () => void;
   onOpenNewTab: () => void;
   onChangeSource: () => void;
+  onFallbackNext?: () => void;
+  currentSourceLabel?: string;
+  runtimeMinutes?: number;
   extraHeaderControls?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -14,11 +18,16 @@ export interface EmbedPlayerChromeProps {
  * Wraps a third-party embed <iframe> with our own non-intrusive Back, Sources, Fullscreen,
  * and External Link controls stacked vertically on the LEFT.
  * Prevents controls from blocking video interaction or native player controls.
+ * Integrates FrameRedirectWatch for auto-fallback on blocked/dead streams,
+ * and dynamic session end time estimation.
  */
 const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
   onBack,
   onOpenNewTab,
   onChangeSource,
+  onFallbackNext,
+  currentSourceLabel,
+  runtimeMinutes,
   extraHeaderControls,
   children,
 }) => {
@@ -35,7 +44,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
     }
     hideTimerRef.current = setTimeout(() => {
       setShowControls(false);
-    }, 2500);
+    }, 2800);
   }, []);
 
   useEffect(() => {
@@ -83,7 +92,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
           if (document.exitFullscreen) {
             await document.exitFullscreen();
           } else if ((document as any)?.webkitExitFullscreen) {
-            await (document as any).webkitExitFullscreen();
+            await document.exitFullscreen();
           }
         }
         setIsFullscreen(false);
@@ -104,6 +113,13 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
     }
   };
 
+  // Dynamic session end time estimation
+  const sessionEndTime = useMemo(() => {
+    if (!runtimeMinutes || runtimeMinutes <= 0) return null;
+    const end = new Date(Date.now() + runtimeMinutes * 60 * 1000);
+    return end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+  }, [runtimeMinutes]);
+
   return (
     <div
       ref={containerRef}
@@ -114,6 +130,24 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
           : 'w-full h-full'
       }`}
     >
+      {/* Auto-fallback and failure watchdog */}
+      <FrameRedirectWatch
+        currentSourceLabel={currentSourceLabel}
+        onFallbackNext={onFallbackNext}
+        onRetry={() => {
+          const iframe = containerRef.current?.querySelector('iframe');
+          if (iframe && iframe.src) {
+            const currentSrc = iframe.src;
+            iframe.src = 'about:blank';
+            setTimeout(() => {
+              iframe.src = currentSrc;
+            }, 100);
+          } else {
+            window.location.reload();
+          }
+        }}
+      />
+
       {/* Left Vertical Controls Column: Back, Sources, Fullscreen, External Link */}
       <div
         className={`absolute left-3 top-3 sm:left-4 sm:top-4 z-[10000] transition-all duration-300 pointer-events-none flex flex-col gap-2 ${
@@ -179,23 +213,30 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
         </button>
       </div>
 
-      {/* Top Center: Extra Controls (e.g. Episode navigation) */}
-      {extraHeaderControls && (
-        <div
-          className={`absolute top-3 left-1/2 -translate-x-1/2 z-[10000] transition-opacity duration-300 pointer-events-none flex items-center gap-1.5 sm:gap-2 ${
-            showControls ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{
-            paddingTop: isFullscreen
-              ? 'max(1.75rem, env(safe-area-inset-top, 1.75rem))'
-              : '0px',
-          }}
-        >
+      {/* Top Center: Extra Controls & Dynamic End of Session */}
+      <div
+        className={`absolute top-3 left-1/2 -translate-x-1/2 z-[10000] transition-opacity duration-300 pointer-events-none flex items-center gap-2 ${
+          showControls ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{
+          paddingTop: isFullscreen
+            ? 'max(1.75rem, env(safe-area-inset-top, 1.75rem))'
+            : '0px',
+        }}
+      >
+        {sessionEndTime && (
+          <div className="pointer-events-auto flex items-center gap-1.5 bg-black/75 backdrop-blur-md border border-emerald-500/30 px-3 py-1.5 rounded-xl shadow-xl text-xs font-medium text-emerald-300">
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Fin de séance vers {sessionEndTime}</span>
+          </div>
+        )}
+
+        {extraHeaderControls && (
           <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2 bg-black/80 backdrop-blur-md border border-white/15 px-3 py-1.5 rounded-xl shadow-xl">
             {extraHeaderControls}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Persistent mini button to show controls when hidden */}
       {!showControls && (

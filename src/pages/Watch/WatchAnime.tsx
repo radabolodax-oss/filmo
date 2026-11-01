@@ -9,6 +9,7 @@ import useWatchStatus from '../../hooks/useWatchStatus';
 import { searchWithFallback, getSearchNameForId, getAnimeMatcherForId, getAnimeMatchTerms } from '../../utils/searchUtils';
 import { encodeId } from '../../utils/idEncoder';
 import HLSPlayer from '../../components/HLSPlayer';
+import FrameRedirectWatch from '../../components/FrameRedirectWatch';
 import { useAdFreePopup } from '../../context/AdFreePopupContext';
 import AdFreePlayerAds from '../../components/AdFreePlayerAds';
 import {
@@ -266,6 +267,22 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
   // AniCloud et FRAnime, portés depuis l'ancien TVDetails.tsx (appels directs navigateur,
   // pas via Mainapi pour AniCloud). ———
   const [provider, setProvider] = useState<'animesama' | 'anicloud' | 'franime' | 'moviez' | 'vidzy'>('animesama');
+
+  // Auto-Fallback & Détection de panne Anime
+  const handleAutoFallbackNext = useCallback(() => {
+    console.log('[WatchAnime] Auto-fallback triggered from provider:', provider);
+    if (provider === 'animesama') {
+      setProvider('moviez');
+    } else if (provider === 'moviez') {
+      setProvider('vidzy');
+    } else if (provider === 'vidzy') {
+      setProvider('anicloud');
+    } else if (provider === 'anicloud') {
+      setProvider('franime');
+    } else {
+      setProvider('animesama');
+    }
+  }, [provider]);
   // Moviez Anime provider states
   const [moviezAnimeData, setMoviezAnimeData] = useState<any>(null);
   const [loadingMoviezAnime, setLoadingMoviezAnime] = useState<boolean>(false);
@@ -2434,6 +2451,10 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
           {/* Zone du player, sous la barre de boutons */}
           <div className="relative flex-1 w-full min-h-0">
+            <FrameRedirectWatch
+              currentSourceLabel={provider}
+              onFallbackNext={handleAutoFallbackNext}
+            />
 
           {/* Change Source Button */}
           {(!showHLSPlayer || provider !== 'animesama') && (
