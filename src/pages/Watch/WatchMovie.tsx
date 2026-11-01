@@ -206,7 +206,31 @@ interface NightflixSource {
   label?: string;
 }
 
-type PlayerSourceType = 'primary' | 'vostfr' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'coflix' | 'frembed' | 'custom' | 'nexus_hls' | 'nexus_file' | 'fstream' | 'wiflix' | 'j1f' | 'viper' | 'vidmoly' | 'dropload' | 'adfree' | 'rivestream_hls' | 'rivestream' | number;
+// Interface Moviez
+interface MoviezMovieResponse {
+  success: boolean;
+  source: 'moviez';
+  tmdbId: number;
+  players: {
+    vf: Array<{ name: string; url: string; hoster: string; language: string; type: string }>;
+    vostfr: Array<{ name: string; url: string; hoster: string; language: string; type: string }>;
+  };
+  embedUrl?: string;
+}
+
+// Interface Vidzy Direct
+interface VidzyMovieResponse {
+  success: boolean;
+  source: 'vidzy';
+  tmdbId: number;
+  players?: {
+    vf: Array<{ name: string; url: string; hoster: string; language: string; type: string }>;
+    vostfr: Array<{ name: string; url: string; hoster: string; language: string; type: string }>;
+  };
+  embedUrl?: string;
+}
+
+type PlayerSourceType = 'moviez' | 'vidzy' | 'primary' | 'vostfr' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'coflix' | 'frembed' | 'custom' | 'nexus_hls' | 'nexus_file' | 'fstream' | 'wiflix' | 'j1f' | 'viper' | 'vidmoly' | 'dropload' | 'adfree' | 'rivestream_hls' | 'rivestream' | number;
 
 function formatPremidSourceDetail(...parts: Array<string | null | undefined>) {
   const normalizedParts = parts
@@ -454,6 +478,16 @@ const WatchMovie: React.FC = () => {
 
   const [selectedWiflixSource, setSelectedWiflixSource] = useState<number>(0);
 
+  // Moviez source states
+  const [moviezSources, setMoviezSources] = useState<{ url: string; label: string; category: string }[]>([]);
+  const [selectedMoviezSource, setSelectedMoviezSource] = useState<number>(0);
+  const [loadingMoviez, setLoadingMoviez] = useState(true);
+
+  // Vidzy Direct source states
+  const [vidzyDirectSources, setVidzyDirectSources] = useState<{ url: string; label: string; category: string }[]>([]);
+  const [selectedVidzySource, setSelectedVidzySource] = useState<number>(0);
+  const [loadingVidzyDirect, setLoadingVidzyDirect] = useState(true);
+
   // J1F (1jour1film) source states
   const [, setJ1fData] = useState<J1fMovieResponse | null>(null);
   const [j1fSources, setJ1fSources] = useState<{ url: string; label: string; category: string }[]>([]);
@@ -521,6 +555,24 @@ const WatchMovie: React.FC = () => {
     return sortHostersByPriority(annotated, { category: 'moviesTv', topLevel: 'wiflix' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wiflixSources]);
+
+  const sortedMoviez = useMemo(() => {
+    const prefs = getSourcePriorityPrefs();
+    const annotated = moviezSources.map((s) => ({
+      ...s,
+      type: 'moviez',
+    }));
+    return sortHostersByPriority(annotated, { category: 'moviesTv', topLevel: 'moviez' });
+  }, [moviezSources]);
+
+  const sortedVidzy = useMemo(() => {
+    const prefs = getSourcePriorityPrefs();
+    const annotated = vidzyDirectSources.map((s) => ({
+      ...s,
+      type: 'vidzy',
+    }));
+    return sortHostersByPriority(annotated, { category: 'moviesTv', topLevel: 'vidzy' });
+  }, [vidzyDirectSources]);
 
   const sortedJ1f = useMemo(() => {
     const prefs = getSourcePriorityPrefs();
@@ -850,6 +902,22 @@ const WatchMovie: React.FC = () => {
           return null;
         }).finally(() => setLoadingWiflix(false));
 
+      // =========== CHECK MOVIEZ SOURCE ===========
+      const moviezPromise: Promise<MoviezMovieResponse | null> = axios.get(`${MAIN_API}/api/moviez/movie/${id}`)
+        .then(response => response.data as MoviezMovieResponse)
+        .catch(error => {
+          console.error('Error fetching Moviez source:', error);
+          return null;
+        }).finally(() => setLoadingMoviez(false));
+
+      // =========== CHECK VIDZY DIRECT SOURCE ===========
+      const vidzyPromise: Promise<VidzyMovieResponse | null> = axios.get(`${MAIN_API}/api/vidzy/movie/${id}`)
+        .then(response => response.data as VidzyMovieResponse)
+        .catch(error => {
+          console.error('Error fetching Vidzy direct source:', error);
+          return null;
+        }).finally(() => setLoadingVidzyDirect(false));
+
       // =========== CHECK J1F (1JOUR1FILM) SOURCE ===========
       const j1fPromise: Promise<J1fMovieResponse | null> = axios.get(`${MAIN_API}/api/j1f/movie/${id}`)
         .then(response => response.data as J1fMovieResponse)
@@ -894,7 +962,9 @@ const WatchMovie: React.FC = () => {
         wiflixResult,
         viperResult,
         j1fResult,
-        wavewatchUrlResult
+        wavewatchUrlResult,
+        moviezResult,
+        vidzyResult
       ] = await Promise.all([
         darkinoPromise,
         availabilityPromise,
@@ -904,7 +974,9 @@ const WatchMovie: React.FC = () => {
         wiflixPromise,
         viperPromise,
         j1fPromise,
-        wavewatchPromise
+        wavewatchPromise,
+        moviezPromise,
+        vidzyPromise
       ]);
 
       // =========== DÉBUT DES EXTRACTIONS (APRÈS LES REQUÊTES PRINCIPALES) ===========
@@ -1739,6 +1811,54 @@ const WatchMovie: React.FC = () => {
       setWiflixSources(wiflixProcessedSources);
       console.log('🎯 [WatchMovie] Wiflix/Lynx sources set:', wiflixProcessedSources.length, wiflixProcessedSources);
 
+      // =========== TRAITEMENT DES RÉSULTATS MOVIEZ ===========
+      let moviezProcessedSources: { url: string; label: string; category: string }[] = [];
+      if (moviezResult && moviezResult.success && moviezResult.players) {
+        console.log('🎬 Processing Moviez result:', moviezResult);
+        const categories = ['vf', 'vostfr'];
+        const vfSources: { url: string; label: string; category: string }[] = [];
+        const vostfrSources: { url: string; label: string; category: string }[] = [];
+
+        categories.forEach(category => {
+          const categoryPlayers = moviezResult.players[category as keyof typeof moviezResult.players] || [];
+          categoryPlayers.forEach((player: any) => {
+            const source = {
+              url: player.url,
+              label: `Moviez ${category.toUpperCase()}`,
+              category: category.toUpperCase(),
+            };
+            if (category === 'vf') vfSources.push(source);
+            else vostfrSources.push(source);
+          });
+        });
+        moviezProcessedSources = [...vfSources, ...vostfrSources];
+      }
+      setMoviezSources(moviezProcessedSources);
+
+      // =========== TRAITEMENT DES RÉSULTATS VIDZY DIRECT ===========
+      let vidzyProcessedSources: { url: string; label: string; category: string }[] = [];
+      if (vidzyResult && vidzyResult.success && vidzyResult.players) {
+        console.log('🎬 Processing Vidzy direct result:', vidzyResult);
+        const categories = ['vf', 'vostfr'];
+        const vfSources: { url: string; label: string; category: string }[] = [];
+        const vostfrSources: { url: string; label: string; category: string }[] = [];
+
+        categories.forEach(category => {
+          const categoryPlayers = vidzyResult.players[category as keyof typeof vidzyResult.players] || [];
+          categoryPlayers.forEach((player: any) => {
+            const source = {
+              url: player.url,
+              label: `Vidzy ${category.toUpperCase()}`,
+              category: category.toUpperCase(),
+            };
+            if (category === 'vf') vfSources.push(source);
+            else vostfrSources.push(source);
+          });
+        });
+        vidzyProcessedSources = [...vfSources, ...vostfrSources];
+      }
+      setVidzyDirectSources(vidzyProcessedSources);
+
       // =========== TRAITEMENT DES RÉSULTATS J1F (1JOUR1FILM) ===========
       let j1fProcessedSources: { url: string; label: string; category: string }[] = [];
 
@@ -2198,6 +2318,28 @@ const WatchMovie: React.FC = () => {
             setOnlyVostfrAvailable(false);
             return true;
           }
+          case 'moviez': {
+            if (!moviezProcessedSources.length) return false;
+            console.log('✅ Selecting MOVIEZ as source');
+            setSelectedSource('moviez');
+            setSelectedMoviezSource(0);
+            setEmbedUrl(moviezProcessedSources[0].url);
+            setEmbedType('moviez');
+            currentSourceRef.current = 'moviez';
+            setOnlyVostfrAvailable(false);
+            return true;
+          }
+          case 'vidzy': {
+            if (!vidzyProcessedSources.length) return false;
+            console.log('✅ Selecting VIDZY DIRECT as source');
+            setSelectedSource('vidzy');
+            setSelectedVidzySource(0);
+            setEmbedUrl(vidzyProcessedSources[0].url);
+            setEmbedType('vidzy');
+            currentSourceRef.current = 'vidzy';
+            setOnlyVostfrAvailable(false);
+            return true;
+          }
           case 'j1f': {
             console.log('✅ Selecting 1JOUR1FILM as source');
             const prefsJ1f = getSourcePriorityPrefs();
@@ -2354,6 +2496,8 @@ const WatchMovie: React.FC = () => {
           { id: 'fstream', hasData: fstreamProcessedSources.length > 0 },
           { id: 'omega', hasData: !!(omegaResult && getSupervideoFromOmega(omegaResult)) },
           { id: 'wiflix', hasData: wiflixProcessedSources.length > 0 },
+          { id: 'moviez', hasData: moviezProcessedSources.length > 0 },
+          { id: 'vidzy', hasData: vidzyProcessedSources.length > 0 },
           { id: 'j1f', hasData: j1fProcessedSources.length > 0 },
           { id: 'coflix', hasData: !!(coflixResult && getMultiFromCoflix(coflixResult)) },
           { id: 'viper', hasData: viperProcessedSources.length > 0 },
@@ -2787,6 +2931,26 @@ const WatchMovie: React.FC = () => {
           } else if (sortedWiflix.length > 0) {
             setSelectedWiflixSource(0);
             setEmbedUrl(sortedWiflix[0].url);
+          }
+        }
+        // Handle Moviez source selection
+        else if (type === 'moviez') {
+          const index = sortedMoviez.findIndex(s => s.url === url);
+          if (index !== -1) {
+            setSelectedMoviezSource(index);
+          } else if (sortedMoviez.length > 0) {
+            setSelectedMoviezSource(0);
+            setEmbedUrl(sortedMoviez[0].url);
+          }
+        }
+        // Handle Vidzy direct source selection
+        else if (type === 'vidzy') {
+          const index = sortedVidzy.findIndex(s => s.url === url);
+          if (index !== -1) {
+            setSelectedVidzySource(index);
+          } else if (sortedVidzy.length > 0) {
+            setSelectedVidzySource(0);
+            setEmbedUrl(sortedVidzy[0].url);
           }
         }
         // Handle J1F source selection
@@ -3258,6 +3422,8 @@ const WatchMovie: React.FC = () => {
               coflixSources={sortedCoflix}
               fstreamSources={sortedFstream}
               wiflixSources={sortedWiflix}
+              moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
               j1fSources={sortedJ1f}
               viperSources={sortedViper}
 
@@ -3328,7 +3494,11 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
                       autoPlay={false}
@@ -3427,7 +3597,11 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
             title={movieTitle}
@@ -3474,7 +3648,11 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
                       autoPlay={false}
@@ -3532,7 +3710,11 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
             title={movieTitle}
@@ -3574,7 +3756,11 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
                       autoPlay={false}
@@ -3632,7 +3818,11 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
             title={movieTitle}
@@ -3679,7 +3869,11 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
                       autoPlay={false}
@@ -3737,7 +3931,11 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
             title={movieTitle}
@@ -3784,7 +3982,11 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
                       autoPlay={false}
@@ -3857,7 +4059,11 @@ const WatchMovie: React.FC = () => {
                 coflixSources={sortedCoflix}
                 fstreamSources={sortedFstream}
                 wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                 viperSources={sortedViper}
 
                 title={movieTitle}
@@ -3901,7 +4107,11 @@ const WatchMovie: React.FC = () => {
                           coflixSources={sortedCoflix}
                           fstreamSources={sortedFstream}
                           wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                           viperSources={sortedViper}
 
                           autoPlay={false}
@@ -3935,7 +4145,11 @@ const WatchMovie: React.FC = () => {
                 coflixSources={sortedCoflix}
                 fstreamSources={sortedFstream}
                 wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                 viperSources={sortedViper}
 
                 autoPlay={false}
@@ -3994,7 +4208,11 @@ const WatchMovie: React.FC = () => {
             coflixSources={sortedCoflix}
             fstreamSources={sortedFstream}
             wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
             viperSources={sortedViper}
 
             title={movieTitle}
@@ -4036,7 +4254,11 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
                       autoPlay={false}
@@ -4128,7 +4350,11 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
                       autoPlay={false}
@@ -4200,7 +4426,11 @@ const WatchMovie: React.FC = () => {
                       coflixSources={sortedCoflix}
                       fstreamSources={sortedFstream}
                       wiflixSources={sortedWiflix}
-                      j1fSources={sortedJ1f}
+                      moviezSources={sortedMoviez}
+                      vidzySources={sortedVidzy}
+                      moviezSources={sortedMoviez}
+              vidzySources={sortedVidzy}
+              j1fSources={sortedJ1f}
                       viperSources={sortedViper}
 
                       autoPlay={false}

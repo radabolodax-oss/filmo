@@ -2,11 +2,11 @@
 
 /** Sources top-level disponibles pour Films/Séries. Ordre = default hardcodé actuel. */
 export const TOP_LEVEL_SOURCE_IDS = [
-  'darkino', 'mp4', 'nexus_hls',
+  'moviez', 'vidzy', 'darkino', 'mp4', 'nexus_hls',
   'fstream', 'wiflix', 'omega', 'coflix', 'frembed', 'vostfr',
   'viper', 'vox', 'custom',
   // Ids propres au fork (movix.chat), sans équivalent upstream direct.
-  'j1f', 'nakios', 'vidzy', 'wavewatch', 'peachify', 'videasy', 'vidlink',
+  'j1f', 'nakios', 'wavewatch', 'peachify', 'videasy', 'vidlink',
   'vidsrcto', 'vidsrcsu', 'vidsrcio', 'vidsrcwtf1', 'vidsrcwtf5',
   // Ajoutés lors du port des sources upstream sur la fiche film.
   'vidmoly', 'rivestream', 'nexus_file',
@@ -22,6 +22,7 @@ export const DEPRECATED_HOSTER_IDS = [] as const;
 
 /** Hosters built-in connus. Les custom hosters utilisent des ids prefixés `custom_`. */
 export const BUILTIN_HOSTER_IDS = [
+  'moviez',
   'voe', 'vidmoly', 'uqload', 'sibnet', 'doodstream',
   'seekstreaming', 'smoothpre', 'minochinos', 'vidzy', 'darkibox',
   'supervideo', 'dropload', 'oneupload', 'fsvid',

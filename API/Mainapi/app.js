@@ -447,6 +447,7 @@ app.use('/', searchRouter);
 app.use('/api', downloadRouter);
 app.use('/api/fstream', require('./routes/fstream'));
 app.use('/api/vidzy', require('./routes/vidzy'));
+app.use('/api/moviez', require('./routes/moviez'));
 app.use('/api/wiflix', require('./routes/wiflix'));
 app.use('/api/j1f', require('./routes/j1f'));
 app.use('/api/frembed', require('./routes/frembed'));

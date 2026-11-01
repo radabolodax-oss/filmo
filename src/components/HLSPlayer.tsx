@@ -557,6 +557,8 @@ interface HLSPlayerProps {
   coflixSources?: any[];
   fstreamSources?: { url: string; label: string; category: string }[];
   wiflixSources?: { url: string; label: string; category: string }[];
+  moviezSources?: { url: string; label: string; category: string }[];
+  vidzySources?: { url: string; label: string; category: string }[];
   j1fSources?: { url: string; label: string; category: string }[];
   viperSources?: { url: string; label: string; quality: string; language: string }[];
   voxSources?: { name: string; link: string }[];
@@ -809,6 +811,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   coflixSources = [],
   fstreamSources = [],
   wiflixSources = [],
+  moviezSources = [],
+  vidzySources = [],
   j1fSources = [],
   viperSources = [],
   voxSources = [],
@@ -1173,6 +1177,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [showNexusMenu, setShowNexusMenu] = useState(false);
   const [showFstreamMenu, setShowFstreamMenu] = useState(false);
   const [showWiflixMenu, setShowWiflixMenu] = useState(false);
+  const [showMoviezMenu, setShowMoviezMenu] = useState(false);
+  const [showVidzyMenu, setShowVidzyMenu] = useState(false);
   const [showJ1fMenu, setShowJ1fMenu] = useState(false);
   const [showViperMenu, setShowViperMenu] = useState(false);
   const [showVoxMenu, setShowVoxMenu] = useState(false);
@@ -1939,6 +1945,26 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       console.log('❌ [HLSPlayer] No Wiflix/Lynx sources available:', wiflixSources);
     }
 
+    // Add Moviez sources
+    if (moviezSources && moviezSources.length > 0) {
+      embedSources.push({
+        type: 'moviez_main',
+        id: 'moviez_main',
+        label: `Lecteurs Moviez (${moviezSources.length})`,
+        url: '#',
+      });
+    }
+
+    // Add Vidzy direct sources
+    if (vidzySources && vidzySources.length > 0) {
+      embedSources.push({
+        type: 'vidzy_main',
+        id: 'vidzy_main',
+        label: `Lecteurs Vidzy (${vidzySources.length})`,
+        url: '#',
+      });
+    }
+
     // Add J1F (1jour1film) sources
     if (j1fSources && j1fSources.length > 0) {
       embedSources.push({
@@ -2174,7 +2200,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   // Fonction pour gérer le changement de source
   const handleSourceChange = (sourceType: string, sourceId: string, sourceUrl: string) => {
     // --- Dropdown Toggle Handling (Doesn't close settings) ---
-    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main') {
+    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'moviez_main' || sourceType === 'vidzy_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main') {
       setShowDarkinoMenu(sourceType === 'darkino_main' ? !showDarkinoMenu : false);
       setShowOmegaMenu(sourceType === 'omega_main' ? !showOmegaMenu : false);
       setShowCoflixMenu(sourceType === 'multi_main' ? !showCoflixMenu : false);
@@ -2182,6 +2208,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       setShowNexusMenu(sourceType === 'nexus_main' ? !showNexusMenu : false);
       setShowFstreamMenu(sourceType === 'fstream_main' ? !showFstreamMenu : false);
       setShowWiflixMenu(sourceType === 'wiflix_main' ? !showWiflixMenu : false);
+      setShowMoviezMenu(sourceType === 'moviez_main' ? !showMoviezMenu : false);
+      setShowVidzyMenu(sourceType === 'vidzy_main' ? !showVidzyMenu : false);
       setShowJ1fMenu(sourceType === 'j1f_main' ? !showJ1fMenu : false);
       setShowViperMenu(sourceType === 'viper_main' ? !showViperMenu : false);
       setShowVoxMenu(sourceType === 'vox_main' ? !showVoxMenu : false);
@@ -2227,6 +2255,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       const index = parseInt(sourceId.split('_')[1], 10);
       if (wiflixSources && wiflixSources[index]) {
         targetUrl = wiflixSources[index].url || '';
+      }
+    } else if (sourceType === 'moviez') {
+      const index = parseInt(sourceId.split('_')[1], 10);
+      if (moviezSources && moviezSources[index]) {
+        targetUrl = moviezSources[index].url || '';
+      }
+    } else if (sourceType === 'vidzy') {
+      const index = parseInt(sourceId.split('_')[1], 10);
+      if (vidzySources && vidzySources[index]) {
+        targetUrl = vidzySources[index].url || '';
       }
     } else if (sourceType === 'j1f') {
       const index = parseInt(sourceId.split('_')[1], 10);
@@ -7583,12 +7621,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                 {group.type === 'hls' && (source.type === 'mp4' || source.type === 'm3u8') && renderSourceQualityMeta(source.url, isActive, source.quality, source.label)}
                               </div>
                               <div className="ml-3 flex items-center gap-2">
-                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
+                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
                                   <ChevronRight className={`w-4 h-4 transition-transform ${(source.type === 'darkino_main' && showDarkinoMenu) ||
                                     (source.type === 'omega_main' && showOmegaMenu) ||
                                     (source.type === 'multi_main' && showCoflixMenu) ||
                                     (source.type === 'fstream_main' && showFstreamMenu) ||
                                     (source.type === 'wiflix_main' && showWiflixMenu) ||
+                                    (source.type === 'moviez_main' && showMoviezMenu) ||
+                                    (source.type === 'vidzy_main' && showVidzyMenu) ||
                                     (source.type === 'j1f_main' && showJ1fMenu) ||
                                     (source.type === 'nexus_main' && showNexusMenu) ||
                                     (source.type === 'rivestream_main' && showRivestreamMenu) ||
@@ -8048,6 +8088,136 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                               )}
                             </AnimatePresence>
                           )}
+                          {/* Menu déroulant Moviez */}
+                          {source.type === 'moviez_main' && (
+                            <AnimatePresence>
+                              {showMoviezMenu && (
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.95, transformOrigin: "top" }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.95 }}
+                                  transition={{ duration: 0.2, ease: "easeOut" }}
+                                  className="ml-4 pl-2 border-l-2 border-indigo-500 mb-2"
+                                >
+                                  {moviezSources && moviezSources.length > 0 && (() => {
+                                    const sourcesByCategory = moviezSources.reduce((acc, s) => {
+                                      const cat = s.category || 'VF';
+                                      if (!acc[cat]) acc[cat] = [];
+                                      acc[cat].push(s);
+                                      return acc;
+                                    }, {} as Record<string, typeof moviezSources>);
+
+                                    const categoryOrder = [
+                                      { key: 'VF', label: t('watch.french'), flagCode: 'FR' },
+                                      { key: 'VOSTFR', label: t('watch.voSubtitledFr'), flagCode: 'GB' }
+                                    ];
+
+                                    return categoryOrder.map((cat) => {
+                                      const catSources = sourcesByCategory[cat.key];
+                                      if (!catSources || catSources.length === 0) return null;
+                                      return (
+                                        <div key={`moviez_cat_${cat.key}`} className="mb-3">
+                                          <div className="flex items-center gap-2 mb-2 px-2">
+                                            <span className="text-lg"><ReactCountryFlag countryCode={cat.flagCode} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }} /></span>
+                                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                              {cat.label} ({catSources.length})
+                                            </span>
+                                          </div>
+                                          {catSources.map((mSource, index) => {
+                                            const globalIndex = moviezSources.findIndex(s => s.url === mSource.url);
+                                            const isMActive = onlyQualityMenu && embedType === 'moviez' && embedUrl === mSource.url;
+                                            return (
+                                              <div key={`moviez_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
+                                                <motion.button
+                                                  initial={{ opacity: 0, x: -20 }}
+                                                  animate={{ opacity: 1, x: 0 }}
+                                                  transition={{ duration: 0.2, delay: index * 0.03 }}
+                                                  onClick={() => handleSourceChange('moviez', `moviez_${globalIndex}`, mSource.url)}
+                                                  className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isMActive ? 'ring-2 ring-indigo-500 bg-gray-800/80' : ''}`}
+                                                >
+                                                  <span>{mSource.label}</span>
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-gray-500">{mSource.category}</span>
+                                                    {isMActive && <span className="text-xs px-2 py-1 bg-indigo-600 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                  </div>
+                                                </motion.button>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    }).filter(Boolean);
+                                  })()}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          )}
+
+                          {/* Menu déroulant Vidzy Direct */}
+                          {source.type === 'vidzy_main' && (
+                            <AnimatePresence>
+                              {showVidzyMenu && (
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.95, transformOrigin: "top" }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.95 }}
+                                  transition={{ duration: 0.2, ease: "easeOut" }}
+                                  className="ml-4 pl-2 border-l-2 border-cyan-500 mb-2"
+                                >
+                                  {vidzySources && vidzySources.length > 0 && (() => {
+                                    const sourcesByCategory = vidzySources.reduce((acc, s) => {
+                                      const cat = s.category || 'VF';
+                                      if (!acc[cat]) acc[cat] = [];
+                                      acc[cat].push(s);
+                                      return acc;
+                                    }, {} as Record<string, typeof vidzySources>);
+
+                                    const categoryOrder = [
+                                      { key: 'VF', label: t('watch.french'), flagCode: 'FR' },
+                                      { key: 'VOSTFR', label: t('watch.voSubtitledFr'), flagCode: 'GB' }
+                                    ];
+
+                                    return categoryOrder.map((cat) => {
+                                      const catSources = sourcesByCategory[cat.key];
+                                      if (!catSources || catSources.length === 0) return null;
+                                      return (
+                                        <div key={`vidzy_cat_${cat.key}`} className="mb-3">
+                                          <div className="flex items-center gap-2 mb-2 px-2">
+                                            <span className="text-lg"><ReactCountryFlag countryCode={cat.flagCode} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }} /></span>
+                                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                              {cat.label} ({catSources.length})
+                                            </span>
+                                          </div>
+                                          {catSources.map((vSource, index) => {
+                                            const globalIndex = vidzySources.findIndex(s => s.url === vSource.url);
+                                            const isVActive = onlyQualityMenu && embedType === 'vidzy' && embedUrl === vSource.url;
+                                            return (
+                                              <div key={`vidzy_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
+                                                <motion.button
+                                                  initial={{ opacity: 0, x: -20 }}
+                                                  animate={{ opacity: 1, x: 0 }}
+                                                  transition={{ duration: 0.2, delay: index * 0.03 }}
+                                                  onClick={() => handleSourceChange('vidzy', `vidzy_${globalIndex}`, vSource.url)}
+                                                  className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isVActive ? 'ring-2 ring-cyan-500 bg-gray-800/80' : ''}`}
+                                                >
+                                                  <span>{vSource.label}</span>
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-gray-500">{vSource.category}</span>
+                                                    {isVActive && <span className="text-xs px-2 py-1 bg-cyan-600 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                  </div>
+                                                </motion.button>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    }).filter(Boolean);
+                                  })()}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          )}
+
                           {/* Ajout du menu déroulant J1F / 1jour1film */}
                           {source.type === 'j1f_main' && (
                             <AnimatePresence>
