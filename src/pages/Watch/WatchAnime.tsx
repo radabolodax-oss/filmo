@@ -265,7 +265,20 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
   // ——— Fournisseur d'anime actif — Anime-Sama (par défaut, celui déjà porté) plus
   // AniCloud et FRAnime, portés depuis l'ancien TVDetails.tsx (appels directs navigateur,
   // pas via Mainapi pour AniCloud). ———
-  const [provider, setProvider] = useState<'animesama' | 'anicloud' | 'franime'>('animesama');
+  const [provider, setProvider] = useState<'animesama' | 'anicloud' | 'franime' | 'moviez' | 'vidzy'>('animesama');
+  // Moviez Anime provider states
+  const [moviezAnimeData, setMoviezAnimeData] = useState<any>(null);
+  const [loadingMoviezAnime, setLoadingMoviezAnime] = useState<boolean>(false);
+  const [moviezAnimeLang, setMoviezAnimeLang] = useState<'vf' | 'vostfr'>('vostfr');
+  const [moviezAnimePlayerIdx, setMoviezAnimePlayerIdx] = useState<number>(0);
+  const [moviezAnimeError, setMoviezAnimeError] = useState<string | null>(null);
+
+  // Vidzy Anime provider states
+  const [vidzyAnimeData, setVidzyAnimeData] = useState<any>(null);
+  const [loadingVidzyAnime, setLoadingVidzyAnime] = useState<boolean>(false);
+  const [vidzyAnimeLang, setVidzyAnimeLang] = useState<'vf' | 'vostfr'>('vostfr');
+  const [vidzyAnimePlayerIdx, setVidzyAnimePlayerIdx] = useState<number>(0);
+  const [vidzyAnimeError, setVidzyAnimeError] = useState<string | null>(null);
 
   // AniCloud states
   const [anicloudSlug, setAnicloudSlug] = useState<string | null>(null);
@@ -371,6 +384,64 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
       .finally(() => { if (!cancelled) setFranimeLoading(false); });
     return () => { cancelled = true; };
   }, [provider, showDetails?.name, franimeLookup, franimeLoading]);
+
+  // Reset Moviez/Vidzy anime data quand l'id change
+  useEffect(() => {
+    setMoviezAnimeData(null);
+    setMoviezAnimeError(null);
+    setVidzyAnimeData(null);
+    setVidzyAnimeError(null);
+  }, [id]);
+
+  // Charge Moviez quand le fournisseur moviez est actif ou quand saison/épisode change
+  useEffect(() => {
+    if (provider !== 'moviez') return;
+    if (!id) return;
+    let cancelled = false;
+    setLoadingMoviezAnime(true);
+    setMoviezAnimeError(null);
+    const epUrl = isMovieMode
+      ? `${MAIN_API}/api/moviez/movie/${id}`
+      : `${MAIN_API}/api/moviez/tv/${id}/season/${season}/episode/${episode}`;
+
+    axios.get(epUrl)
+      .then(res => {
+        if (cancelled) return;
+        setMoviezAnimeData(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setMoviezAnimeError('Anime/Épisode non trouvé sur Moviez');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMoviezAnime(false);
+      });
+    return () => { cancelled = true; };
+  }, [provider, id, season, episode, isMovieMode]);
+
+  // Charge Vidzy quand le fournisseur vidzy est actif ou quand saison/épisode change
+  useEffect(() => {
+    if (provider !== 'vidzy') return;
+    if (!id) return;
+    let cancelled = false;
+    setLoadingVidzyAnime(true);
+    setVidzyAnimeError(null);
+    const epUrl = isMovieMode
+      ? `${MAIN_API}/api/vidzy/movie/${id}`
+      : `${MAIN_API}/api/vidzy/tv/${id}/season/${season}/episode/${episode}`;
+
+    axios.get(epUrl)
+      .then(res => {
+        if (cancelled) return;
+        setVidzyAnimeData(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setVidzyAnimeError('Anime/Épisode non trouvé sur Vidzy');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingVidzyAnime(false);
+      });
+    return () => { cancelled = true; };
+  }, [provider, id, season, episode, isMovieMode]);
 
   // Loading states for extractions
   const [loadingVidmolyExtraction, setLoadingVidmolyExtraction] = useState<boolean>(false);
@@ -681,21 +752,19 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
         // --- FIN PATCH SPECIAL ANIMES ---
         if (bestMatch && bestMatch.seasons && bestMatch.seasons.length > 0) {
           setAnimeData(bestMatch as AnimeData);
-        } else if (onNoSourceFallback) {
-          onNoSourceFallback();
         } else {
-          setError(t('watch.noAnimeSource'));
+          // Anime-Sama indisponible ou pas de saisons trouvées -> bascule transparente sur Moviez API
+          setProvider('moviez');
           setLoading(false);
         }
-      } else if (onNoSourceFallback) {
-        onNoSourceFallback();
       } else {
-        setError(t('watch.noAnimeSource'));
+        // Anime-Sama recherche sans résultat -> bascule transparente sur Moviez API
+        setProvider('moviez');
         setLoading(false);
       }
     } catch (error) {
       console.error('Error loading anime data:', error);
-      setError(t('watch.animeDataError'));
+      setProvider('moviez');
       setLoading(false);
     }
   }, [id, showDetails?.name]);
@@ -1958,7 +2027,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
             </div>
           </div>
         </div>
-      ) : loading ? (
+      ) : (loading && provider === 'animesama') ? (
         <div className="flex flex-col items-center justify-center h-full bg-black">
           <div className="loading-container">
             <div className="loading-bar"></div>
@@ -2407,7 +2476,9 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                       <h4 className="text-white text-md font-semibold mb-3">Fournisseur</h4>
                       <div className="space-y-2">
                         {([
-                          { key: 'animesama', label: 'Anime-Sama' },
+                          { key: 'animesama', label: 'Anime-Sama', badge: 'Prioritaire' },
+                          { key: 'moviez', label: 'Moviez API (Ad-Free)' },
+                          { key: 'vidzy', label: 'Vidzy Direct' },
                           { key: 'anicloud', label: 'AniCloud' },
                           { key: 'franime', label: 'FRAnime' },
                         ] as const).map(p => (
@@ -2419,7 +2490,14 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                               : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200 hover:text-white'
                               }`}
                           >
-                            {p.label}
+                            <span className="flex items-center gap-2">
+                              {p.label}
+                              {'badge' in p && (
+                                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  {p.badge}
+                                </span>
+                              )}
+                            </span>
                             {provider === p.key && (
                               <span className="text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.active')}</span>
                             )}
@@ -2427,6 +2505,102 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                         ))}
                       </div>
                     </div>
+
+                    {/* Moviez API — langue + lecteurs */}
+                    {provider === 'moviez' && (
+                      <div className="mb-6">
+                        {loadingMoviezAnime ? (
+                          <div className="flex items-center justify-center py-6">
+                            <svg className="animate-spin h-6 w-6 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          </div>
+                        ) : moviezAnimeError || !moviezAnimeData ? (
+                          <p className="text-gray-400 text-sm">{moviezAnimeError ?? 'Non disponible sur Moviez'}</p>
+                        ) : (
+                          <>
+                            <h4 className="text-white text-md font-semibold mb-3">{t('watch.versionLabel')}</h4>
+                            <div className="grid grid-cols-2 gap-2 mb-4">
+                              {(['vf', 'vostfr'] as const).map(lang => {
+                                const hasLang = moviezAnimeData.players?.[lang]?.length > 0;
+                                if (!hasLang) return null;
+                                return (
+                                  <button key={lang} onClick={() => { setMoviezAnimeLang(lang); setMoviezAnimePlayerIdx(0); }}
+                                    className={`px-3 py-2 rounded-lg text-sm transition-all duration-200 ${moviezAnimeLang === lang ? 'bg-gray-800 border-l-4 border-indigo-500 pl-3 font-medium text-indigo-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200'}`}>
+                                    {lang.toUpperCase()}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {moviezAnimeData.players?.[moviezAnimeLang]?.length > 0 && (
+                              <>
+                                <h4 className="text-white text-md font-semibold mb-3">{t('watch.playersLabel')}</h4>
+                                <div className="space-y-2">
+                                  {moviezAnimeData.players[moviezAnimeLang].map((p: any, i: number) => (
+                                    <button key={`m-${i}`} onClick={() => setMoviezAnimePlayerIdx(i)}
+                                      className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center ${moviezAnimePlayerIdx === i ? 'bg-gray-800 border-l-4 border-indigo-500 pl-3 font-medium text-indigo-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200 hover:text-white'}`}>
+                                      {p.name}
+                                      {moviezAnimePlayerIdx === i && (
+                                        <span className="text-xs px-2 py-1 bg-indigo-600 text-white rounded-full">{t('watch.active')}</span>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Vidzy Direct — langue + lecteurs */}
+                    {provider === 'vidzy' && (
+                      <div className="mb-6">
+                        {loadingVidzyAnime ? (
+                          <div className="flex items-center justify-center py-6">
+                            <svg className="animate-spin h-6 w-6 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          </div>
+                        ) : vidzyAnimeError || !vidzyAnimeData ? (
+                          <p className="text-gray-400 text-sm">{vidzyAnimeError ?? 'Non disponible sur Vidzy'}</p>
+                        ) : (
+                          <>
+                            <h4 className="text-white text-md font-semibold mb-3">{t('watch.versionLabel')}</h4>
+                            <div className="grid grid-cols-2 gap-2 mb-4">
+                              {(['vf', 'vostfr'] as const).map(lang => {
+                                const hasLang = vidzyAnimeData.players?.[lang]?.length > 0;
+                                if (!hasLang) return null;
+                                return (
+                                  <button key={lang} onClick={() => { setVidzyAnimeLang(lang); setVidzyAnimePlayerIdx(0); }}
+                                    className={`px-3 py-2 rounded-lg text-sm transition-all duration-200 ${vidzyAnimeLang === lang ? 'bg-gray-800 border-l-4 border-cyan-500 pl-3 font-medium text-cyan-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200'}`}>
+                                    {lang.toUpperCase()}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {vidzyAnimeData.players?.[vidzyAnimeLang]?.length > 0 && (
+                              <>
+                                <h4 className="text-white text-md font-semibold mb-3">{t('watch.playersLabel')}</h4>
+                                <div className="space-y-2">
+                                  {vidzyAnimeData.players[vidzyAnimeLang].map((p: any, i: number) => (
+                                    <button key={`v-${i}`} onClick={() => setVidzyAnimePlayerIdx(i)}
+                                      className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center ${vidzyAnimePlayerIdx === i ? 'bg-gray-800 border-l-4 border-cyan-500 pl-3 font-medium text-cyan-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200 hover:text-white'}`}>
+                                      {p.name}
+                                      {vidzyAnimePlayerIdx === i && (
+                                        <span className="text-xs px-2 py-1 bg-cyan-600 text-white rounded-full">{t('watch.active')}</span>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
 
                     {/* AniCloud — langue + lecteurs */}
                     {provider === 'anicloud' && (
@@ -2675,6 +2849,72 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
               ) : null}
             </>
           )}
+
+          {provider === 'moviez' && (() => {
+            if (loadingMoviezAnime) return (
+              <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                <svg className="animate-spin h-10 w-10 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              </div>
+            );
+            if (moviezAnimeError || !moviezAnimeData) return (
+              <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                <span className="text-sm">{moviezAnimeError ?? 'Aucun lecteur Moviez disponible'}</span>
+              </div>
+            );
+            const players = moviezAnimeData.players?.[moviezAnimeLang] || moviezAnimeData.players?.vostfr || moviezAnimeData.players?.vf || [];
+            const currentPlayer = players[moviezAnimePlayerIdx] || players[0];
+            return currentPlayer ? (
+              <iframe
+                key={`moviez-${season}-${episode}-${moviezAnimeLang}-${moviezAnimePlayerIdx}`}
+                src={currentPlayer.url}
+                className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px] border-0"
+                allowFullScreen
+                allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                sandbox="allow-scripts allow-forms allow-presentation"
+                title={`${showDetails?.name} S${season}E${episode} - Moviez`}
+              />
+            ) : (
+              <div className="w-full h-[360px] flex items-center justify-center bg-black text-gray-400 text-sm">
+                Aucun lecteur disponible pour cette langue
+              </div>
+            );
+          })()}
+
+          {provider === 'vidzy' && (() => {
+            if (loadingVidzyAnime) return (
+              <div className="w-full h-[360px] flex items-center justify-center bg-black">
+                <svg className="animate-spin h-10 w-10 text-cyan-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              </div>
+            );
+            if (vidzyAnimeError || !vidzyAnimeData) return (
+              <div className="w-full h-[360px] flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                <span className="text-sm">{vidzyAnimeError ?? 'Aucun lecteur Vidzy disponible'}</span>
+              </div>
+            );
+            const players = vidzyAnimeData.players?.[vidzyAnimeLang] || vidzyAnimeData.players?.vostfr || vidzyAnimeData.players?.vf || [];
+            const currentPlayer = players[vidzyAnimePlayerIdx] || players[0];
+            return currentPlayer ? (
+              <iframe
+                key={`vidzy-${season}-${episode}-${vidzyAnimeLang}-${vidzyAnimePlayerIdx}`}
+                src={currentPlayer.url}
+                className="w-full h-[56vw] min-h-[200px] sm:h-[360px] md:h-[500px] lg:h-[560px] 2xl:h-[700px] border-0"
+                allowFullScreen
+                allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                sandbox="allow-scripts allow-forms allow-presentation"
+                title={`${showDetails?.name} S${season}E${episode} - Vidzy`}
+              />
+            ) : (
+              <div className="w-full h-[360px] flex items-center justify-center bg-black text-gray-400 text-sm">
+                Aucun lecteur disponible pour cette langue
+              </div>
+            );
+          })()}
 
           {provider === 'anicloud' && (() => {
             if (loadingAnicloud) return (
