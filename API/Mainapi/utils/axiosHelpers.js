@@ -658,20 +658,9 @@ async function axiosAnimeSamaRequest(config) {
 
   // Headers pour les requ\u00eates Anime-Sama via proxy
   const animeSamaHeaders = {
-    'Accept-Language': 'fr-FR,fr;q=0.6',
-    'Cache-Control': 'no-cache',
-    'Pragma': 'no-cache',
-    'Priority': 'u=0, i',
-    'Sec-CH-UA': '"Chromium";v="142", "Brave";v="142", "Not_A Brand";v="99"',
-    'Sec-CH-UA-Mobile': '?0',
-    'Sec-CH-UA-Platform': '"Windows"',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-    'Sec-GPC': '1',
-    'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+    'Accept': '*/*',
+    'Accept-Language': 'fr-FR,fr;q=0.9',
+    'Referer': deps.ANIME_SAMA_URL || 'https://anime-sama.to/',
   };
 
   // Supprimer les headers li\u00e9s \u00e0 l'IP d'origine pour \u00e9viter de les transmettre

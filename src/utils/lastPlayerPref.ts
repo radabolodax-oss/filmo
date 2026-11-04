@@ -22,7 +22,7 @@ const VALID_IDS = new Set<string>(TOP_LEVEL_SOURCE_IDS);
 export function getRememberLastPlayer(): boolean {
   try {
     const v = localStorage.getItem(TOGGLE_KEY);
-    if (v === null) return true;
+    if (v === null) return false;
     return v === 'true';
   } catch {
     return true;

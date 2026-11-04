@@ -61,7 +61,7 @@ let darkino403CooldownUntil = 0; // Timestamp jusqu'auquel on ne fait plus de re
 // === CPASMAL CONFIGURATION ===
 // Domaine rotatif (site pirate) — surchargeable via env sans toucher au code
 // quand www.cpasmal.rip devient injoignable (DNS mort / saisie de domaine).
-const CPASMAL_BASE_URL = process.env.CPASMAL_BASE_URL || "https://www.cpasmal.rip";
+const CPASMAL_BASE_URL = process.env.CPASMAL_BASE_URL || "https://www.cpasmal.top";
 
 const cpasmalJar = new tough.CookieJar(null, { rejectPublicSuffixes: false });
 
@@ -962,19 +962,26 @@ async function makeAnimeSamaRequest(targetUrl, options = {}) {
     .sort(() => Math.random() - 0.5)
     .slice(0, MAX_ANIMESAMA_CYCLETLS_ATTEMPTS);
 
-  if (pool.length === 0) {
-    const res = await axios({
-      method: lowerMethod,
-      url: cleanTargetUrl,
-      data: body || undefined,
-      headers: defaultHeaders,
-      timeout: timeout * 1000,
-      validateStatus: () => true,
-    });
-    return { data: typeof res.data === 'string' ? res.data : JSON.stringify(res.data), status: res.status, headers: res.headers };
-  }
-
   const cycleTLS = await getCycleTLS();
+
+  if (pool.length === 0) {
+    const response = await cycleTLS(
+      cleanTargetUrl,
+      {
+        body,
+        ja3: CHROME_JA3,
+        userAgent: CHROME_UA,
+        headers: defaultHeaders,
+        timeout,
+      },
+      lowerMethod,
+    );
+    const data =
+      typeof response.body === "string"
+        ? response.body
+        : JSON.stringify(response.body);
+    return { data, status: response.status, headers: response.headers || {} };
+  }
 
   const asAxiosLike = (response) => {
     const data =

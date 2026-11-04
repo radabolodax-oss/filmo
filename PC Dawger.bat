@@ -32,11 +32,16 @@ if defined DOCKER_EXE (
     echo Lancement de Docker Desktop en cours...
     echo Attente du demarrage du moteur Docker...
 ) else (
-    echo [AVERTISSEMENT] Docker Desktop n'est pas trouve dans les repertoires standards.
-    echo Si Docker est installe dans un autre repertoire, veuillez le lancer manuellement.
+    docker info >nul 2>&1
+    if errorlevel 1 (
+        echo [INFO] Docker Desktop non detecte sur cette machine.
+        echo Basculement automatique vers le mode leger sans Docker...
+        call "%~dp0Lancer Dawger (Sans Docker).bat"
+        exit /b %errorlevel%
+    )
 )
 
-REM Boucle d'attente active pour que le daemon Docker soit pret (max ~90s)
+REM Boucle d'attente active pour que le daemon Docker soit pret (max ~15s)
 set /a docker_wait=0
 :wait_docker
 ping 127.0.0.1 -n 3 >nul
@@ -46,9 +51,10 @@ if not errorlevel 1 (
     goto docker_pret
 )
 set /a docker_wait+=3
-if !docker_wait! GEQ 90 (
-    echo [ATTENTION] Le demarrage de Docker prend plus de temps que prevu. Tentative de continuation...
-    goto conteneurs_step
+if !docker_wait! GEQ 15 (
+    echo [ATTENTION] Docker ne repond pas. Basculement automatique en mode leger sans Docker...
+    call "%~dp0Lancer Dawger (Sans Docker).bat"
+    exit /b %errorlevel%
 )
 goto wait_docker
 
@@ -62,6 +68,7 @@ echo [2/3] Demarrage des services et conteneurs...
 docker compose up -d mysql redis api proxiesembed bypass403 frontend >nul 2>&1
 if not errorlevel 1 (
     echo [OK] Conteneurs operationnels !
+    docker compose restart api >nul 2>&1
     goto attente_serveur
 )
 

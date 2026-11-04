@@ -16,7 +16,15 @@
 process.env.DB_BACKEND = process.env.DB_BACKEND || 'sqlite';
 process.env.REDIS_BACKEND = process.env.REDIS_BACKEND || 'memory';
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'dawger_offline_mobile_secret_key_2026';
+process.env.TMDB_API_KEY = process.env.TMDB_API_KEY || '15d2ea6d0dc1d476efbca3eba2b9bbfb';
+process.env.WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || 'https://flemmix.studio';
+process.env.CPASMAL_BASE_URL = process.env.CPASMAL_BASE_URL || 'https://www.cpasmal.top';
+process.env.FSTREAM_BASE_URL = process.env.FSTREAM_BASE_URL || 'https://french-stream.net';
+process.env.FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'http://localhost:3000';
 
 process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '4'; // single process, no need for server.js's 8x6
 

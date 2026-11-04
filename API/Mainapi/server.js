@@ -18,7 +18,7 @@ if (cluster.isPrimary ?? cluster.isMaster) {
   }
   // Anti-fork-bomb : limiter les redémarrages rapides
   const workerRestarts = new Map(); // pid -> [timestamps]
-  const MAX_RESTARTS = 5;
+  const MAX_RESTARTS = 50;
   const RESTART_WINDOW_MS = 60000; // 1 minute
   let isShuttingDown = false; // Flag pour empêcher le redémarrage des workers pendant le shutdown
 
@@ -97,6 +97,18 @@ if (cluster.isPrimary ?? cluster.isMaster) {
 // =============================================================================
 // === WORKER PROCESS ONLY (below) =============================================
 // =============================================================================
+
+process.on('uncaughtException', (err) => {
+  if (err && (err.code === 'ESRCH' || String(err.message).includes('ESRCH') || String(err.stack || '').includes('cycletls'))) {
+    console.warn('[Worker] CycleTLS cleanup ignore:', err.message);
+    return;
+  }
+  console.error('[Worker] Uncaught Exception interceptee:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Worker] Unhandled Rejection interceptee:', reason);
+});
 
 process.env.UV_THREADPOOL_SIZE = 8; // 8 threads libuv par worker (6 workers x 8 = 48 threads total)
 

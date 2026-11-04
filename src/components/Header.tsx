@@ -345,7 +345,12 @@ const Header: React.FC = () => {
     setShowAutocomplete(false);
     setHeaderQuery('');
     setIsMobileSearchOpen(false);
-    navigate(`/${item.media_type}/${encodeId(item.id)}`);
+    const mediaType = item.media_type || (item.title ? 'movie' : 'tv');
+    if (mediaType === 'person') {
+      navigate(`/person/${item.id}`);
+    } else {
+      navigate(`/${mediaType}/${encodeId(item.id)}`);
+    }
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -522,6 +527,18 @@ const Header: React.FC = () => {
 
               {/* Right section */}
               <div className="flex items-center gap-1 sm:gap-1.5">
+                {/* Mobile Search Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMobileSearchOpen(true);
+                    setTimeout(() => mobileSearchInputRef.current?.focus(), 100);
+                  }}
+                  aria-label="Recherche"
+                  className="landscape:hidden lg:hidden flex items-center justify-center p-2 text-gray-400 hover:text-white transition-colors"
+                >
+                  <Search size={20} />
+                </button>
                 {isAprilFoolsAdminVisible && (
                   <Link
                     to={APRIL_FOOLS_ADMIN_PATH}

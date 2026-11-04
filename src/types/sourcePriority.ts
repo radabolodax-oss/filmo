@@ -13,6 +13,12 @@ export const TOP_LEVEL_SOURCE_IDS = [
 ] as const;
 export type TopLevelSourceId = typeof TOP_LEVEL_SOURCE_IDS[number];
 
+/** Sources / Fournisseurs pour la section Animes */
+export const ANIME_SOURCE_IDS = [
+  'animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime',
+] as const;
+export type AnimeSourceId = typeof ANIME_SOURCE_IDS[number];
+
 /**
  * Ids historiques retirés de l'UI de priorité.
  * mergeWithDefaults les strip des prefs persistées (cleanup migration).
@@ -22,7 +28,7 @@ export const DEPRECATED_HOSTER_IDS = [] as const;
 
 /** Hosters built-in connus. Les custom hosters utilisent des ids prefixés `custom_`. */
 export const BUILTIN_HOSTER_IDS = [
-  'moviez',
+  'miaw', 'moviez',
   'voe', 'vidmoly', 'uqload', 'sibnet', 'doodstream',
   'seekstreaming', 'smoothpre', 'minochinos', 'vidzy', 'darkibox',
   'supervideo', 'dropload', 'oneupload', 'fsvid',
@@ -56,9 +62,11 @@ export interface MoviesTvPrefs {
 }
 
 export interface AnimePrefs {
+  sourceOrder: Array<{ id: AnimeSourceId; enabled: boolean }>;
   languageOrder: Array<{ id: LanguageId; enabled: boolean }>;
   hosterOrder: HosterId[];
   overrides: Partial<Record<LanguageId, HosterId[]>>;
+  pinnedSource: PinSnapshot<AnimeSourceId> | null;
   pinnedLanguage: PinSnapshot<LanguageId> | null;
   pinnedHoster: PinSnapshot<HosterId> | null;
 }
@@ -70,7 +78,7 @@ export interface CustomHoster {
 }
 
 export interface SourcePriorityPrefs {
-  version: 1;
+  version: 2;
   categories: {
     moviesTv: MoviesTvPrefs;
     anime: AnimePrefs;
@@ -81,3 +89,4 @@ export interface SourcePriorityPrefs {
 }
 
 export type PriorityCategory = 'moviesTv' | 'anime';
+

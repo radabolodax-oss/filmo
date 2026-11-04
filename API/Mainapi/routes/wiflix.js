@@ -6,7 +6,8 @@
 
 const express = require("express");
 const router = express.Router();
-const axios = require("axios");
+const rawAxios = require("axios");
+const axios = rawAxios.default || rawAxios;
 const cheerio = require("cheerio");
 const path = require("path");
 const fsp = require("fs").promises;
@@ -30,7 +31,7 @@ const { fetchCinestreamMovieData } = require("./cinestream");
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "";
 const TMDB_API_URL = "https://api.themoviedb.org/3";
-const WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || "https://flemmix.garden";
+const WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || "https://flemmix.studio";
 
 // === Cache helpers (local, since getFromCacheNoExpiration is not yet in cacheManager) ===
 const getFromCacheNoExpiration = async (cacheDir, key) => {
@@ -128,6 +129,12 @@ const getLevenshteinSimilarity = (str1, str2) => {
     : (maxLength - matrix[s2.length][s1.length]) / maxLength;
 };
 
+const isWaitingRoom = (body) =>
+  typeof body === "string" &&
+  (body.includes("Un instant, s'il vous pla") ||
+   body.includes("Votre demande est en cours de") ||
+   body.includes("Bot shield active"));
+
 function formatNextUpdate(ms) {
   if (ms <= 0) return 'imminent';
   const totalSeconds = Math.ceil(ms / 1000);
@@ -187,12 +194,33 @@ async function searchWiflixMovie(title, baseUrl = WIFLIX_BASE_URL) {
       return { url: null, debugHtml: 'Erreur: service temporairement indisponible' };
     }
 
+        if (!responseBody || isWaitingRoom(responseBody) || responseBody.includes('Bot shield active')) {
+      try {
+        const cleanQuery = title.replace(/\s+saison\s+\d+/i, '').trim();
+        const xfUrl = `${baseUrl}/xfsearch/${encodeURIComponent(cleanQuery)}/`;
+        console.log(`[WIFLIX SEARCH] Bot shield/waiting room detected, falling back to xfsearch: ${xfUrl}`);
+        const xfRes = await axios.get(xfUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Referer": baseUrl + "/",
+          },
+          timeout: 10000,
+        });
+        if (xfRes.data && typeof xfRes.data === 'string' && (xfRes.data.includes('class="mov') || xfRes.data.includes("class='mov") || xfRes.data.includes('mov-t'))) {
+          responseBody = xfRes.data;
+          console.log(`[WIFLIX SEARCH] OK via xfsearch (${responseBody.length} bytes)`);
+        }
+      } catch (xfErr) {
+        console.log(`[WIFLIX SEARCH] Echec xfsearch: ${xfErr.message}`);
+      }
+    }
+
     if (isWaitingRoom(responseBody) || responseBody.includes('Bot shield active')) {
       return { url: null, debugHtml: responseBody };
     }
 
     const $ = cheerio.load(responseBody);
-    const movBlocks = $("#dle-content div.mov");
+    const movBlocks = $("#dle-content div.mov, div.mov");
     if (movBlocks.length === 0) return { url: null, debugHtml: responseBody };
 
     let bestMatch = null;
@@ -345,16 +373,42 @@ async function extractWiflixPlayers(pageUrl) {
     let rawHtml = null;
 
     try {
-      const res = await makeWiflixRequest(pageUrl, {
-        timeout: 15000,
+      const directRes = await axios.get(pageUrl, {
         headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
           "Referer": WIFLIX_BASE_URL + "/",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         },
+        timeout: 5000,
       });
-      rawHtml = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-      console.log(`[WIFLIX PLAYERS] OK via proxy`);
-    } catch (err) {
-      console.log(`[WIFLIX PLAYERS] Echec: ${err.message}`);
+      if (directRes.status === 200 && typeof directRes.data === 'string' && directRes.data.length > 500 && !isWaitingRoom(directRes.data)) {
+        rawHtml = directRes.data;
+        console.log(`[WIFLIX PLAYERS] OK direct (${rawHtml.length} bytes)`);
+      } else {
+        console.log(`[WIFLIX PLAYERS] Direct returned waiting room, fallback proxy...`);
+      }
+    } catch (directErr) {
+      console.log(`[WIFLIX PLAYERS] Direct fail (${directErr.message}), fallback proxy...`);
+    }
+
+    if (!rawHtml) {
+      try {
+        const res = await makeWiflixRequest(pageUrl, {
+          timeout: 10000,
+          headers: {
+            "Referer": WIFLIX_BASE_URL + "/",
+          },
+        });
+        const body = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+        if (!isWaitingRoom(body)) {
+          rawHtml = body;
+          console.log(`[WIFLIX PLAYERS] OK via proxy`);
+        } else {
+          console.log(`[WIFLIX PLAYERS] Proxy returned waiting room`);
+        }
+      } catch (err) {
+        console.log(`[WIFLIX PLAYERS] Echec: ${err.message}`);
+      }
     }
 
     if (!rawHtml) {
@@ -364,7 +418,111 @@ async function extractWiflixPlayers(pageUrl) {
     const players = [];
     const releaseYear = extractWiflixReleaseDate($);
 
-    const episodeDivs = $(
+    // Extraction moderne Flemmix via data-v + /ajax_player.php
+    const dataVButtons = $('a[data-v]');
+    if (dataVButtons.length > 0) {
+      let fxK = '';
+      const fxKMatch = rawHtml.match(/_fx_k\s*=\s*['"]([^'"]+)['"]/);
+      if (fxKMatch) {
+        fxK = fxKMatch[1];
+      } else {
+        const xorMatch = rawHtml.match(/var\s+_a\s*=\s*\[([^\]]+)\],\s*_m\s*=\s*(\d+)/);
+        if (xorMatch) {
+          try {
+            const arr = xorMatch[1].split(',').map(n => parseInt(n.trim(), 10));
+            const m = parseInt(xorMatch[2], 10);
+            let d = '';
+            for (let i = 0; i < arr.length; i++) d += String.fromCharCode(arr[i] ^ m);
+            fxK = d.split('|')[0];
+            console.log('[WIFLIX] Decoded XOR fxK:', fxK);
+          } catch (e) {
+            console.error('[WIFLIX] Error decoding XOR key:', e.message);
+          }
+        }
+      }
+
+      const tasks = [];
+      dataVButtons.each((_, el) => {
+        const $el = $(el);
+        const dataV = $el.attr('data-v');
+        if (!dataV) return;
+
+        let episodeNumber = 1;
+        let type = 'VF';
+        const $epDiv = $el.closest('div[class*="ep"]');
+        if ($epDiv.length > 0) {
+          const epClass = $epDiv.attr('class') || '';
+          const epMatch = epClass.match(/ep(\d+)(vf|vs)/i);
+          if (epMatch) {
+            episodeNumber = parseInt(epMatch[1], 10);
+            type = epMatch[2].toLowerCase() === 'vs' ? 'VOSTFR' : 'VF';
+          }
+        }
+
+        const dataN = $el.find('span[data-n]').attr('data-n') || '';
+        let providerName = '';
+        if (dataN) {
+          try {
+            providerName = Buffer.from(dataN, 'base64').toString('utf-8').trim();
+          } catch {}
+        }
+        if (!providerName) {
+          providerName = $el.find('.clichost').text().trim() || $el.text().trim() || 'Player';
+        }
+
+        tasks.push({ dataV, providerName, episodeNumber, type });
+      });
+
+      console.log('[WIFLIX EXTRACT] Found data-v tasks:', tasks.length);
+      const BATCH_SIZE = 6;
+      for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+        const batch = tasks.slice(i, i + BATCH_SIZE);
+        const resolvedBatch = await Promise.all(
+          batch.map(async (t) => {
+            try {
+              const ajaxRes = await axios.post(
+                'https://flemmix.studio/ajax_player.php',
+                new URLSearchParams({ v: t.dataV, k: fxK, b: '1' }).toString(),
+                {
+                  headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Referer': pageUrl,
+                    'Origin': 'https://flemmix.studio',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+                  },
+                  timeout: 6000
+                }
+              );
+              const realUrl = ajaxRes.data?.u;
+              if (!realUrl) return null;
+
+              let name = t.providerName;
+              if (!name || name.toLowerCase().includes('lecteur') || name.toLowerCase().includes('player')) {
+                const domainMatch = realUrl.match(/https?:\/\/(?:www\.)?([^\/]+)/);
+                if (domainMatch) name = domainMatch[1];
+              }
+
+              return {
+                name: name || 'Wiflix',
+                url: realUrl,
+                episode: t.episodeNumber,
+                type: t.type
+              };
+            } catch (err) {
+              console.error('[WIFLIX AJAX ERROR]:', err.message);
+              return null;
+            }
+          })
+        );
+        for (const p of resolvedBatch) {
+          if (p) players.push(p);
+        }
+      }
+    }
+
+    if (players.length === 0) {
+      const episodeDivs = $(
       'div[class*="ep"][class*="vf"], div[class*="ep"][class*="vs"]',
     );
 
@@ -457,6 +615,7 @@ async function extractWiflixPlayers(pageUrl) {
         }
       });
     }
+  }
 
     return { players, releaseYear, debugHtml: players.length === 0 ? rawHtml : null };
   } catch (error) {
@@ -764,7 +923,7 @@ const updateWiflixCache = async (
       if (newData.success) {
         const { debugHtml: _dh, ...cacheableData } = newData;
         await saveToCache(cacheDir, cacheKey, cacheableData);
-      } else {
+      } else if (!isWaitingRoom(newData.debugHtml)) {
         await saveToCache(cacheDir, cacheKey, newData);
       }
     }
@@ -899,4 +1058,7 @@ router.get("/tv/:tmdbId/:season", async (req, res) => {
   }
 });
 
+router.fetchWiflixMovieData = fetchWiflixMovieData;
+router.fetchWiflixTvData = fetchWiflixTvData;
+router.extractWiflixPlayers = extractWiflixPlayers;
 module.exports = router;

@@ -34,6 +34,7 @@ import {
   clearPinOnDrag,
   resetMoviesTvSources, resetMoviesTvHosters,
   resetAnimeLanguages, resetAnimeHosters,
+  pinAnimeSource, unpinAnimeSource, resetAnimeSources,
   restoreMoviesTv, restoreAnime,
 } from '../../utils/sourcePriorityPrefs';
 import {
@@ -495,6 +496,67 @@ export const SourcePriorityPanel: React.FC = () => {
           labelledBy="tab-anime-trigger"
           className="space-y-5 mt-4"
         >
+          {/* ─── Fournisseurs & Sources Anime (Anime-Sama prioritaire, Moviez, Vidzy, etc.) ─── */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium text-white">Fournisseurs & Sources Anime</h4>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-white/60 hover:text-white"
+                onClick={() => doResetWithUndo(
+                  'Fournisseurs Anime',
+                  t('settings.sourcePriority.undoToastAction'),
+                  'Fournisseurs Anime réinitialisés (Anime-Sama prioritaire)',
+                  { type: 'anime', fn: resetAnimeSources, restore: restoreAnime },
+                )}
+                title="Réinitialiser l'ordre des sources anime"
+              >
+                <RotateCcw size={12} className="mr-1" /> {t('settings.sourcePriority.resetSectionShort')}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500 mb-2">
+              Classez vos plateformes d'anime préférées. Anime-Sama est configuré par défaut en priorité absolue.
+            </p>
+            <SortableList
+              items={(anime.sourceOrder || []).map((e) => e.id)}
+              onReorder={(newOrder) => {
+                clearPinOnDrag('anime', 'source');
+                updateCategory('anime', (cat) => ({
+                  ...cat,
+                  sourceOrder: newOrder.map((id) => {
+                    const existing = (cat.sourceOrder || []).find((e) => e.id === id);
+                    return existing ?? { id: id as any, enabled: true };
+                  }),
+                }));
+              }}
+              renderItem={(id) => {
+                const entry = (anime.sourceOrder || []).find((e) => e.id === id);
+                if (!entry) return null;
+                const pinnedId = anime.pinnedSource?.id;
+                const isFirst = (anime.sourceOrder || [])[0]?.id === id;
+                return (
+                  <SourceCard
+                    id={entry.id}
+                    enabled={entry.enabled}
+                    isPinned={pinnedId === entry.id}
+                    isFirst={isFirst}
+                    onToggle={(v) => updateCategory('anime', (cat) => ({
+                      ...cat,
+                      sourceOrder: (cat.sourceOrder || []).map((e) =>
+                        e.id === entry.id ? { ...e, enabled: v } : e,
+                      ),
+                    }))}
+                    onTogglePin={() =>
+                      pinnedId === entry.id ? unpinAnimeSource() : pinAnimeSource(entry.id as any)
+                    }
+                    hideOverride
+                  />
+                );
+              }}
+            />
+          </section>
+
           <section>
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-medium text-white">{t('settings.sourcePriority.sectionLanguages')}</h4>

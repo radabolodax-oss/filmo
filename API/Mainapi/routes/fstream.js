@@ -28,7 +28,7 @@ const { PROXIES, DARKINO_PROXIES, getProxyAgent, getDarkinoHttpProxyAgent } = re
 // === FStream Configuration ===
 const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 const TMDB_API_URL = 'https://api.themoviedb.org/3';
-const FSTREAM_BASE_URL = process.env.FSTREAM_BASE_URL || 'https://french-stream.ac';
+const FSTREAM_BASE_URL = process.env.FSTREAM_BASE_URL || 'https://french-stream.my';
 const FSTREAM_SEARCH_URL = `${FSTREAM_BASE_URL}/engine/ajax/search.php`;
 
 // === FStream Authentication (disabled) ===
@@ -658,7 +658,62 @@ async function fetchEpisodesFromApi(pageUrl) {
   if (!pageId) return null;
 
   const baseUrl = extractBaseUrlFromLink(pageUrl);
+  const fullPageUrl = pageUrl.startsWith('http') ? pageUrl : `${baseUrl}${pageUrl}`;
   const apiUrl = `${baseUrl}/engine/ajax/episodes_p.php?id=${pageId}`;
+
+  // Direct attempt first for speed & reliability
+  try {
+    const directResp = await axios.get(apiUrl, {
+      timeout: 8000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Referer': fullPageUrl,
+        'Accept': 'application/json, text/plain, */*'
+      }
+    });
+    if (directResp.status === 200 && directResp.data) {
+      const data = typeof directResp.data === 'string' ? JSON.parse(directResp.data) : directResp.data;
+      if (data && typeof data === 'object') {
+        const episodes = {};
+        const langMap = { vf: 'VF', vostfr: 'VOSTFR', vo: 'VOENG' };
+        for (const [langKey, langLabel] of Object.entries(langMap)) {
+          const langData = data[langKey];
+          if (!langData || typeof langData !== 'object') continue;
+          for (const [epNum, providers] of Object.entries(langData)) {
+            const epNumber = parseInt(epNum);
+            if (isNaN(epNumber) || epNumber === 0) continue;
+            if (!episodes[epNumber]) {
+              episodes[epNumber] = {
+                number: epNumber,
+                title: `Episode ${epNumber}`,
+                languages: { VF: [], VOSTFR: [], VOENG: [], Default: [] }
+              };
+            }
+            for (const [provider, url] of Object.entries(providers)) {
+              if (!url || typeof url !== 'string' || !url.startsWith('http')) continue;
+              let displayName = provider;
+              if (provider === 'premium') displayName = 'Premium';
+              else if (provider === 'vidzy') displayName = 'Vidzy';
+              else if (provider === 'uqload') displayName = 'Uqload';
+              else if (provider === 'netu') displayName = 'Netu';
+              else if (provider === 'voe') displayName = 'Voe';
+              else displayName = provider.charAt(0).toUpperCase() + provider.slice(1);
+              episodes[epNumber].languages[langLabel].push({ url, type: 'embed', quality: 'HD', player: displayName });
+            }
+          }
+        }
+        if (data.info && typeof data.info === 'object') {
+          for (const [epNum, info] of Object.entries(data.info)) {
+            const epNumber = parseInt(epNum);
+            if (episodes[epNumber] && info.title) episodes[epNumber].title = info.title;
+          }
+        }
+        if (Object.keys(episodes).length > 0) return episodes;
+      }
+    }
+  } catch (err) {
+    // continue to proxies
+  }
 
   const proxies = getShuffledAllProxies();
   const maxAttempts = Math.min(proxies.length, 3);
@@ -761,7 +816,43 @@ async function fetchMoviePlayersFromApi(pageUrl) {
   if (!pageId) return null;
 
   const baseUrl = extractBaseUrlFromLink(pageUrl);
+  const fullPageUrl = pageUrl.startsWith('http') ? pageUrl : `${baseUrl}${pageUrl}`;
   const apiUrl = `${baseUrl}/engine/ajax/film_api.php?id=${pageId}`;
+
+  // Direct attempt first
+  try {
+    const directResp = await axios.get(apiUrl, {
+      timeout: 8000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Referer': fullPageUrl,
+        'Accept': 'application/json, text/plain, */*'
+      }
+    });
+    if (directResp.status === 200 && directResp.data) {
+      const data = typeof directResp.data === 'string' ? JSON.parse(directResp.data) : directResp.data;
+      if (data && data.players && typeof data.players === 'object') {
+        const players = [];
+        for (const [provider, versions] of Object.entries(data.players)) {
+          if (!versions || typeof versions !== 'object') continue;
+          let displayName = provider;
+          if (provider === 'premium') displayName = 'Premium';
+          else if (provider === 'vidzy') displayName = 'Vidzy';
+          else if (provider === 'uqload') displayName = 'Uqload';
+          else if (provider === 'netu') displayName = 'Netu';
+          else if (provider === 'voe') displayName = 'Voe';
+          else displayName = provider.charAt(0).toUpperCase() + provider.slice(1);
+          for (const [version, url] of Object.entries(versions)) {
+            if (!url || typeof url !== 'string' || !url.startsWith('http')) continue;
+            players.push({ url, type: 'embed', quality: 'HD', player: displayName, version });
+          }
+        }
+        if (players.length > 0) return players;
+      }
+    }
+  } catch (err) {
+    // continue to proxies
+  }
 
   const proxies = getShuffledAllProxies();
   const maxAttempts = Math.min(proxies.length, 3);

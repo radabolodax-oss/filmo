@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, memo, useMemo } from 'react';
 import type HlsType from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock, Clock, SkipForward } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock, Clock, SkipForward, ArrowLeft, Layers } from 'lucide-react';
 import { fetchIntroTimestamps, type MediaTimestamps } from '../services/introDbService';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -56,7 +56,7 @@ import {
   pinHoster,
   unpinHoster,
 } from '../utils/sourcePriorityPrefs';
-import { detectHoster } from '../utils/hosterRegistry';
+import { detectHoster, formatPlayerDisplayName } from '../utils/hosterRegistry';
 import { sortHostersByPriority } from '../utils/sourceAutoSelect';
 import type {
   HosterId, TopLevelSourceId, LanguageId, PriorityCategory,
@@ -472,7 +472,7 @@ const handle429Error = (hls: any, videoRef: React.RefObject<HTMLVideoElement>, d
       console.log(`▶️ Restarted HLS loading from: ${targetTime}s`);
     }
     retryTimeout = null;
-  }, 5000); // Attendre 5 secondes pour éviter les 429 répétés
+  }, 1500); // Attendre 5 secondes pour éviter les 429 répétés
 };
 
 // Utility function to reset media element error state
@@ -753,6 +753,20 @@ declare global {
 }
 
 // Add MAIN_API from env
+const getCleanMainApi = (): string => {
+  if (typeof window !== 'undefined') {
+    const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    const custom = localStorage.getItem('custom_main_api');
+    if (custom && custom.trim()) return custom.replace(/\/+$/, '');
+    if (isLocal) return 'http://localhost:25565';
+  }
+  const envApi = (import.meta.env.VITE_MAIN_API as string || '').replace(/\/+$/, '');
+  if (envApi && !envApi.includes('pichunter-linda') && !envApi.includes('metropolitan-seat') && !envApi.includes('billy-affairs')) {
+    return envApi;
+  }
+  return 'http://localhost:25565';
+};
+const MAIN_API = getCleanMainApi();
 
 // Ajouter ces types pour les API propriétaires de WebKit juste après les interfaces existantes
 interface HTMLVideoElementWithWebkit extends HTMLVideoElement {
@@ -2118,6 +2132,35 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       });
     }
 
+    // Milestone 4 — Tri des embedSources selon la priorité de l'utilisateur (Moviez & Vidzy en tête, Wavewatch & VOSTFR en bas)
+    try {
+      const prefs = getSourcePriorityPrefs();
+      const orderList = prefs?.categories?.moviesTv?.sourceOrder?.map(s => s.id) || TOP_LEVEL_SOURCE_IDS;
+      
+      const getOrderRank = (src: SourceOption): number => {
+        let topId: string = src.type;
+        if (src.id === 'wavewatch') topId = 'wavewatch';
+        else if (src.type === 'moviez_main') topId = 'moviez';
+        else if (src.type === 'vidzy_main') topId = 'vidzy';
+        else if (src.type === 'darkino_main') topId = 'darkino';
+        else if (src.type === 'fstream_main') topId = 'fstream';
+        else if (src.type === 'wiflix_main') topId = 'wiflix';
+        else if (src.type === 'omega_main') topId = 'omega';
+        else if (src.type === 'multi_main') topId = 'coflix';
+        else if (src.type === 'frembed_main' || src.type === 'frembed') topId = 'frembed';
+        else if (src.type === 'viper_main') topId = 'viper';
+        else if (src.type === 'vox_main') topId = 'vox';
+        else if (src.type === 'j1f_main') topId = 'j1f';
+        else if (src.type === 'custom') topId = 'custom';
+        else if (src.type === 'vostfr_main' || src.type === 'vostfr') topId = 'vostfr';
+        
+        const idx = orderList.indexOf(topId as any);
+        return idx >= 0 ? idx : 999;
+      };
+
+      embedSources.sort((a, b) => getOrderRank(a) - getOrderRank(b));
+    } catch (_) {}
+
     // Organiser en groupes
     const groups: SourceGroup[] = [];
 
@@ -3176,11 +3219,18 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     }
   }, [src, autoPlay, onEnded, onError, subtitleUrl, Hls]); // REMOVED playbackSpeed
 
-  // Auto skip intro preference (TheIntroDB)
+  // Auto skip intro preference (TheIntroDB) & Session End preference
   const [autoSkipIntro, setAutoSkipIntro] = useState(() => {
     try {
       const saved = localStorage.getItem('dawger_auto_skip_intro');
       return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+  const [sessionEndPref, setSessionEndPref] = useState(() => {
+    try {
+      return localStorage.getItem('dawger_session_end_time') !== 'false';
     } catch {
       return true;
     }
@@ -3191,6 +3241,27 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       localStorage.setItem('dawger_auto_skip_intro', autoSkipIntro ? 'true' : 'false');
     } catch { /* ignore */ }
   }, [autoSkipIntro]);
+
+  useEffect(() => {
+    const syncPrefs = () => {
+      try {
+        setAutoSkipIntro(localStorage.getItem('dawger_auto_skip_intro') !== 'false');
+        setSessionEndPref(localStorage.getItem('dawger_session_end_time') !== 'false');
+        const oled = localStorage.getItem('playerVideoOled') as any;
+        if (oled) setVideoOledMode(oled);
+        const spd = parseFloat(localStorage.getItem('playerPlaybackSpeed') || '1');
+        if (!isNaN(spd) && spd > 0) setPlaybackSpeed(spd);
+        setAutoNextEpisodeEnabled(localStorage.getItem('playerAutoNextEpisodePref') !== 'false');
+        setSaveProgressEnabled(localStorage.getItem('playerSaveProgressPref') !== 'false');
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('dawger-player-prefs-changed', syncPrefs);
+    window.addEventListener('storage', syncPrefs);
+    return () => {
+      window.removeEventListener('dawger-player-prefs-changed', syncPrefs);
+      window.removeEventListener('storage', syncPrefs);
+    };
+  }, []);
 
   // IntroDB Timestamps (TheIntroDB API v4)
   const [introTimestamps, setIntroTimestamps] = useState<MediaTimestamps | null>(null);
@@ -3217,12 +3288,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     return () => { isMounted = false; };
   }, [movieId, tvShowId, seasonNumber, episodeNumber, src]);
 
-  // Intro & Credits range calculation
-  const introRange = introTimestamps?.intro;
+  // Intro & Credits range calculation with Anime fallback
+  const effectiveIntro = introTimestamps?.intro || (isAnime ? { start: 5, end: 90 } : null);
+  const introRange = effectiveIntro;
   const isInsideIntro = Boolean(
-    introRange &&
-    currentTime >= introRange.start &&
-    currentTime < introRange.end
+    effectiveIntro &&
+    currentTime >= effectiveIntro.start &&
+    currentTime < effectiveIntro.end
   );
 
   const creditsRange = introTimestamps?.credits;
@@ -3232,15 +3304,22 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     currentTime >= creditsRange.start
   );
 
+  // Auto-reset auto-skipped flag when rewound back to beginning
+  useEffect(() => {
+    if (effectiveIntro && currentTime < effectiveIntro.start) {
+      hasAutoSkippedIntroRef.current = false;
+    }
+  }, [currentTime, effectiveIntro]);
+
   // Auto-skip intro execution
   useEffect(() => {
     if (isInsideIntro && autoSkipIntro && !hasAutoSkippedIntroRef.current && videoRef.current) {
       hasAutoSkippedIntroRef.current = true;
-      videoRef.current.currentTime = (introRange?.end || 0) + 0.5;
+      videoRef.current.currentTime = (effectiveIntro?.end || 0) + 0.5;
       setShowIntroSkipToast(true);
       setTimeout(() => setShowIntroSkipToast(false), 3500);
     }
-  }, [isInsideIntro, autoSkipIntro, introRange]);
+  }, [isInsideIntro, autoSkipIntro, effectiveIntro]);
 
   // Estimation dynamique de fin de séance
   const sessionEndTime = useMemo(() => {
@@ -4098,8 +4177,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   }, []);
 
   const handleMouseMove = () => {
-    // Do not show controls via mousemove on touch devices or while a touch gesture is active
-    if (isTouchDevice || touchActiveRef.current) return;
+    // Only ignore if a touch gesture is actively in progress
+    if (touchActiveRef.current) return;
 
     setShowControls(true);
     if (controlsTimeoutRef.current) {
@@ -4112,7 +4191,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           setShowControls(false);
           setShowVolumeSlider(false);
         }
-      }, 5000);
+      }, 1500);
     }
   };
 
@@ -5344,7 +5423,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         console.warn('[Cast] SDK did not load within 5s — likely blocked by adblock/ISP');
         setCastSdkBlocked(true);
       }
-    }, 5000);
+    }, 1500);
 
     return () => window.clearTimeout(timeoutId);
   }, []);
@@ -5616,7 +5695,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     if (castError) {
       const timer = setTimeout(() => {
         setCastError(null);
-      }, 5000);
+      }, 1500);
 
       return () => clearTimeout(timer);
     }
@@ -5629,7 +5708,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     if (airPlayError) {
       const timer = setTimeout(() => {
         setAirPlayError(null);
-      }, 5000);
+      }, 1500);
 
       return () => clearTimeout(timer);
     }
@@ -5990,7 +6069,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         const isMobileLandscapeFullscreen = isMobileLandscape && isFullscreenMode;
 
         // En mode paysage mobile plein écran, timeout plus court
-        let timeout = 5000;
+        let timeout = 1500;
         if (isMobileLandscapeFullscreen) {
           timeout = 2000; // Très court en plein écran paysage
         } else if (isMobileLandscape) {
@@ -7549,10 +7628,18 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
   const handleBackToInfo = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (movieId) {
-      navigate(`/movie/${encodeId(movieId)}`);
-    } else if (tvShowId) {
-      navigate(`/tv/${encodeId(tvShowId)}`);
+    if (isFullscreen) {
+      toggleFullscreen();
+      return;
+    }
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else if (isAnime) {
+      navigate('/anime');
+    } else if (movieId) {
+      navigate('/movies');
+    } else {
+      navigate('/tv');
     }
   };
 
@@ -8828,7 +8915,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           setShowControls(false);
           setShowVolumeSlider(false);
         }
-      }, 5000);
+      }, 1500);
     }
 
     // Reset the flag after a short delay
@@ -9954,151 +10041,122 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         </motion.div>
       )}
 
-      {/* Back to Info Button */}
-      <motion.button
-        onClick={handleBackToInfo}
-        initial={{ opacity: 0, y: -20 }}
-        animate={{
-          opacity: showControls ? 1 : 0,
-          y: showControls ? 0 : -20
-        }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
-        whileTap={{ scale: 0.95 }}
-        style={{ pointerEvents: showControls ? 'auto' : 'none' }}
-        aria-hidden={!showControls}
-        tabIndex={showControls ? 0 : -1}
-        className="absolute top-4 left-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 text-white shadow-lg"
+
+
+      {/* Unified Left Vertical Controls Column: Back, Sources, Fullscreen */}
+      <div
+        className={`absolute left-2.5 top-2.5 sm:left-3 sm:top-3 z-50 transition-all duration-300 pointer-events-auto flex flex-col gap-1.5 ${
+          showControls ? 'opacity-100 translate-x-0' : 'opacity-35 hover:opacity-100 translate-x-0'
+        }`}
       >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-        </svg>
-        {t('watch.back')}
-      </motion.button>
-
-      {/* Next Episode Button */}
-      {nextEpisode && onNextEpisode && (
-        <motion.div
-          className="absolute top-4 right-4 z-50 flex items-center gap-2"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{
-            opacity: showControls ? 1 : 0,
-            y: showControls ? 0 : -20
-          }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
+        {/* 1. Bouton Retour */}
+        <button
+          onClick={handleBackToInfo}
           style={{ pointerEvents: showControls ? 'auto' : 'none' }}
-          aria-hidden={!showControls}
+          className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 hover:border-emerald-500/60 hover:text-emerald-400 active:scale-95 text-white border border-white/15 backdrop-blur-md shadow-xl transition-all group"
+          title={isFullscreen ? t('watch.exitFullscreen') : t('watch.back')}
+          aria-label={isFullscreen ? t('watch.exitFullscreen') : t('watch.back')}
         >
-          {/* Previous Episode Button - hide if at first episode of first season */}
-          {!(seasonNumber === 1 && episodeNumber === 1) && (
-            <motion.button
-              onClick={(e) => {
-                e.stopPropagation();
-                // Appeler le callback parent
-                if (onPreviousEpisode) {
-                  onPreviousEpisode();
-                }
-              }}
-              whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
-              whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 text-white shadow-lg"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-              </svg>
-              <span>
-                {(episodeNumber && episodeNumber > 1) ?
-                  `S${seasonNumber || 1}:${String((episodeNumber || 1) - 1).padStart(2, '0')}` :
-                  (seasonNumber && seasonNumber > 1 ?
-                    `S${(seasonNumber || 1) - 1}:01` :
-                    `S1:01`)}
-              </span>
-            </motion.button>
-          )}
+          <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+        </button>
 
-          {/* Episodes Button */}
-          <motion.button
+        {/* 2. Bouton Sources (vert émeraude Dawger) */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onShowSources) {
+              onShowSources();
+            } else {
+              setSettingsTab('quality');
+              setShowSettings(true);
+            }
+          }}
+          style={{ pointerEvents: showControls ? 'auto' : 'none' }}
+          className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border border-emerald-500/40 hover:border-emerald-400 active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group"
+          title={t('watch.sources')}
+          aria-label={t('watch.sources')}
+        >
+          <Layers className="w-3.5 h-3.5 text-emerald-400 transition-transform group-hover:scale-110" />
+        </button>
+
+        
+        {/* Bouton Épisode suivant (si onNextEpisode dispo) */}
+        {onNextEpisode && (
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
-              console.log('Episodes button clicked. Episodes available:', episodes?.length || 0);
-              console.log('onShowEpisodesMenu available:', !!onShowEpisodesMenu);
-              console.log('tvShowId:', tvShowId);
-
-              // En mode anime (tvShowId présent), toujours utiliser le fallback externe
-              if (tvShowId && onShowEpisodesMenu) {
-                console.log('Using external episodes menu for anime');
-                onShowEpisodesMenu();
-              }
-              // Pour les séries normales, utiliser le menu interne si disponible
-              else if (episodes && episodes.length > 0) {
-                console.log('Using internal episodes menu');
-                setShowInternalEpisodesMenu(!showInternalEpisodesMenu);
-              }
-              // Fallback vers l'ancien système
-              else if (onShowEpisodesMenu) {
-                console.log('Using fallback external episodes menu');
-                onShowEpisodesMenu();
-              }
-              else {
-                console.log('No episodes menu available');
-              }
-            }}
-            whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 text-white shadow-lg"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
-            </svg>
-            <span className="hidden sm:inline">{t('watch.episodes')}</span>
-          </motion.button>
-
-          <motion.button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (nextEpisode.seasonNumber && nextEpisode.episodeNumber) {
+              if (nextEpisode) {
                 onNextEpisode(nextEpisode.seasonNumber, nextEpisode.episodeNumber);
+              } else if (seasonNumber !== undefined && episodeNumber !== undefined) {
+                onNextEpisode(seasonNumber, episodeNumber + 1);
+              } else {
+                onNextEpisode(1, 2);
               }
             }}
-            whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/70 text-white shadow-lg"
+            style={{ pointerEvents: showControls ? 'auto' : 'none' }}
+            className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border border-emerald-500/40 hover:border-emerald-400 hover:text-emerald-400 active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group"
+            title={nextEpisode?.title ? `Épisode suivant : ${nextEpisode.title}` : (t('watch.nextEpisode') || 'Épisode suivant')}
+            aria-label={t('watch.nextEpisode') || 'Épisode suivant'}
           >
-            <span>S{nextEpisode.seasonNumber || 1}:{String(nextEpisode.episodeNumber || 1).padStart(2, '0')}</span>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </motion.button>
-        </motion.div>
-      )}
+            <SkipForward className="w-3.5 h-3.5 text-emerald-400 transition-transform group-hover:scale-110" />
+          </button>
+        )}
 
-      {/* Sources Button (Top Right, below navigation) */}
-      {onShowSources && (
-        <motion.button
-          onClick={onShowSources}
-          initial={{ opacity: 0, y: -20 }}
-          animate={{
-            opacity: showControls ? 1 : 0,
-            y: showControls ? 0 : -20
+        {/* Bouton Film suivant / recommandation (si onNextMovie dispo) */}
+        {!onNextEpisode && onNextMovie && nextMovie && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNextMovie(nextMovie.id);
+            }}
+            style={{ pointerEvents: showControls ? 'auto' : 'none' }}
+            className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border border-emerald-500/40 hover:border-emerald-400 hover:text-emerald-400 active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group"
+            title={nextMovie?.title ? `Film suivant : ${nextMovie.title}` : 'Film suivant'}
+            aria-label="Film suivant"
+          >
+            <SkipForward className="w-3.5 h-3.5 text-emerald-400 transition-transform group-hover:scale-110" />
+          </button>
+        )}
+{/* 3. Bouton Paramètres (colonne de gauche) */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowSettings(!showSettings);
           }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-          whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 0, 0, 0.9)" }}
-          whileTap={{ scale: 0.95 }}
           style={{ pointerEvents: showControls ? 'auto' : 'none' }}
-          aria-hidden={!showControls}
-          tabIndex={showControls ? 0 : -1}
-          className="absolute top-16 right-2 z-50 flex items-center gap-2 px-4 py-2 rounded-lg bg-black/70 backdrop-blur-sm border border-gray-700 text-white font-medium text-sm shadow-lg border-opacity-50"
+          className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 active:scale-95 text-white border backdrop-blur-md shadow-xl transition-all group ${
+            showSettings ? 'border-emerald-500 text-emerald-400' : 'border-white/15 hover:border-emerald-500/60 hover:text-emerald-400'
+          }`}
+          title={t('watch.settingsTitle') || 'Paramètres'}
+          aria-label={t('watch.settingsTitle') || 'Paramètres'}
         >
-          <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          <span>{t('watch.sources')}</span>
-        </motion.button>
-      )}
+          <Settings className={`w-3.5 h-3.5 transition-transform ${showSettings ? 'rotate-45' : 'group-hover:rotate-45'}`} />
+        </button>
 
-      {/* Informations sur le contenu en haut à gauche - move this down to make room for back button */}
+        {/* 4. Bouton Plein écran */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFullscreen();
+          }}
+          style={{ pointerEvents: showControls ? 'auto' : 'none' }}
+          className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 hover:border-emerald-500/60 hover:text-emerald-400 active:scale-95 text-white border border-white/15 backdrop-blur-md shadow-xl transition-all group"
+          title={isFullscreen ? t('watch.exitFullscreen') : t('watch.fullscreen')}
+          aria-label={isFullscreen ? t('watch.exitFullscreen') : t('watch.fullscreen')}
+        >
+          {isFullscreen ? (
+            <Minimize className="w-3.5 h-3.5 transition-transform group-hover:scale-90" />
+          ) : (
+            <Maximize className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
+          )}
+        </button>
+      </div>
+
+      {/* Informations sur le contenu en haut à gauche (décalé à droite de la colonne de boutons) */}
       <motion.div
-        className="absolute top-16 left-0 p-4 flex items-center gap-3 z-40"
+        className="absolute top-2.5 left-11 sm:left-13 p-2 flex items-center gap-3 z-40"
         initial={{ opacity: 0, y: -20 }}
         animate={{
           opacity: showControls ? 1 : 0,
@@ -10203,6 +10261,38 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 >
                   <FastForward size={isMobile ? 20 : 24} />
                 </button>
+                {onNextEpisode && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (nextEpisode) {
+                        onNextEpisode(nextEpisode.seasonNumber, nextEpisode.episodeNumber);
+                      } else if (seasonNumber !== undefined && episodeNumber !== undefined) {
+                        onNextEpisode(seasonNumber, episodeNumber + 1);
+                      } else {
+                        onNextEpisode(1, 2);
+                      }
+                    }}
+                    className="text-white hover:text-emerald-400 transition-colors"
+                    title={nextEpisode?.title ? `Épisode suivant : ${nextEpisode.title}` : (t('watch.nextEpisode') || 'Épisode suivant')}
+                    aria-label={t('watch.nextEpisode') || 'Épisode suivant'}
+                  >
+                    <SkipForward size={isMobile ? 20 : 24} />
+                  </button>
+                )}
+                {!onNextEpisode && onNextMovie && nextMovie && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNextMovie(nextMovie.id);
+                    }}
+                    className="text-white hover:text-emerald-400 transition-colors"
+                    title={nextMovie?.title ? `Film suivant : ${nextMovie.title}` : 'Film suivant'}
+                    aria-label="Film suivant"
+                  >
+                    <SkipForward size={isMobile ? 20 : 24} />
+                  </button>
+                )}
                 <div className="relative group flex items-center h-[24px] mr-4">
                   <div className="flex items-center group/volume h-full">
                     <button
@@ -10244,15 +10334,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               </div>
               <div className="text-white text-xs md:text-sm whitespace-nowrap min-w-[85px] flex items-center gap-2">
                 <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-                {sessionEndTime && (
-                  <span
-                    className="hidden sm:inline-flex items-center gap-1 text-[11px] text-emerald-300 font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/25 backdrop-blur-sm"
-                    title="Estimation dynamique de fin de séance"
-                  >
-                    <Clock className="w-3 h-3 text-emerald-400" />
-                    <span>Fin vers {sessionEndTime}</span>
-                  </span>
-                )}
+
               </div>
             </div>
 
@@ -10334,24 +10416,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               >
                 <Lock size={isMobile ? 20 : 24} />
               </button>
-              <div className="relative flex items-center h-[24px]">
-                <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
-                >
-                  <motion.div
-                    animate={{
-                      rotate: showSettings ? 180 : 0
-                    }}
-                    transition={{
-                      duration: 0.3,
-                      ease: "easeInOut"
-                    }}
-                  >
-                    <Settings size={isMobile ? 20 : 24} />
-                  </motion.div>
-                </button>
-              </div>
+
               <button
                 onClick={toggleFullscreen}
                 className="text-white hover:text-red-600 transition-colors flex items-center justify-center h-[24px]"
@@ -10676,42 +10741,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         />
       )}
 
-      {/* Floating Skip Intro Button (TheIntroDB) */}
-      <AnimatePresence>
-        {isInsideIntro && !autoSkipIntro && (
-          <motion.button
-            key="skip-intro-btn"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            onClick={() => {
-              if (videoRef.current && introRange?.end) {
-                videoRef.current.currentTime = introRange.end + 0.5;
-              }
-            }}
-            className="absolute bottom-20 right-6 z-40 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-black/85 hover:bg-black/95 text-white border border-emerald-500/40 hover:border-emerald-400 font-semibold text-sm backdrop-blur-md shadow-2xl transition-all active:scale-95 group"
-          >
-            <FastForward className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-            <span>Passer l'intro</span>
-          </motion.button>
-        )}
-      </AnimatePresence>
 
-      {/* Auto-skipped Intro Notification Toast */}
-      <AnimatePresence>
-        {showIntroSkipToast && (
-          <motion.div
-            key="auto-skip-toast"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute top-20 right-6 z-40 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-950/90 border border-emerald-500/40 text-emerald-300 text-xs font-medium backdrop-blur-md shadow-xl"
-          >
-            <FastForward className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Intro passée automatiquement (TheIntroDB)</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+
 
       {/* Floating Credits / Next Episode Button */}
       <AnimatePresence>
@@ -10876,57 +10908,61 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         )}
       </AnimatePresence>
 
-      {/* Episodes Menu - Internal to HLSPlayer for fullscreen compatibility */}
+      {/* Episodes Menu - Internal to HLSPlayer for fullscreen compatibility (Optimisé & compact sans affiche) */}
       <AnimatePresence>
         {showInternalEpisodesMenu && episodes && episodes.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-            className="absolute top-16 right-4 left-4 md:left-auto z-[12000] bg-black/95 border border-gray-800 rounded-lg shadow-2xl md:w-96 w-auto max-h-[80vh] flex flex-col"
+            transition={{ duration: 0.18 }}
+            className="absolute top-16 right-4 left-4 md:left-auto z-[12000] bg-neutral-950/95 backdrop-blur-xl border border-white/15 rounded-2xl shadow-2xl md:w-96 w-auto max-h-[75vh] flex flex-col overflow-hidden"
             data-lenis-prevent
           >
-            <div className="p-4 border-b border-gray-800 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-white">{showTitle || tvShow?.name || t('watch.episodes')}</h3>
+            <div className="p-3 border-b border-white/10 flex justify-between items-center">
+              <h3 className="text-base font-semibold text-white truncate px-1">{showTitle || tvShow?.name || t('watch.episodes')}</h3>
               <button
                 onClick={() => setShowInternalEpisodesMenu(false)}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors flex-shrink-0"
+                title="Fermer"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
             {/* Season Selection */}
-            {seasons && seasons.length > 1 && (
-              <div className="p-4 border-b border-gray-800/50 overflow-visible">
-                <h4 className="text-sm text-gray-400 mb-2">{t('watch.season')}</h4>
+            {seasons && seasons.length > 0 && (
+              <div className="p-3 border-b border-white/10 overflow-visible">
                 <div className="relative w-full overflow-visible">
                   <button
                     onClick={() => setShowSeasonDropdown(!showSeasonDropdown)}
-                    className="w-full flex items-center justify-between bg-gray-800/50 hover:bg-gray-700/50 rounded-lg p-3 text-white transition-colors duration-200"
+                    className="w-full flex items-center justify-between bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white transition-colors duration-200"
                   >
-                    <span className="font-medium">{t('watch.seasonN', { n: selectedSeasonNumber })}</span>
-                    <motion.div
-                      animate={{ rotate: showSeasonDropdown ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </motion.div>
+                    <span className="font-semibold truncate">{t('watch.seasonN', { n: selectedSeasonNumber })}</span>
+                    {seasons.length > 1 && (
+                      <motion.div
+                        animate={{ rotate: showSeasonDropdown ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="ml-2 flex-shrink-0 text-emerald-400"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </motion.div>
+                    )}
                   </button>
 
                   <AnimatePresence>
-                    {showSeasonDropdown && (
+                    {showSeasonDropdown && seasons.length > 1 && (
                       <motion.div
-                        initial={{ opacity: 0, y: -10 }}
+                        initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2, ease: "easeInOut" }}
-                        className="absolute top-full left-0 right-0 mt-1 bg-gray-900/95 border border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto z-[13000]"
+                        exit={{ opacity: 0, y: -8 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute top-full left-0 right-0 mt-1 bg-neutral-900 border border-white/15 rounded-xl shadow-xl max-h-56 overflow-y-auto z-[13000] custom-scrollbar"
+                        data-lenis-prevent
                       >
                         {seasons.map((season) => (
                           <button
@@ -10934,18 +10970,18 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                             onClick={() => {
                               setSelectedSeasonNumber(season.season_number);
                               setShowSeasonDropdown(false);
-                              // Fetch episodes for the selected season if not already loaded
                               if (!episodesBySeasons[season.season_number]) {
                                 fetchEpisodesForSeason(season.season_number);
                               }
                             }}
-                            className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 ${selectedSeasonNumber === season.season_number
-                              ? 'bg-red-800/50 text-red-100 font-semibold'
-                              : 'text-gray-200 hover:bg-gray-700/50'
-                              }`}
+                            className={`w-full text-left px-3.5 py-2.5 text-sm flex items-center justify-between transition-colors duration-150 ${
+                              selectedSeasonNumber === season.season_number
+                                ? 'bg-emerald-900/40 text-emerald-300 font-semibold'
+                                : 'text-gray-200 hover:bg-white/10'
+                            }`}
                           >
-                            {t('watch.seasonDropdown', { n: season.season_number })}
-                            <span className="text-xs text-gray-400 ml-1">{t('watch.nEpisodes', { count: season.episode_count })}</span>
+                            <span className="truncate">{t('watch.seasonDropdown', { n: season.season_number })}</span>
+                            <span className="text-xs text-gray-400 ml-2 flex-shrink-0">{season.episode_count} ép.</span>
                           </button>
                         ))}
                       </motion.div>
@@ -10955,92 +10991,52 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               </div>
             )}
 
-            {/* Current Episode Info */}
-            {currentEpisodeInfo && (
-              <div className="p-4 border-b border-gray-800/50 flex gap-3">
-                {currentEpisodeInfo.still_path && (
-                  shouldHide('episodeImages') ? (
-                    <div className="w-24 h-auto rounded object-cover bg-gray-800 flex items-center justify-center min-h-[60px]">
-                      <span className="text-xs text-gray-400">{t('watch.hiddenImage')}</span>
-                    </div>
-                  ) : (
-                    <img
-                      src={`https://image.tmdb.org/t/p/w300${currentEpisodeInfo.still_path}`}
-                      alt={currentEpisodeInfo.name}
-                      className="w-24 h-auto rounded object-cover"
-                    />
-                  )
-                )}
-                <div className="flex-1">
-                  <div className="text-xs text-gray-400 mb-1">
-                    S{seasonNumber} E{episodeNumber} • {t('watch.inProgress')}
-                  </div>
-                  <h4 className="text-white font-medium mb-1">
-                    {shouldHide('episodeNames')
-                      ? getMaskedContent(currentEpisodeInfo.name, 'episodeNames', undefined, episodeNumber)
-                      : `${episodeNumber}. ${currentEpisodeInfo.name}`}
-                  </h4>
-                  <p className="text-xs text-gray-300 line-clamp-3">
-                    {shouldHide('episodeOverviews')
-                      ? getMaskedContent(currentEpisodeInfo.overview || t('watch.noDescription'), 'episodeOverviews', undefined, episodeNumber)
-                      : (currentEpisodeInfo.overview || t('watch.noDescription'))}
-                  </p>
+            {/* Episodes List - Compact Sans Affiche */}
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar" data-lenis-prevent>
+              {loadingEpisodes ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+                  <span className="ml-2 text-sm text-gray-300">{t('watch.loadingEpisodes')}</span>
                 </div>
-              </div>
-            )}
-
-            {/* Episodes List */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden p-1" data-lenis-prevent>
-              <div className="grid gap-2 p-2">
-                {loadingEpisodes ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-white" />
-                    <span className="ml-2 text-white">{t('watch.loadingEpisodes')}</span>
-                  </div>
-                ) : (
-                  (episodesBySeasons[selectedSeasonNumber] || []).map((episode) => (
-                    <button
-                      key={episode.id}
-                      onClick={() => {
-                        if (onEpisodeSelect) {
-                          onEpisodeSelect(selectedSeasonNumber, episode.episode_number);
-                        }
-                        setShowInternalEpisodesMenu(false);
-                      }}
-                      className={`flex items-start gap-3 p-2 rounded-lg transition-colors ${episodeNumber === episode.episode_number && seasonNumber === selectedSeasonNumber
-                        ? 'bg-red-900/30 border border-red-800/50'
-                        : 'hover:bg-gray-800/50'
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {((episodesBySeasons[selectedSeasonNumber] && episodesBySeasons[selectedSeasonNumber].length > 0)
+                    ? episodesBySeasons[selectedSeasonNumber]
+                    : (episodes || [])).map((episode) => {
+                    const isCurrent = episodeNumber === episode.episode_number && seasonNumber === selectedSeasonNumber;
+                    const epTitle = shouldHide('episodeNames')
+                      ? getMaskedContent(episode.name, 'episodeNames', undefined, episode.episode_number)
+                      : (episode.name || `${t('watch.episodeN', { n: episode.episode_number })}`);
+                    return (
+                      <button
+                        key={episode.id || episode.episode_number}
+                        onClick={() => {
+                          if (onEpisodeSelect) {
+                            onEpisodeSelect(selectedSeasonNumber, episode.episode_number);
+                          }
+                          setShowInternalEpisodesMenu(false);
+                        }}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-xl text-left transition-all duration-150 ${
+                          isCurrent
+                            ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                            : 'hover:bg-white/[0.06] border border-transparent text-gray-200 hover:text-white'
                         }`}
-                    >
-                      {episode.still_path ? (
-                        shouldHide('episodeImages') ? (
-                          <div className="w-20 h-12 bg-gray-800 rounded flex items-center justify-center">
-                            <span className="text-xs text-gray-400">{t('watch.hiddenImage')}</span>
-                          </div>
-                        ) : (
-                          <img
-                            src={`https://image.tmdb.org/t/p/w300${episode.still_path}`}
-                            alt={episode.name}
-                            className="w-20 h-12 object-cover rounded"
-                          />
-                        )
-                      ) : (
-                        <div className="w-20 h-12 bg-gray-800 rounded flex items-center justify-center">
-                          <span className="text-sm text-gray-400">{t('watch.noImage')}</span>
-                        </div>
-                      )}
-                      <div className="flex-1 text-left">
-                        <div className="text-xs text-gray-400">{t('watch.episodeN', { n: episode.episode_number })}</div>
-                        <h5 className="text-sm text-white font-medium line-clamp-1">
-                          {shouldHide('episodeNames')
-                            ? getMaskedContent(episode.name, 'episodeNames', undefined, episode.episode_number)
-                            : `${episode.episode_number}. ${episode.name}`}
-                        </h5>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
+                      >
+                        <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                          isCurrent
+                            ? 'bg-emerald-500 text-black'
+                            : 'bg-white/[0.07] text-emerald-400'
+                        }`}>
+                          {episode.episode_number}
+                        </span>
+                        <span className="flex-1 text-sm font-medium truncate">
+                          {epTitle}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </motion.div>
         )}

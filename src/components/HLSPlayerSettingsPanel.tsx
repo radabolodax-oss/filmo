@@ -187,6 +187,8 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
   } = props;
 
   const category: PriorityCategory = priorityCategory === 'anime' ? 'anime' : 'moviesTv';
+  const [sessionEndEnabled, setSessionEndEnabled] = useState<boolean>(() => localStorage.getItem('dawger_session_end_time') !== 'false');
+  const [autoFallbackEnabled, setAutoFallbackEnabled] = useState<boolean>(() => localStorage.getItem('dawger_auto_fallback') !== 'false');
 
   // ===== Milestone 3 — sort hoster lists by user priority =====
   // Re-render when priority prefs change (e.g. user reorders in Settings).
@@ -331,14 +333,17 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
       key="settings-panel"
       initial={{
         opacity: 0,
+        x: -300,
         width: 0
       }}
       animate={{
         opacity: 1,
+        x: 0,
         width: settingsMenuWidth || (audioTracks.length > 0 || subtitles.length > 0 ? 480 : 400)
       }}
       exit={{
         opacity: 0,
+        x: -300,
         width: 0
       }}
       transition={{
@@ -349,11 +354,11 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
         height: '100%',
         position: 'absolute',
         top: 0,
-        right: 0,
+        left: 0,
         bottom: 0,
         maxWidth: '90vw'
       }}
-      className="bg-black/95 z-[10002] flex flex-col border-l border-gray-800 shadow-xl"
+      className="bg-black/95 z-[10002] flex flex-col border-r border-gray-800 shadow-2xl"
     >
             <div className="flex flex-col border-b border-gray-800 mb-4">
               <div className="flex justify-between items-center mb-3 px-4 pt-4">
@@ -2256,6 +2261,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                           if (setAutoSkipIntro) setAutoSkipIntro(nextVal);
                           try {
                             localStorage.setItem('dawger_auto_skip_intro', nextVal ? 'true' : 'false');
+                            window.dispatchEvent(new CustomEvent('dawger-player-prefs-changed'));
                           } catch { /* ignore */ }
                         }}
                         className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center transition-colors ${autoSkipIntro ? 'bg-green-600/30 hover:bg-green-600/40 text-green-300' : 'bg-red-600/30 hover:bg-red-600/40 text-red-300'}`}
@@ -2271,6 +2277,60 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                         </div>
                       </button>
                       <p className="text-xs text-gray-400 mt-1 px-1">Passe automatiquement les génériques d'ouverture et récaps synchronisés via TheIntroDB.</p>
+                    </div>
+
+                    {/* Toggle Estimation dynamique de fin de séance */}
+                    <div className="mb-3 pt-4 border-t border-gray-700/60">
+                      <h3 className="text-base font-semibold text-white mb-2">Fin de séance dynamique</h3>
+                      <button
+                        onClick={() => {
+                          const nextVal = !sessionEndEnabled;
+                          setSessionEndEnabled(nextVal);
+                          try {
+                            localStorage.setItem('dawger_session_end_time', nextVal ? 'true' : 'false');
+                            window.dispatchEvent(new CustomEvent('dawger-player-prefs-changed'));
+                          } catch { /* ignore */ }
+                        }}
+                        className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center transition-colors ${sessionEndEnabled ? 'bg-green-600/30 hover:bg-green-600/40 text-green-300' : 'bg-red-600/30 hover:bg-red-600/40 text-red-300'}`}
+                      >
+                        <span>{sessionEndEnabled ? t('watch.enabled') : t('watch.disabled')}</span>
+                        <div className={`w-10 h-5 flex items-center rounded-full p-1 transition-colors ${sessionEndEnabled ? 'bg-green-500' : 'bg-gray-600'}`}>
+                          <motion.div
+                            className="w-3.5 h-3.5 bg-white rounded-full shadow-md"
+                            layout
+                            transition={{ type: "spring", stiffness: 700, damping: 30 }}
+                            style={{ marginLeft: sessionEndEnabled ? 'auto' : '0px' }}
+                          />
+                        </div>
+                      </button>
+                      <p className="text-xs text-gray-400 mt-1 px-1">Affiche l'heure de fin estimée selon la durée restante et la vitesse de lecture.</p>
+                    </div>
+
+                    {/* Toggle Auto-Fallback & Détection de panne */}
+                    <div className="mb-3 pt-4 border-t border-gray-700/60">
+                      <h3 className="text-base font-semibold text-white mb-2">Auto-Fallback & Détection de panne</h3>
+                      <button
+                        onClick={() => {
+                          const nextVal = !autoFallbackEnabled;
+                          setAutoFallbackEnabled(nextVal);
+                          try {
+                            localStorage.setItem('dawger_auto_fallback', nextVal ? 'true' : 'false');
+                            window.dispatchEvent(new CustomEvent('dawger-player-prefs-changed'));
+                          } catch { /* ignore */ }
+                        }}
+                        className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center transition-colors ${autoFallbackEnabled ? 'bg-green-600/30 hover:bg-green-600/40 text-green-300' : 'bg-red-600/30 hover:bg-red-600/40 text-red-300'}`}
+                      >
+                        <span>{autoFallbackEnabled ? t('watch.enabled') : t('watch.disabled')}</span>
+                        <div className={`w-10 h-5 flex items-center rounded-full p-1 transition-colors ${autoFallbackEnabled ? 'bg-green-500' : 'bg-gray-600'}`}>
+                          <motion.div
+                            className="w-3.5 h-3.5 bg-white rounded-full shadow-md"
+                            layout
+                            transition={{ type: "spring", stiffness: 700, damping: 30 }}
+                            style={{ marginLeft: autoFallbackEnabled ? 'auto' : '0px' }}
+                          />
+                        </div>
+                      </button>
+                      <p className="text-xs text-gray-400 mt-1 px-1">Bascule automatiquement sur la source suivante si le lecteur est en panne.</p>
                     </div>
 
                     {/* Next Content Threshold Configuration */}

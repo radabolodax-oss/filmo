@@ -1,8 +1,8 @@
 // src/utils/sourcePriorityPrefs.ts
 import {
-  TOP_LEVEL_SOURCE_IDS, BUILTIN_HOSTER_IDS, LANGUAGE_IDS,
+  TOP_LEVEL_SOURCE_IDS, ANIME_SOURCE_IDS, BUILTIN_HOSTER_IDS, LANGUAGE_IDS,
   DEPRECATED_SOURCE_IDS, DEPRECATED_HOSTER_IDS,
-  type TopLevelSourceId, type HosterId, type LanguageId,
+  type TopLevelSourceId, type AnimeSourceId, type HosterId, type LanguageId,
   type SourcePriorityPrefs, type PriorityCategory,
   type MoviesTvPrefs, type AnimePrefs, type CustomHoster,
 } from '../types/sourcePriority';
@@ -43,22 +43,18 @@ type SchemaVersion = 1 | 2;
  * resteront simplement indisponibles (hasData=false) sur les pages qui ne
  * les fournissent pas.
  */
-const DEFAULT_MOVIES_TV_ORDER: readonly TopLevelSourceId[] = [
-  'nexus_hls', 'mp4', 'darkino',
-  'fstream', 'omega', 'wiflix', 'viper', 'coflix',
-  'custom', 'frembed', 'vox', 'vostfr',
+export const DEFAULT_MOVIES_TV_ORDER: readonly TopLevelSourceId[] = [
+  'moviez', 'vidzy', 'wavewatch', 'fstream', 'darkino', 'mp4', 'nexus_hls',
+  'omega', 'wiflix', 'viper', 'coflix',
+  'j1f', 'custom', 'frembed', 'vox', 'vostfr',
 ];
 
-/**
- * Ordre par défaut des hosters pour la catégorie Animes.
- * Scope étendu suite au portage de 7 extracteurs additionnels (déjà utilisés côté
- * Films/Séries) vers WatchAnime : voe, uqload, vidzy, fsvid, doodstream, darkibox.
- * Insérés après vidmoly/sibnet (priorité historique VF/VOSTFR la plus fiable) mais
- * avant smoothpre/seekstreaming/minochinos (hosters sans extracteur HLS dédié ou
- * au pattern de détection très large) pour préserver le comportement existant.
- */
+export const DEFAULT_ANIME_SOURCE_ORDER: readonly AnimeSourceId[] = [
+  'animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime',
+];
+
 const DEFAULT_ANIME_HOSTER_ORDER: readonly HosterId[] = [
-  'vidmoly', 'sibnet', 'voe', 'doodstream', 'uqload', 'vidzy', 'fsvid', 'darkibox',
+  'miaw', 'moviez', 'vidzy', 'vidmoly', 'sibnet', 'voe', 'doodstream', 'uqload', 'fsvid', 'darkibox',
   'smoothpre', 'seekstreaming', 'minochinos',
 ];
 
@@ -86,9 +82,11 @@ export function buildDefaults(): SourcePriorityPrefs {
     pinnedLanguage: null,
   };
   const anime: AnimePrefs = {
+    sourceOrder: DEFAULT_ANIME_SOURCE_ORDER.map((id) => ({ id, enabled: true })),
     languageOrder: LANGUAGE_IDS.map((id) => ({ id, enabled: true })),
     hosterOrder: [...DEFAULT_ANIME_HOSTER_ORDER],
     overrides: {},
+    pinnedSource: null,
     pinnedLanguage: null,
     pinnedHoster: null,
   };
@@ -212,20 +210,44 @@ function mergeWithDefaults(parsed: SourcePriorityPrefs): SourcePriorityPrefs {
     pin: { id: T; snapshot: Array<{ id: T; enabled: boolean }> } | null,
   ) => (pin && deprecatedHosters.has(pin.id) ? null : pin);
 
+  const mergedMoviesTvSources = mergeOrderedToggle(
+    parsed.categories.moviesTv.sourceOrder,
+    defaults.categories.moviesTv.sourceOrder,
+    deprecatedSources,
+  );
+  const moviezEntry = mergedMoviesTvSources.find((e) => e.id === 'moviez') ?? { id: 'moviez' as TopLevelSourceId, enabled: true };
+  const enforcedMoviesTvSources = [
+    { ...moviezEntry, enabled: true },
+    ...mergedMoviesTvSources.filter((e) => e.id !== 'moviez'),
+  ];
+
+  const mergedMoviesTvHosters = mergeOrderedList(
+    parsed.categories.moviesTv.hosterOrder,
+    defaults.categories.moviesTv.hosterOrder,
+    deprecatedHosters,
+  );
+  const enforcedMoviesTvHosters: HosterId[] = [
+    'miaw',
+    'moviez',
+    ...mergedMoviesTvHosters.filter((id) => id !== 'miaw' && id !== 'moviez'),
+  ];
+
+  const mergedAnimeSources = mergeOrderedToggle(
+    parsed.categories.anime?.sourceOrder ?? defaults.categories.anime.sourceOrder,
+    defaults.categories.anime.sourceOrder,
+  );
+  const animeSamaEntry = mergedAnimeSources.find((e) => e.id === 'animesama') ?? { id: 'animesama' as AnimeSourceId, enabled: true };
+  const enforcedAnimeSources = [
+    { ...animeSamaEntry, enabled: true },
+    ...mergedAnimeSources.filter((e) => e.id !== 'animesama'),
+  ];
+
   return {
     version: SCHEMA_VERSION,
     categories: {
       moviesTv: {
-        sourceOrder: mergeOrderedToggle(
-          parsed.categories.moviesTv.sourceOrder,
-          defaults.categories.moviesTv.sourceOrder,
-          deprecatedSources,
-        ),
-        hosterOrder: mergeOrderedList(
-          parsed.categories.moviesTv.hosterOrder,
-          defaults.categories.moviesTv.hosterOrder,
-          deprecatedHosters,
-        ),
+        sourceOrder: enforcedMoviesTvSources,
+        hosterOrder: enforcedMoviesTvHosters,
         // languageOrder : fallback sur defaults si absent (pre-v3 users).
         // mergeOrderedToggle append les ids manquants à la fin.
         languageOrder: mergeOrderedToggle(
@@ -238,18 +260,20 @@ function mergeWithDefaults(parsed: SourcePriorityPrefs): SourcePriorityPrefs {
         pinnedLanguage: parsed.categories.moviesTv.pinnedLanguage ?? null,
       },
       anime: {
+        sourceOrder: enforcedAnimeSources,
         languageOrder: mergeOrderedToggle(
-          parsed.categories.anime.languageOrder,
+          parsed.categories.anime?.languageOrder ?? defaults.categories.anime.languageOrder,
           defaults.categories.anime.languageOrder,
         ),
         hosterOrder: mergeOrderedList(
-          parsed.categories.anime.hosterOrder,
+          parsed.categories.anime?.hosterOrder ?? defaults.categories.anime.hosterOrder,
           defaults.categories.anime.hosterOrder,
           deprecatedHosters,
         ),
-        overrides: purgeOverrides<LanguageId>(parsed.categories.anime.overrides),
-        pinnedLanguage: parsed.categories.anime.pinnedLanguage ?? null,
-        pinnedHoster: purgePinHoster(parsed.categories.anime.pinnedHoster ?? null),
+        overrides: purgeOverrides<LanguageId>(parsed.categories.anime?.overrides),
+        pinnedSource: purgePinSource(parsed.categories.anime?.pinnedSource ?? null),
+        pinnedLanguage: parsed.categories.anime?.pinnedLanguage ?? null,
+        pinnedHoster: purgePinHoster(parsed.categories.anime?.pinnedHoster ?? null),
       },
     },
     customHosters: parsed.customHosters ?? [],
@@ -652,4 +676,39 @@ export function restoreCustomHostersAndPatterns(
       anime: { ...prefs.categories.anime, hosterOrder: animeOrder },
     },
   });
+}
+
+/** Épingle une source anime à la position 0. */
+export function pinAnimeSource(id: AnimeSourceId): void {
+  updateCategory('anime', (cat) => {
+    const currentOrder = cat.sourceOrder || DEFAULT_ANIME_SOURCE_ORDER.map((s) => ({ id: s, enabled: true }));
+    const target = currentOrder.find((e) => e.id === id);
+    if (!target) return cat;
+    const rest = currentOrder.filter((e) => e.id !== id);
+    return {
+      ...cat,
+      sourceOrder: [target, ...rest],
+      pinnedSource: { id, snapshot: currentOrder },
+    };
+  });
+}
+
+/** Retire le pin source anime actif et restaure l'ordre pré-pin. */
+export function unpinAnimeSource(): void {
+  updateCategory('anime', (cat) => {
+    if (!cat.pinnedSource) return cat;
+    return { ...cat, sourceOrder: cat.pinnedSource.snapshot, pinnedSource: null };
+  });
+}
+
+/** Reset des sources Anime (sourceOrder + pinnedSource). Retourne le snapshot. */
+export function resetAnimeSources(): AnimePrefs {
+  const snapshot = getSourcePriorityPrefs().categories.anime;
+  const def = buildDefaults().categories.anime;
+  updateCategory('anime', (cat) => ({
+    ...cat,
+    sourceOrder: def.sourceOrder,
+    pinnedSource: null,
+  }));
+  return snapshot;
 }

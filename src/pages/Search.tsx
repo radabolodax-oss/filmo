@@ -84,7 +84,7 @@ const Search: React.FC = () => {
     const keywordSuggestionsRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const autocompleteRef = useRef<HTMLDivElement>(null);
-    const searchPerformedRef = useRef<boolean>(false);
+    const lastSearchSignatureRef = useRef<string>('');
     const resultsTopRef = useRef<HTMLDivElement>(null);
     const pendingScrollRef = useRef<boolean>(false);
     // Debounce timers for the typing-driven autocomplete fetches. Previously
@@ -171,35 +171,20 @@ const Search: React.FC = () => {
         const pageParam = parseInt(urlParams.get('page') || '1', 10);
 
         if (queryParam) {
+            const sig = `${queryParam}__${pageParam}`;
             if (queryParam !== query) {
                 setQuery(queryParam);
-                searchPerformedRef.current = false;
-            } else if (queryParam === query && !searchPerformedRef.current) {
-                performSearch(pageParam, true);
-                searchPerformedRef.current = true;
             }
-        } else if (query) {
-            // URL has no ?q= but context still holds an old query (provider lives at app
-            // root and never unmounts). Reset so the input doesn't repopulate after nav.
-            setQuery('');
+            if (lastSearchSignatureRef.current !== sig) {
+                lastSearchSignatureRef.current = sig;
+                performSearch(pageParam, true);
+            }
+        } else {
+            lastSearchSignatureRef.current = '';
+            if (query) {
+                setQuery('');
+            }
         }
-    }, [location.search]);
-
-    // Separate effect to trigger search when query is updated
-    useEffect(() => {
-        const urlParams = new URLSearchParams(location.search);
-        const queryParam = urlParams.get('q');
-        const pageParam = parseInt(urlParams.get('page') || '1', 10);
-
-        if (query && queryParam === query && !searchPerformedRef.current) {
-            performSearch(pageParam, true);
-            searchPerformedRef.current = true;
-        }
-    }, [query]);
-
-    // Reset ref when location changes
-    useEffect(() => {
-        searchPerformedRef.current = false;
     }, [location.search]);
 
     // Limit maximum pages to 500 (TMDB API limitation)
@@ -352,7 +337,12 @@ const Search: React.FC = () => {
     const handleSelectAutocomplete = (item: SearchResult) => {
         clearAutocompleteSuggestions();
         setShowAutocomplete(false);
-        navigate(`/${item.media_type}/${encodeId(item.id)}`);
+        const mediaType = item.media_type || (item.title ? 'movie' : 'tv');
+        if (mediaType === 'person') {
+            navigate(`/person/${item.id}`);
+        } else {
+            navigate(`/${mediaType}/${encodeId(item.id)}`);
+        }
     };
 
     // Select a director from suggestions
@@ -605,13 +595,28 @@ const Search: React.FC = () => {
                                             className="flex-grow min-w-0 bg-transparent text-white placeholder:text-white/30 focus:outline-none text-lg pl-3 pr-5 py-4"
                                             autoComplete="off"
                                         />
+                                        {query && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setQuery('');
+                                                    clearAutocompleteSuggestions();
+                                                    setShowAutocomplete(false);
+                                                    window.history.replaceState(null, '', '/search');
+                                                }}
+                                                className="px-3 text-white/40 hover:text-white transition-colors shrink-0"
+                                                aria-label="Effacer"
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                        )}
                                         <button
                                             type="submit"
                                             onClick={() => {
                                                 clearAutocompleteSuggestions();
                                                 setShowAutocomplete(false);
                                             }}
-                                            className="px-4 text-white/60 hover:text-white transition-colors md:hidden border-l border-white/10 shrink-0"
+                                            className="px-4 text-white/60 hover:text-white transition-colors border-l border-white/10 shrink-0"
                                             aria-label={t('search.searchPlaceholder')}
                                         >
                                             <SearchIcon size={22} />

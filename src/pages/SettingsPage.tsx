@@ -7,7 +7,7 @@ import {
   ArrowLeft, Settings, Shield, Monitor, Smartphone, Tablet,
   Copy, X, Snowflake, Activity, Trash2, Crown, Volume2,
   Database, Key, Lock, Palette, Eye, Download, Upload, Globe, AlertTriangle, History, CalendarClock, FlaskConical, Link2, MessageCircle, BellOff, Sparkles,
-  Zap, RefreshCw, ChevronDown, ListOrdered, Gauge
+  Zap, RefreshCw, ChevronDown, ListOrdered, Gauge, Film, FastForward, Clock
 } from 'lucide-react';
 import axios from 'axios';
 import {
@@ -148,6 +148,7 @@ const SECTIONS = [
   { id: 'sessions', labelKey: 'settings.sections.sessions', icon: Monitor },
   { id: 'accounts', labelKey: 'settings.sections.accounts', icon: Link2 },
   { id: 'privacy', labelKey: 'settings.sections.privacy', icon: Shield },
+  { id: 'player', labelKey: 'settings.sections.player', icon: Film },
   { id: 'source-priority', labelKey: 'settings.sections.sourcePriority', icon: ListOrdered },
   { id: 'extractions', labelKey: 'settings.sections.extractions', icon: Zap },
   { id: 'data', labelKey: 'settings.sections.data', icon: Database },
@@ -381,6 +382,84 @@ const SettingsPage: React.FC = () => {
   });
 
   // M11 — toggle "se souvenir du dernier lecteur choisi".
+    // Player features state
+  const [autoSkipIntro, setAutoSkipIntro] = useState<boolean>(() => localStorage.getItem('dawger_auto_skip_intro') !== 'false');
+  const [sessionEndPref, setSessionEndPref] = useState<boolean>(() => localStorage.getItem('dawger_session_end_time') !== 'false');
+  const [autoFallbackPref, setAutoFallbackPref] = useState<boolean>(() => localStorage.getItem('dawger_auto_fallback') !== 'false');
+  const [autoNextEpisode, setAutoNextEpisode] = useState<boolean>(() => localStorage.getItem('playerAutoNextEpisodePref') !== 'false');
+  const [saveProgressPref, setSaveProgressPref] = useState<boolean>(() => localStorage.getItem('playerSaveProgressPref') !== 'false');
+  const [speedPref, setSpeedPref] = useState<string>(() => localStorage.getItem('playerPlaybackSpeed') || '1');
+  const [oledPref, setOledPref] = useState<string>(() => localStorage.getItem('playerVideoOled') || 'off');
+
+  useEffect(() => {
+    const syncPlayerPrefs = () => {
+      setAutoSkipIntro(localStorage.getItem('dawger_auto_skip_intro') !== 'false');
+      setSessionEndPref(localStorage.getItem('dawger_session_end_time') !== 'false');
+      setAutoFallbackPref(localStorage.getItem('dawger_auto_fallback') !== 'false');
+      setAutoNextEpisode(localStorage.getItem('playerAutoNextEpisodePref') !== 'false');
+      setSaveProgressPref(localStorage.getItem('playerSaveProgressPref') !== 'false');
+      setSpeedPref(localStorage.getItem('playerPlaybackSpeed') || '1');
+      setOledPref(localStorage.getItem('playerVideoOled') || 'off');
+    };
+    window.addEventListener('dawger-player-prefs-changed', syncPlayerPrefs);
+    window.addEventListener('storage', syncPlayerPrefs);
+    return () => {
+      window.removeEventListener('dawger-player-prefs-changed', syncPlayerPrefs);
+      window.removeEventListener('storage', syncPlayerPrefs);
+    };
+  }, []);
+
+  const notifyPlayerPrefs = () => {
+    window.dispatchEvent(new CustomEvent('dawger-player-prefs-changed'));
+  };
+
+  const handleToggleAutoSkip = () => {
+    const next = !autoSkipIntro;
+    setAutoSkipIntro(next);
+    localStorage.setItem('dawger_auto_skip_intro', next ? 'true' : 'false');
+    notifyPlayerPrefs();
+  };
+
+  const handleToggleSessionEnd = () => {
+    const next = !sessionEndPref;
+    setSessionEndPref(next);
+    localStorage.setItem('dawger_session_end_time', next ? 'true' : 'false');
+    notifyPlayerPrefs();
+  };
+
+  const handleToggleAutoFallback = () => {
+    const next = !autoFallbackPref;
+    setAutoFallbackPref(next);
+    localStorage.setItem('dawger_auto_fallback', next ? 'true' : 'false');
+    notifyPlayerPrefs();
+  };
+
+  const handleToggleAutoNextEpisode = () => {
+    const next = !autoNextEpisode;
+    setAutoNextEpisode(next);
+    localStorage.setItem('playerAutoNextEpisodePref', next ? 'true' : 'false');
+    notifyPlayerPrefs();
+  };
+
+  const handleToggleSaveProgress = () => {
+    const next = !saveProgressPref;
+    setSaveProgressPref(next);
+    localStorage.setItem('playerSaveProgressPref', next ? 'true' : 'false');
+    notifyPlayerPrefs();
+  };
+
+  const handleSpeedChange = (spd: string) => {
+    setSpeedPref(spd);
+    localStorage.setItem('playerPlaybackSpeed', spd);
+    notifyPlayerPrefs();
+  };
+
+  const handleOledChange = (oled: string) => {
+    setOledPref(oled);
+    localStorage.setItem('playerVideoOled', oled);
+    notifyPlayerPrefs();
+  };
+
   const [rememberLastPlayer, setRememberLastPlayerState] = useState<boolean>(() => getRememberLastPlayer());
   useEffect(() => subscribeToLastPlayerChanges(() => setRememberLastPlayerState(getRememberLastPlayer())), []);
   const handleRememberLastPlayerToggle = () => {
@@ -2806,6 +2885,164 @@ const SettingsPage: React.FC = () => {
               </AnimatePresence>
             </section>
             )}
+
+            {/* ════════════════════════════════════════════════════════ */}
+            {/* SECTION: Lecteur vidéo & Fonctionnalités (TheIntroDB, Fallback, etc.) */}
+            {/* ════════════════════════════════════════════════════════ */}
+            <section id="player" className="scroll-mt-24">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-600/20 to-teal-600/20 border border-emerald-500/20">
+                  <Film className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-white">{t('settings.player.title')}</h2>
+                  <p className="text-sm text-gray-500">{t('settings.player.description')}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* 1. Saut d'intro TheIntroDB */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 flex items-center justify-between gap-4"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <FastForward className="w-4 h-4 text-emerald-400" />
+                      <h4 className="font-medium text-white text-sm">{t('settings.player.autoSkipIntroTitle')}</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{t('settings.player.autoSkipIntroDesc')}</p>
+                  </div>
+                  {renderToggle(autoSkipIntro, handleToggleAutoSkip, 'emerald')}
+                </motion.div>
+
+                {/* 2. Estimation dynamique de fin de séance */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 flex items-center justify-between gap-4"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="w-4 h-4 text-emerald-400" />
+                      <h4 className="font-medium text-white text-sm">{t('settings.player.sessionEndTimeTitle')}</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{t('settings.player.sessionEndTimeDesc')}</p>
+                  </div>
+                  {renderToggle(sessionEndPref, handleToggleSessionEnd, 'emerald')}
+                </motion.div>
+
+                {/* 3. Auto-Fallback & Détection de panne FrameRedirectWatch */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 flex items-center justify-between gap-4"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Zap className="w-4 h-4 text-emerald-400" />
+                      <h4 className="font-medium text-white text-sm">{t('settings.player.autoFallbackTitle')}</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{t('settings.player.autoFallbackDesc')}</p>
+                  </div>
+                  {renderToggle(autoFallbackPref, handleToggleAutoFallback, 'emerald')}
+                </motion.div>
+
+                {/* 4. Enchaînement automatique des épisodes */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 flex items-center justify-between gap-4"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Film className="w-4 h-4 text-emerald-400" />
+                      <h4 className="font-medium text-white text-sm">{t('settings.player.autoNextEpisodeTitle')}</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{t('settings.player.autoNextEpisodeDesc')}</p>
+                  </div>
+                  {renderToggle(autoNextEpisode, handleToggleAutoNextEpisode, 'emerald')}
+                </motion.div>
+
+                {/* 5. Sauvegarde automatique de progression */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 flex items-center justify-between gap-4"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <History className="w-4 h-4 text-emerald-400" />
+                      <h4 className="font-medium text-white text-sm">{t('settings.player.saveProgressTitle')}</h4>
+                    </div>
+                    <p className="text-xs text-gray-500 leading-relaxed">{t('settings.player.saveProgressDesc')}</p>
+                  </div>
+                  {renderToggle(saveProgressPref, handleToggleSaveProgress, 'emerald')}
+                </motion.div>
+
+                {/* 6. Vitesse de lecture par défaut */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <FastForward className="w-4 h-4 text-emerald-400" />
+                    <h4 className="font-medium text-white text-sm">{t('settings.player.defaultSpeedTitle')}</h4>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {['0.75', '1', '1.25', '1.5', '2'].map((spd) => (
+                      <button
+                        key={spd}
+                        type="button"
+                        onClick={() => handleSpeedChange(spd)}
+                        className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                          speedPref === spd
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-lg'
+                            : 'bg-neutral-800/80 text-neutral-300 hover:text-white border border-transparent'
+                        }`}
+                      >
+                        {spd === '1' ? '1.0x (Normal)' : `${spd}x`}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+
+                {/* 7. Profil OLED / Contraste */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-4 sm:p-5 space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                    <h4 className="font-medium text-white text-sm">{t('settings.player.defaultOledTitle')}</h4>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { key: 'off', label: 'Désactivé' },
+                      { key: 'natural', label: 'Naturel (OLED)' },
+                      { key: 'cinema', label: 'Cinéma' },
+                      { key: 'vivid', label: 'Vif & Contrasté' },
+                    ].map((oled) => (
+                      <button
+                        key={oled.key}
+                        type="button"
+                        onClick={() => handleOledChange(oled.key)}
+                        className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                          oledPref === oled.key
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-lg'
+                            : 'bg-neutral-800/80 text-neutral-300 hover:text-white border border-transparent'
+                        }`}
+                      >
+                        {oled.label}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              </div>
+            </section>
 
             {/* ════════════════════════════════════════════════════════ */}
             {/* SECTION: Priorité des sources (Milestone 5)            */}

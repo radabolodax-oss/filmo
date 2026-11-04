@@ -567,7 +567,7 @@ class AnimeSama {
       const results = this.parseSearchResults(responseData);
       console.log(`[AnimeSama Search] parseSearchResults -> ${results.length} results`);
 
-      await deps.saveToCache(ANIME_SAMA_CACHE_DIR, cacheKey, results);
+      if (Array.isArray(results) && results.length > 0) { await deps.saveToCache(ANIME_SAMA_CACHE_DIR, cacheKey, results); }
 
       return results.map(result =>
         new Catalogue(result.url, result.name, this.client, result)
@@ -751,7 +751,7 @@ router.get('/search/:query', async (req, res) => {
           alternative_names: cat.alternative_names,
           alternative_names_string: cat.alternative_names_string
         }));
-        await deps.saveToCache(animeCacheDir, cacheKey, serializedResults);
+        if (Array.isArray(serializedResults) && serializedResults.length > 0) { await deps.saveToCache(animeCacheDir, cacheKey, serializedResults); }
         cachedResults = serializedResults;
       } catch (err) {
         console.error('Erreur scraping Anime Sama:', err);
@@ -802,6 +802,57 @@ router.get('/search/:query', async (req, res) => {
             return null;
           }
         }))).filter(Boolean);
+      }
+
+      const hasValidEpisodes = saisons.some(
+        (s) => Array.isArray(s.episodes) && s.episodes.length > 0
+      );
+
+      // Si aucune saison valide n'est en cache et que l'appelant demande includeSeasons,
+      // on scrape immédiatement pour éviter de renvoyer seasons: [] au premier chargement.
+      if (!hasValidEpisodes && req.query.includeSeasons === 'true' && anime.url && anime.url.includes('/catalogue/') && anime.name) {
+        try {
+          const client = new AnimeSama(deps.ANIME_SAMA_URL);
+          const catalogueObj = new Catalogue(anime.url, anime.name, client.client, anime);
+          const seasonsList = await catalogueObj.seasons();
+          const updatedAnimeCache = {};
+          const scrapedSaisons = [];
+
+          for (const seasonObj of seasonsList) {
+            if (seasonObj.name === 'nom') continue;
+            try {
+              const scrapedEpisodes = await seasonObj.episodes();
+              if (Array.isArray(scrapedEpisodes) && scrapedEpisodes.length > 0) {
+                updatedAnimeCache[seasonObj.name] = {
+                  timestamp: Date.now(),
+                  episodes: scrapedEpisodes,
+                };
+                scrapedSaisons.push({
+                  name: seasonObj.name,
+                  episodes: scrapedEpisodes,
+                  episodeCount: scrapedEpisodes.length,
+                  cacheFile: animeFile,
+                  timestamp: Date.now(),
+                });
+              }
+            } catch (e) {
+              // ignore single season error
+            }
+          }
+
+          if (scrapedSaisons.length > 0) {
+            saisons = scrapedSaisons;
+            try {
+              await writeFileAtomic(
+                path.join(animeCacheDir, animeFile),
+                JSON.stringify({ timestamp: Date.now(), seasons: updatedAnimeCache }),
+                'utf-8'
+              );
+            } catch (_) {}
+          }
+        } catch (e) {
+          console.error('[AnimeSama] Inline scrape error:', e.message);
+        }
       }
 
       const sortSeasons = (seasons) => {

@@ -420,7 +420,9 @@ export const SearchProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const hasFilters = selectedGenres.length > 0 || selectedType !== 'all' || minRating > 0 || director || actor || year || selectedKeywords.length > 0 || selectedLanguage || selectedCountry || selectedProviders.length > 0;
     const isGenreSearch = hasFilters;
 
-    if ((!hasMore && !isNewSearch && !isGenreSearch) || isLoading) return;
+    // Ne bloquer que si ce n'est PAS une nouvelle recherche
+    if (!isNewSearch && (!hasMore && !isGenreSearch)) return;
+    if (!isNewSearch && isLoading) return;
 
     if (!query && selectedGenres.length === 0 && selectedType === 'all' && minRating === 0 && !director && !actor && !year && selectedKeywords.length === 0 && !selectedLanguage && !selectedCountry && selectedProviders.length === 0) return;
 

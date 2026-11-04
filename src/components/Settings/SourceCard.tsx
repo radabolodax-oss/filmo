@@ -19,22 +19,26 @@ import type { TopLevelSourceId } from '../../types/sourcePriority';
  * Labels UI pour les sources top-level (Films/Séries).
  * Exporté pour réutilisation par M6 (overrides dialog).
  */
-export const SOURCE_LABELS: Record<TopLevelSourceId, string> = {
+export const SOURCE_LABELS: Record<string, string> = {
+  moviez: 'Moviez (Ultra HD)',
+  vidzy: 'Vidzy Direct (TMDB)',
+  animesama: 'Anime-Sama (Prioritaire)',
+  anicloud: 'AniCloud',
+  franime: 'FRAnime',
   darkino: 'Darkino',
   mp4: 'MP4 direct',
   nexus_hls: 'Nexus HLS',
   fstream: 'FStream',
-  wiflix: 'Lynx',
+  wiflix: 'Lynx (Wiflix)',
   omega: 'Omega',
   coflix: 'Coflix',
   frembed: 'Frembed',
   vostfr: 'Vostfr',
   viper: 'Viper',
   vox: 'Vox',
-  custom: 'Lecteur Prowler',
+  custom: 'Lecteur Dawger',
   j1f: '1jour1film',
   nakios: 'Nakios',
-  vidzy: 'Vidzy',
   wavewatch: 'Wavewatch',
   peachify: 'Peachify',
   videasy: 'Videasy',
@@ -82,22 +86,22 @@ const Switch: React.FC<SwitchProps> = ({ checked, onCheckedChange, ariaLabel }) 
 );
 
 interface SourceCardProps {
-  id: TopLevelSourceId;
+  id: string;
   enabled: boolean;
   isPinned: boolean;
   /** True si la source est en première position de `sourceOrder`. Affiche le badge #1. */
   isFirst: boolean;
   onToggle: (enabled: boolean) => void;
   onTogglePin: () => void;
-  /** Stub M6 (overrides dialog). No-op pour l'instant. */
-  onOpenOverride: () => void;
+  onOpenOverride?: () => void;
+  hideOverride?: boolean;
 }
 
 export const SourceCard: React.FC<SourceCardProps> = ({
-  id, enabled, isPinned, isFirst, onToggle, onTogglePin, onOpenOverride,
+  id, enabled, isPinned, isFirst, onToggle, onTogglePin, onOpenOverride, hideOverride,
 }) => {
   const { t } = useTranslation();
-  const label = SOURCE_LABELS[id];
+  const label = SOURCE_LABELS[id] || id;
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900/50 px-3 py-2">
       <div className="flex items-center gap-2 min-w-0">
@@ -118,15 +122,17 @@ export const SourceCard: React.FC<SourceCardProps> = ({
           ariaLabel={t('settings.sourcePriority.toggleSourceAria', { label })}
         />
         <PinButton isPinned={isPinned} onToggle={onTogglePin} />
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onOpenOverride}
-          aria-label={t('settings.sourcePriority.customizeHosters')}
-          className="h-8 w-8"
-        >
-          <Settings size={14} />
-        </Button>
+        {!hideOverride && onOpenOverride && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onOpenOverride}
+            aria-label={t('settings.sourcePriority.customizeHosters')}
+            className="h-8 w-8"
+          >
+            <Settings size={14} />
+          </Button>
+        )}
       </div>
     </div>
   );

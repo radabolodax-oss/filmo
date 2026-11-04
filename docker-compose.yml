@@ -49,6 +49,11 @@ services:
       - ./.env
     environment:
       VITE_SITE_URL: http://localhost:3001
+    volumes:
+      - ./src:/app/src
+      - ./index.html:/app/index.html
+      - ./public:/app/public
+      - ./.env:/app/.env
     ports:
       - "3001:3001"
     depends_on:
@@ -61,6 +66,9 @@ services:
     restart: unless-stopped
     ports:
       - "25565:25565"
+    volumes:
+      - ./API/Mainapi:/app
+      - /app/node_modules
     env_file:
       - ./API/Mainapi/.env
     environment:

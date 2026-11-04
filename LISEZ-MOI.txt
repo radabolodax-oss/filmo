@@ -2,25 +2,19 @@
               DAWGER - GUIDE RAPIDE
 ==================================================
 
-ETAPE 1 :
-Double-clique sur le raccourci "installer-prerequis"
-(Installe Docker Desktop et Node.js automatiquement).
+PREMIERE INSTALLATION SUR UN NOUVEAU PC :
+Double-clique sur "setup-new-pc.bat"
+(Installe automatiquement Git, Docker Desktop et Node.js,
+demarre Docker et lance Dawger PC).
 
-ETAPE 2 :
-Ouvre "Docker Desktop" depuis ton menu Demarrer
-(Attends 1 minute que la petite baleine soit prete).
-
-ETAPE 3 :
-Double-clique sur le raccourci "start-dawger"
-(L'application Dawger se lance toute seule !).
+AU QUOTIDIEN :
+Double-clique simplement sur "PC Dawger.bat"
+(Lance automatiquement Docker Desktop s'il est ferme,
+demarre les conteneurs et ouvre l'application Dawger PC !).
 
 ==================================================
-Au quotidien : lance simplement "start-dawger".
-==================================================
-
---------------------------------------------------
 SI DOCKER DEMANDE WSL OU LA VIRTUALISATION :
---------------------------------------------------
+==================================================
 Ouvre PowerShell (clic droit -> Executer en administrateur)
 et tape ces 2 commandes :
 
