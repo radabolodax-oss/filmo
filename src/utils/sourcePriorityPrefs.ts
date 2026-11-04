@@ -50,7 +50,7 @@ export const DEFAULT_MOVIES_TV_ORDER: readonly TopLevelSourceId[] = [
 ];
 
 export const DEFAULT_ANIME_SOURCE_ORDER: readonly AnimeSourceId[] = [
-  'animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime',
+  'animesama', 'franime', 'moviez', 'vidzy', 'anicloud', 'wavewatch',
 ];
 
 const DEFAULT_ANIME_HOSTER_ORDER: readonly HosterId[] = [

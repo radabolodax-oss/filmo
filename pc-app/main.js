@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-const CURRENT_VERSION = '1.0.3';
+const CURRENT_VERSION = '1.0.4';
 const VERSION_CHECK_URL = 'https://dawgerwebsite.vercel.app/api/version.json';
 const isPackaged = app.isPackaged;
 

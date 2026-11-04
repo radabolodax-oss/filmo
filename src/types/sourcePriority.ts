@@ -15,7 +15,7 @@ export type TopLevelSourceId = typeof TOP_LEVEL_SOURCE_IDS[number];
 
 /** Sources / Fournisseurs pour la section Animes */
 export const ANIME_SOURCE_IDS = [
-  'animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime',
+  'animesama', 'franime', 'moviez', 'vidzy', 'anicloud', 'wavewatch',
 ] as const;
 export type AnimeSourceId = typeof ANIME_SOURCE_IDS[number];
 

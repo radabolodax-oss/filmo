@@ -959,17 +959,12 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
       const prefs = getSourcePriorityPrefs();
 
       const order = (prefs.categories.anime?.sourceOrder || [
-
         { id: 'animesama', enabled: true },
-        { id: 'wavewatch', enabled: true },
-        { id: 'moviez', enabled: true },
-
-        { id: 'vidzy', enabled: true },
-
-        { id: 'anicloud', enabled: true },
-
         { id: 'franime', enabled: true },
-
+        { id: 'moviez', enabled: true },
+        { id: 'vidzy', enabled: true },
+        { id: 'anicloud', enabled: true },
+        { id: 'wavewatch', enabled: true },
       ]).filter((s) => s.enabled).map((s) => s.id);
 
 
@@ -1191,46 +1186,38 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
   // Charge le lookup FRAnime quand le fournisseur est sélectionné
-
   useEffect(() => {
-
     if (provider !== 'franime') return;
-
-    if (franimeLookup || franimeLoading) return;
-
+    if (franimeLookup) return;
     if (!showDetails?.name) return;
 
     let cancelled = false;
-
     setFranimeLoading(true);
-
     setFranimeError(null);
 
-    axios.get(`${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(showDetails.name)}`)
+    const queryUrl = `${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(showDetails.name)}${showDetails.original_name ? `&alt=${encodeURIComponent(showDetails.original_name)}` : ''}`;
 
+    axios.get(queryUrl)
       .then(res => {
-
         if (cancelled) return;
-
         const data = res.data as { slug: string; animeId: string; langs: string[] };
-
         setFranimeLookup(data);
-
         if (data.langs?.length) {
-
           setFranimeLang(data.langs.includes('vf') ? 'vf' : data.langs[0]);
-
         }
-
       })
-
-      .catch(() => { if (!cancelled) setFranimeError('Anime non trouvé sur FRAnime'); })
-
-      .finally(() => { if (!cancelled) setFranimeLoading(false); });
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn('[FRAnime] Erreur lookup:', err);
+          setFranimeError('Anime non trouvé sur FRAnime');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setFranimeLoading(false);
+      });
 
     return () => { cancelled = true; };
-
-  }, [provider, showDetails?.name, franimeLookup, franimeLoading]);
+  }, [provider, showDetails?.name, showDetails?.original_name]);
 
 
 
@@ -3743,15 +3730,11 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
                           const allProviders = [
                             { key: 'animesama', label: 'Anime-Sama', badge: 'Prioritaire' },
-                            { key: 'wavewatch', label: 'Wavewatch (Multi/VOSTFR)' },
+                            { key: 'franime', label: 'FRAnime (VF/VOSTFR)', badge: 'Recommandé' },
                             { key: 'moviez', label: 'Moviez (Ultra HD)' },
-
                             { key: 'vidzy', label: 'Vidzy Direct' },
-
                             { key: 'anicloud', label: 'AniCloud' },
-
-                            { key: 'franime', label: 'FRAnime' },
-
+                            { key: 'wavewatch', label: 'Wavewatch (Multi/VOSTFR)' },
                           ];
 
                           return allProviders.sort((a, b) => {
@@ -4108,57 +4091,37 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
                     {/* FRAnime — langue */}
-
                     {provider === 'franime' && (
-
                       <div className="mb-6">
-
                         {franimeLoading ? (
-
                           <div className="flex items-center justify-center py-6">
-
-                            <svg className="animate-spin h-6 w-6 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-
+                            <svg className="animate-spin h-6 w-6 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-
                             </svg>
-
                           </div>
-
                         ) : franimeError || !franimeLookup ? (
-
                           <p className="text-gray-400 text-sm">{franimeError ?? 'Anime non trouvé sur FRAnime'}</p>
-
-                        ) : franimeLookup.langs.length > 1 ? (
-
+                        ) : (
                           <>
-
                             <h4 className="text-white text-md font-semibold mb-3">{t('watch.versionLabel')}</h4>
-
-                            <div className="grid grid-cols-2 gap-2 mb-4">
-
+                            <div className="grid grid-cols-2 gap-2 mb-3">
                               {franimeLookup.langs.map(lang => (
-
                                 <button key={lang} onClick={() => { setFranimeLang(lang); saveAnimeChoice({ provider: 'franime', language: lang }); setShowEmbedQuality(false); }}
-
                                   className={`px-3 py-2 rounded-lg text-sm transition-all duration-200 ${franimeLang === lang ? 'bg-gray-800 border-l-4 border-emerald-500 pl-3 font-medium text-emerald-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200'}`}>
-
-                                  {lang.toUpperCase()}
-
+                                  {lang === 'vo' ? 'VOSTFR' : lang.toUpperCase()}
                                 </button>
-
                               ))}
-
                             </div>
-
+                            <button
+                              onClick={() => setShowEmbedQuality(false)}
+                              className="w-full py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition-colors text-center"
+                            >
+                              Lancer la lecture
+                            </button>
                           </>
-
-                        ) : null}
-
+                        )}
                       </div>
-
                     )}
 
 
@@ -4473,7 +4436,15 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
               onNextEpisode={handleNextEpisode}
 
-              currentSourceLabel={provider === 'animesama' ? (selectedSource?.player || 'Anime-Sama') : provider}
+              currentSourceLabel={
+                provider === 'animesama' ? (selectedSource?.player || 'Anime-Sama') :
+                provider === 'franime' ? `FRAnime (${(franimeLang || 'VF').toUpperCase()})` :
+                provider === 'wavewatch' ? 'Wavewatch (Multi)' :
+                provider === 'moviez' ? 'Moviez' :
+                provider === 'vidzy' ? 'Vidzy' :
+                provider === 'anicloud' ? 'AniCloud' :
+                provider
+              }
 
               runtimeMinutes={24}
 
@@ -4749,32 +4720,19 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
                 );
 
-                const franimeSrc = `https://franime.fr/anime/${franimeLookup.slug}?anime_id=${franimeLookup.animeId}&lang=${franimeLang}&ep=${episode ?? 1}`;
+                const franimeSrc = `https://franime.fr/anime/${franimeLookup.slug}?anime_id=${franimeLookup.animeId}&s=${season ?? 1}&ep=${episode ?? 1}&lang=${franimeLang}`;
 
                 return (
-
-                  <div className="w-full h-full overflow-hidden relative">
-
+                  <div className="w-full h-full overflow-hidden relative bg-black">
                     <iframe
-
                       key={`franime-${season}-${episode}-${franimeLang}`}
-
                       src={franimeSrc}
-
                       allowFullScreen
-
-                      allow="autoplay; fullscreen; encrypted-media"
-
-                      scrolling="no"
-
-                      style={{ border: 'none', display: 'block', position: 'absolute', top: '-140px', left: 0, width: '100%', height: 'calc(100% + 140px)' }}
-
-                      title={`${showDetails?.name} S${season}E${episode}`}
-
+                      allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                      className="w-full h-full border-0"
+                      title={`${showDetails?.name || 'Anime'} S${season}E${episode} - FRAnime`}
                     />
-
                   </div>
-
                 );
 
               })()}
