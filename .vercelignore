@@ -1,0 +1,11 @@
+pc-app
+API
+dist
+*.exe
+*.zip
+*.tar.gz
+*.dmg
+.git
+.github
+node_modules
+.system_generated
