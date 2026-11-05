@@ -43,13 +43,6 @@ import {
 } from '../utils/soundSettings';
 import { useTranslation } from 'react-i18next';
 import { AVAILABLE_LANGUAGES, changeLanguage, type SupportedLanguage } from '../i18n';
-import { SourcePriorityPanel } from '../components/Settings/SourcePriorityPanel';
-import {
-  getRememberLastPlayer,
-  setRememberLastPlayer,
-  subscribeToLastPlayerChanges,
-} from '../utils/lastPlayerPref';
-import { BgColorPickerPanel } from '../components/Settings/BgColorPickerPanel';
 import { useLightMode } from '../context/LightModeContext';
 import {
   BG_ACCENT_PRESETS,
