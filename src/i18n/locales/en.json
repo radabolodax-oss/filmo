@@ -1554,7 +1554,7 @@
     "animTransTitle": "Page transitions",
     "animTransDesc": "Fade and slide animations between pages and modals.",
     "introAnimation": "Intro animation",
-    "introAnimationDesc": "Shows a periodic-table style animation when the site starts",
+    "introAnimationDesc": "Displays a cinematic DAWGER letters animation on app launch",
     "keepScrollPositionBetweenPages": "Keep scroll position between pages",
     "keepScrollPositionBetweenPagesDesc": "Dawger will no longer automatically scroll back to the top when changing pages.",
     "language": "Language",

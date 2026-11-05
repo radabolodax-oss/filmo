@@ -284,11 +284,84 @@ const scrollViewportToTop = (mode: 'smooth' | 'instant') => {
   }
 };
 
-// Composant pour faire défiler automatiquement vers le haut lors des changements de route
+const SCROLL_POSITIONS_KEY = 'dawger_scroll_positions';
+
+const getSavedRouteScroll = (key: string): number => {
+  try {
+    const raw = sessionStorage.getItem(SCROLL_POSITIONS_KEY);
+    if (!raw) return 0;
+    const map = JSON.parse(raw);
+    return typeof map[key] === 'number' ? Math.max(0, map[key]) : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const saveRouteScroll = (key: string, y: number) => {
+  try {
+    const raw = sessionStorage.getItem(SCROLL_POSITIONS_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[key] = Math.max(0, Math.round(y));
+    sessionStorage.setItem(SCROLL_POSITIONS_KEY, JSON.stringify(map));
+  } catch {}
+};
+
+const getCurrentViewportY = (): number => {
+  const lenis = (window as any).lenis;
+  if (typeof lenis?.scroll === 'number') {
+    return lenis.scroll;
+  }
+  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+};
+
+const applyScrollTarget = (targetY: number, mode: 'smooth' | 'instant') => {
+  const lenis = (window as any).lenis;
+  if (lenis?.scrollTo) {
+    lenis.scrollTo(targetY, {
+      immediate: mode === 'instant',
+      duration: mode === 'smooth' ? 0.45 : undefined,
+      force: true
+    });
+  } else {
+    window.scrollTo({ top: targetY, left: 0, behavior: mode === 'smooth' ? 'smooth' : 'auto' });
+  }
+
+  if (mode === 'instant') {
+    document.documentElement.scrollTop = targetY;
+    document.body.scrollTop = targetY;
+  }
+};
+
+// Composant pour mémoriser et restaurer le défilement lors des changements de route
 const ScrollToTop = () => {
   const location = useLocation();
   const navigationType = useNavigationType();
-  const prevPathRef = React.useRef(location.pathname);
+  const currentKey = location.pathname + location.search;
+  const currentKeyRef = React.useRef(currentKey);
+  const prevKeyRef = React.useRef(currentKey);
+  const currentScrollRef = React.useRef(0);
+
+  // Écouter le scroll pour mémoriser en continu la position de la page actuelle
+  useEffect(() => {
+    let scrollTimeout: number | undefined;
+
+    const onScroll = () => {
+      const y = getCurrentViewportY();
+      currentScrollRef.current = y;
+      if (scrollTimeout) window.clearTimeout(scrollTimeout);
+      scrollTimeout = window.setTimeout(() => {
+        saveRouteScroll(currentKeyRef.current, currentScrollRef.current);
+      }, 150);
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (scrollTimeout) window.clearTimeout(scrollTimeout);
+      saveRouteScroll(currentKeyRef.current, currentScrollRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const handleRestorationSync = (event?: StorageEvent) => {
@@ -324,20 +397,19 @@ const ScrollToTop = () => {
     const { preserveScrollOnBack, disableRouteScrollToTop } = syncHistoryScrollRestoration();
     const isBackOrForward = navigationType === 'POP';
 
+    // Sauvegarder la position de la page précédente avant de basculer
+    if (prevKeyRef.current !== currentKey) {
+      saveRouteScroll(prevKeyRef.current, currentScrollRef.current);
+      prevKeyRef.current = currentKey;
+      currentKeyRef.current = currentKey;
+    }
+
     // Sur /search, ne pas scroll to top si seuls les query params changent (pagination)
-    const pathChanged = prevPathRef.current !== location.pathname;
-    prevPathRef.current = location.pathname;
-    if (!pathChanged && location.pathname === '/search') {
+    if (location.pathname === '/search' && prevKeyRef.current.split('?')[0] === '/search') {
       return undefined;
     }
 
-    if (disableRouteScrollToTop) {
-      return undefined;
-    }
-
-    if (preserveScrollOnBack && isBackOrForward) {
-      return undefined;
-    }
+    const shouldRestoreScroll = (preserveScrollOnBack && isBackOrForward) || disableRouteScrollToTop;
 
     let cancelled = false;
     let frameId = 0;
@@ -347,6 +419,8 @@ const ScrollToTop = () => {
 
     const cancelPendingAdjustments = () => {
       userInteracted = true;
+      if (frameId) cancelAnimationFrame(frameId);
+      if (nestedFrameId) cancelAnimationFrame(nestedFrameId);
       window.clearTimeout(settleTimeout);
     };
 
@@ -356,6 +430,51 @@ const ScrollToTop = () => {
       }
     };
 
+    window.addEventListener('wheel', handleUserInteraction, { passive: true });
+    window.addEventListener('touchstart', handleUserInteraction, { passive: true });
+    window.addEventListener('touchmove', handleUserInteraction, { passive: true });
+    window.addEventListener('pointerdown', handleUserInteraction, { passive: true });
+    window.addEventListener('keydown', handleUserInteraction);
+
+    if (shouldRestoreScroll) {
+      const savedY = getSavedRouteScroll(currentKey);
+
+      if (savedY > 0) {
+        const startTime = performance.now();
+        const MAX_WATCH_TIME_MS = 2500;
+
+        const attemptRestore = () => {
+          if (cancelled || userInteracted) return;
+
+          applyScrollTarget(savedY, 'instant');
+
+          const currentHeight = document.documentElement.scrollHeight;
+          const viewportBottom = savedY + window.innerHeight;
+
+          // Si la page est encore en train de charger ses données et n'a pas atteint la hauteur voulue
+          if (currentHeight < viewportBottom && (performance.now() - startTime) < MAX_WATCH_TIME_MS) {
+            frameId = requestAnimationFrame(attemptRestore);
+          } else {
+            // Settle final
+            applyScrollTarget(savedY, 'instant');
+          }
+        };
+
+        frameId = requestAnimationFrame(attemptRestore);
+
+        return () => {
+          cancelled = true;
+          cancelAnimationFrame(frameId);
+          window.removeEventListener('wheel', handleUserInteraction);
+          window.removeEventListener('touchstart', handleUserInteraction);
+          window.removeEventListener('touchmove', handleUserInteraction);
+          window.removeEventListener('pointerdown', handleUserInteraction);
+          window.removeEventListener('keydown', handleUserInteraction);
+        };
+      }
+    }
+
+    // Cas standard : remise à zéro du défilement
     const scrollToTop = (mode: 'smooth' | 'instant') => {
       try {
         scrollViewportToTop(mode);
@@ -366,12 +485,6 @@ const ScrollToTop = () => {
     };
 
     const shouldAnimate = shouldAnimateScrollToTop();
-
-    window.addEventListener('wheel', handleUserInteraction, { passive: true });
-    window.addEventListener('touchstart', handleUserInteraction, { passive: true });
-    window.addEventListener('touchmove', handleUserInteraction, { passive: true });
-    window.addEventListener('pointerdown', handleUserInteraction, { passive: true });
-    window.addEventListener('keydown', handleUserInteraction);
 
     frameId = requestAnimationFrame(() => {
       if (cancelled) return;
@@ -403,7 +516,7 @@ const ScrollToTop = () => {
       window.removeEventListener('pointerdown', handleUserInteraction);
       window.removeEventListener('keydown', handleUserInteraction);
     };
-  }, [location.pathname, location.search, navigationType]);
+  }, [location.pathname, location.search, navigationType, currentKey]);
 
   return null;
 };

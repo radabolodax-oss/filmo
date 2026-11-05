@@ -10,7 +10,6 @@ import {
   Zap, RefreshCw, ChevronDown, ListOrdered, Gauge, Film, FastForward, Clock
 } from 'lucide-react';
 import axios from 'axios';
-import { isLowLatencyEnabled, setLowLatencyEnabled } from '../utils/lowLatencyPref';
 import { unsubscribeFromPush } from '../services/pushNotificationService';
 import { clearStoredAuthSession, getResolvedAccountContext, setPendingAuthLink } from '../utils/accountAuth';
 import {
@@ -22,11 +21,6 @@ import {
   type NonSyncableStorageReason,
   isSyncableStorageKey
 } from '../utils/syncStorage';
-import {
-  areSoundEffectsEnabled,
-  setSoundEffectsEnabled,
-  SOUND_EFFECTS_CHANGED_EVENT
-} from '../utils/soundSettings';
 import { useTranslation } from 'react-i18next';
 import { AVAILABLE_LANGUAGES, changeLanguage, type SupportedLanguage } from '../i18n';
 import { useLightMode } from '../context/LightModeContext';
@@ -269,10 +263,6 @@ const SettingsPage: React.FC = () => {
     return localStorage.getItem('settings_smooth_scroll') !== 'false';
   });
 
-  const [soundEffectsEnabled, setSoundEffectsEnabledState] = useState(() => {
-    return areSoundEffectsEnabled();
-  });
-
   const [isSnowfallActive, setIsSnowfallActive] = useState(() => {
     return sessionStorage.getItem('snowfall_active') === 'true';
   });
@@ -428,20 +418,6 @@ const SettingsPage: React.FC = () => {
     return () => {
       window.removeEventListener('storage', checkAuth);
       window.removeEventListener('auth_changed', checkAuth);
-    };
-  }, []);
-
-  useEffect(() => {
-    const syncSoundEffectsPreference = () => {
-      setSoundEffectsEnabledState(areSoundEffectsEnabled());
-    };
-
-    window.addEventListener('storage', syncSoundEffectsPreference);
-    window.addEventListener(SOUND_EFFECTS_CHANGED_EVENT, syncSoundEffectsPreference as EventListener);
-
-    return () => {
-      window.removeEventListener('storage', syncSoundEffectsPreference);
-      window.removeEventListener(SOUND_EFFECTS_CHANGED_EVENT, syncSoundEffectsPreference as EventListener);
     };
   }, []);
 
@@ -717,12 +693,6 @@ const SettingsPage: React.FC = () => {
     window.dispatchEvent(new CustomEvent('settings_smooth_scroll_intensity_changed'));
   };
 
-  const handleSoundEffectsToggle = () => {
-    const newValue = !soundEffectsEnabled;
-    setSoundEffectsEnabledState(newValue);
-    setSoundEffectsEnabled(newValue);
-  };
-
   const handleSnowfallToggle = () => {
     const newValue = !isSnowfallActive;
     setIsSnowfallActive(newValue);
@@ -735,8 +705,10 @@ const SettingsPage: React.FC = () => {
     const newValue = !introEnabled;
     setIntroEnabled(newValue);
     localStorage.setItem('movix_intro_enabled', String(newValue));
+    localStorage.setItem('dawger_intro_enabled', String(newValue));
     if (newValue) {
       localStorage.removeItem('movix_intro_seen');
+      sessionStorage.removeItem('dawger_intro_seen');
     }
     window.dispatchEvent(new Event('intro_settings_changed'));
   };
@@ -809,15 +781,6 @@ const SettingsPage: React.FC = () => {
     setHeroHidden(newValue);
     localStorage.setItem('settings_hide_hero', String(newValue));
     window.dispatchEvent(new CustomEvent('hero_visibility_changed'));
-  };
-
-  // Streaming basse latence (LL-HLS) — opt-in, s'applique à la prochaine
-  // lecture (lu au montage du lecteur). Voir utils/lowLatencyPref.ts.
-  const [lowLatencyMovies, setLowLatencyMovies] = useState<boolean>(() => isLowLatencyEnabled('movies'));
-  const handleLowLatencyToggle = () => {
-    const next = !lowLatencyMovies;
-    setLowLatencyEnabled('movies', next);
-    setLowLatencyMovies(next);
   };
 
   const handleRecommendationsToggle = () => {
@@ -1439,25 +1402,6 @@ const SettingsPage: React.FC = () => {
                   </div>
                 </motion.div>
 
-                {/* Bruitages */}
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.125 }}
-                  className="flex items-center justify-between p-4 bg-gray-800/30 rounded-xl border border-gray-700/40 hover:border-gray-600/50 transition-colors group"
-                >
-                  <div className="flex-1 mr-4">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <Volume2 className="w-3.5 h-3.5 text-orange-400" />
-                      <h4 className="font-medium text-white text-sm">{t('settings.soundEffects')}</h4>
-                    </div>
-                    <p className="text-xs text-gray-500 leading-relaxed">
-                      {t('settings.soundEffectsDesc')}
-                    </p>
-                  </div>
-                  {renderToggle(soundEffectsEnabled, handleSoundEffectsToggle)}
-                </motion.div>
-
 
                 {/* Effet neige */}
                 <motion.div
@@ -1572,7 +1516,7 @@ const SettingsPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex-1 mr-4">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <FlaskConical className="w-3.5 h-3.5 text-green-400" />
+                        <Sparkles className="w-3.5 h-3.5 text-red-400" />
                         <h4 className="font-medium text-white text-sm">{t('settings.introAnimation')}</h4>
                       </div>
                       <p className="text-xs text-gray-500 leading-relaxed">
@@ -1723,9 +1667,7 @@ const SettingsPage: React.FC = () => {
 
                 <div className="space-y-2">
                   {([
-                    { key: 'bgAnimations',      titleKey: 'settings.animBgTitle',       descKey: 'settings.animBgDesc' },
                     { key: 'loadingAnimations', titleKey: 'settings.animLoadingTitle',  descKey: 'settings.animLoadingDesc' },
-                    { key: 'carouselAutoplay',  titleKey: 'settings.animCarouselTitle', descKey: 'settings.animCarouselDesc' },
                     { key: 'blurEffects',       titleKey: 'settings.animBlurTitle',     descKey: 'settings.animBlurDesc' },
                     { key: 'transitions',       titleKey: 'settings.animTransTitle',    descKey: 'settings.animTransDesc' },
                   ] as const).map((row) => {

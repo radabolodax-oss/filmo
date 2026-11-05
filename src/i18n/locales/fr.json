@@ -1554,7 +1554,7 @@
     "animTransTitle": "Transitions de page",
     "animTransDesc": "Animations d'apparition/disparition (fondus, glissements) entre pages et modales.",
     "introAnimation": "Animation d'intro",
-    "introAnimationDesc": "Affiche une animation style tableau périodique au lancement du site",
+    "introAnimationDesc": "Affiche une animation cinématique des lettres DAWGER au lancement de l'application",
     "keepScrollPositionBetweenPages": "Conserver la position entre les pages",
     "keepScrollPositionBetweenPagesDesc": "Dawger ne remontera plus automatiquement en haut lors d'un changement de page.",
     "language": "Langue",

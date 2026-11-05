@@ -15,8 +15,10 @@ export const IntroProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [introCompleted, setIntroCompleted] = useState(true);
 
   useEffect(() => {
-    const introEnabled = localStorage.getItem('movix_intro_enabled') === 'true';
-    const hasSeenIntro = localStorage.getItem('movix_intro_seen') === 'true';
+    const introEnabled =
+      localStorage.getItem('dawger_intro_enabled') === 'true' ||
+      localStorage.getItem('movix_intro_enabled') === 'true';
+    const hasSeenIntro = sessionStorage.getItem('dawger_intro_seen') === 'true';
 
     if (introEnabled && !hasSeenIntro) {
       setShowIntro(true);
@@ -24,10 +26,11 @@ export const IntroProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Ecouter les changements de setting (toggle depuis SettingsPage)
+  // Écouter les changements de setting (toggle depuis SettingsPage)
   useEffect(() => {
     const handleIntroReset = () => {
-      // Quand on active l'intro dans les settings, reset le "seen" pour la prochaine visite
+      // Quand on active l'intro dans les settings, reset le "seen" pour la session
+      sessionStorage.removeItem('dawger_intro_seen');
       localStorage.removeItem('movix_intro_seen');
     };
     window.addEventListener('intro_settings_changed', handleIntroReset);
@@ -37,12 +40,14 @@ export const IntroProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const completeIntro = useCallback(() => {
     setShowIntro(false);
     setIntroCompleted(true);
+    sessionStorage.setItem('dawger_intro_seen', 'true');
     localStorage.setItem('movix_intro_seen', 'true');
   }, []);
 
   const skipIntro = useCallback(() => {
     setShowIntro(false);
     setIntroCompleted(true);
+    sessionStorage.setItem('dawger_intro_seen', 'true');
     localStorage.setItem('movix_intro_seen', 'true');
   }, []);
 
