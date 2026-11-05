@@ -1564,33 +1564,6 @@ const SettingsPage: React.FC = () => {
                 {renderToggle(heroHidden, handleHeroToggle)}
               </motion.div>
 
-              {/* Streaming basse latence (LL-HLS) — opt-in. */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.075 }}
-                className="p-4 bg-gray-800/30 rounded-xl border border-gray-700/40 mb-3"
-              >
-                <div className="flex items-center gap-2 mb-0.5">
-                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                  <h4 className="font-medium text-white text-sm">{t('settings.lowLatency')}</h4>
-                </div>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  {t('settings.lowLatencyDesc')}
-                </p>
-
-                <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-amber-100/80 leading-relaxed">
-                    {t('settings.lowLatencyWarning')}
-                  </p>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between p-3 bg-gray-800/30 rounded-lg border border-gray-700/40">
-                  <span className="font-medium text-white text-xs">{t('settings.lowLatencyMovies')}</span>
-                  {renderToggle(lowLatencyMovies, handleLowLatencyToggle, 'green')}
-                </div>
-              </motion.div>
 
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
