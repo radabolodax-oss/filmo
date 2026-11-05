@@ -9,6 +9,7 @@ import {
   Smartphone,
   HelpCircle,
   Github,
+  Instagram,
   Globe,
   Film,
   Tv,
@@ -331,6 +332,17 @@ const Footer: React.FC = () => {
                       <path d="M5.43 11.87c3.5-1.52 5.83-2.53 7-3.02 3.33-1.39 4.03-1.63 4.48-1.64.1 0 .32.02.46.14.12.1.15.23.17.33.02.09.04.3.02.47-.18 1.9-.96 6.5-1.36 8.63-.17.9-.5 1.2-.82 1.23-.7.06-1.23-.46-1.9-.91-1.06-.69-1.66-1.12-2.69-1.8-1.19-.78-.42-1.21.26-1.92.18-.18 3.25-2.98 3.31-3.23.01-.03.01-.15-.06-.21-.07-.06-.17-.04-.25-.02-.1.02-1.79 1.14-5.06 3.35-.48.33-.91.49-1.3.48-.43-.01-1.25-.24-1.86-.44-.75-.24-1.35-.37-1.3-.79.03-.22.33-.44.9-.67Z" fill="#fff" />
                     </svg>
                     Support Telegram
+                    <ArrowUpRight className="w-3 h-3 opacity-60" />
+                  </a>
+
+                  <a
+                    href="https://www.instagram.com/cineviseur_/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-pink-400 hover:text-pink-300 transition-colors"
+                  >
+                    <Instagram className="w-4 h-4 text-pink-400" />
+                    Instagram (@cineviseur_)
                     <ArrowUpRight className="w-3 h-3 opacity-60" />
                   </a>
 

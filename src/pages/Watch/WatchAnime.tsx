@@ -1019,10 +1019,13 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
     try {
       let slug = anicloudSlug;
+      let matchedFilmEpisodeId: number | null = null;
       if (!slug) {
         const candidateQueries = [
           getSearchNameForId(id || '', showDetails.name),
           showDetails.name,
+          showDetails.name?.includes(':') ? showDetails.name.split(':')[0].trim() : null,
+          showDetails.name?.includes('-') ? showDetails.name.split('-')[0].trim() : null,
           (showDetails as any)?.original_name,
           cleanSearchTerm(showDetails.name),
         ].filter(Boolean);
@@ -1036,14 +1039,26 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
               const queryLower = query.toLowerCase();
               const words = queryLower.split(/[\s:,\-'’]+/).filter((w: string) => w.length > 2);
               match = results.find((r: any) => r.name?.toLowerCase() === queryLower) ??
-                      results.find((r: any) => r.name?.toLowerCase().includes(queryLower)) ??
+                      results.find((r: any) => r.name?.toLowerCase().includes(queryLower) || queryLower.startsWith((r.name || '').toLowerCase())) ??
+                      (isMovieMode ? results.find((r: any) => {
+                        const rName = (r.name || '').toLowerCase();
+                        return r.id?.startsWith('anime-film-') && (queryLower.includes(rName) || rName.includes(queryLower));
+                      }) : null) ??
                       (words.length > 1
                         ? results.find((r: any) => {
                             const nameLower = (r.name || '').toLowerCase();
-                            return words.every((w: string) => nameLower.includes(w));
+                            const rWords = nameLower.split(/[\s:,\-'’]+/).filter((w: string) => w.length > 2);
+                            return words.every((w: string) => nameLower.includes(w)) ||
+                                   (rWords.length > 0 && rWords.every((rw: string) => queryLower.includes(rw)));
                           })
                         : null);
-              if (match) break;
+              if (match) {
+                if (match.id && typeof match.id === 'string' && match.id.startsWith('anime-film-')) {
+                  const extracted = parseInt(match.id.replace('anime-film-', ''), 10);
+                  if (!isNaN(extracted)) matchedFilmEpisodeId = extracted;
+                }
+                break;
+              }
             }
           } catch (_) {}
         }
@@ -1094,21 +1109,60 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
       const epsRes = await axios.get(`https://anicloud.top/api/anime-episodes?sectionId=${targetSection.id}`);
       const episodes: any[] = epsRes.data?.episodes ?? [];
-      const targetEpNum = isMovieMode ? 1 : Number(episode || 1);
 
-      let target = episodes.find((e: any) => (isMovieMode || e.episode_number === targetEpNum) && e.language === lang);
-      if (!target && lang === 'vf') {
-        target = episodes.find((e: any) => (isMovieMode || e.episode_number === targetEpNum) && e.language === 'vostfr');
-        if (target) {
-          setAnicloudLang('vostfr');
+      let target: any = null;
+      if (isMovieMode) {
+        // En mode film, cibler précisément l'œuvre (ex: Battle of Gods, Broly, etc.)
+        if (matchedFilmEpisodeId) {
+          target = episodes.find((e: any) => e.id === matchedFilmEpisodeId && e.language === lang) ||
+                   (lang === 'vf' ? episodes.find((e: any) => e.id === matchedFilmEpisodeId && e.language === 'vostfr') : null) ||
+                   episodes.find((e: any) => e.id === matchedFilmEpisodeId);
+        }
+
+        if (!target) {
+          const showWords = (showDetails.name || '')
+            .toLowerCase()
+            .replace(/[:\-–—']/g, ' ')
+            .split(/\s+/)
+            .filter((w: string) => w.length > 2 && !['dragon', 'ball', 'super', 'film', 'movie', 'les', 'des', 'une', 'the'].includes(w));
+
+          const titleMatches = episodes.filter((e: any) => {
+            const eTitle = (e.title || e.name || '').toLowerCase();
+            return showWords.length > 0 && showWords.some((w: string) => eTitle.includes(w));
+          });
+
+          if (titleMatches.length > 0) {
+            target = titleMatches.find((e: any) => e.language === lang) ||
+                     (lang === 'vf' ? titleMatches.find((e: any) => e.language === 'vostfr') : null) ||
+                     titleMatches[0];
+          }
+        }
+
+        if (!target) {
+          target = episodes.find((e: any) => e.language === lang) ||
+                   (lang === 'vf' ? episodes.find((e: any) => e.language === 'vostfr') : null) ||
+                   episodes[0];
+        }
+
+        if (target && target.language && target.language !== lang) {
+          setAnicloudLang(target.language as 'vf' | 'vostfr');
+        }
+      } else {
+        const targetEpNum = Number(episode || 1);
+        target = episodes.find((e: any) => e.episode_number === targetEpNum && e.language === lang);
+        if (!target && lang === 'vf') {
+          target = episodes.find((e: any) => e.episode_number === targetEpNum && e.language === 'vostfr');
+          if (target) {
+            setAnicloudLang('vostfr');
+          }
+        }
+        if (!target) {
+          target = episodes.find((e: any) => e.episode_number === targetEpNum);
         }
       }
-      if (!target) {
-        target = episodes.find((e: any) => isMovieMode || e.episode_number === targetEpNum);
-      }
 
       if (!target) {
-        setAnicloudError(`Épisode ${episode} indisponible sur AniCloud`);
+        setAnicloudError(`Épisode ${episode || 1} indisponible sur AniCloud`);
         handleAutoFallbackNext('anicloud');
         return;
       }

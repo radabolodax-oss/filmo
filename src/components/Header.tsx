@@ -5,6 +5,7 @@ import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import { Film, Search, X, Star, Tv2, Users, Clapperboard, Bell, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NotificationsPopup from './NotificationsPopup';
+import HeaderSettingsModal from './HeaderSettingsModal';
 import { getUnreadNotificationsCount, getNotificationsDisabled } from '../services/apiNotificationService';
 import { encodeId } from '../utils/idEncoder';
 
@@ -45,6 +46,7 @@ const Header: React.FC = () => {
   const { t } = useTranslation();
   const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSnowfallActive, setIsSnowfallActive] = useState(() => {
     return sessionStorage.getItem('snowfall_active') === 'true';
   });
@@ -525,8 +527,30 @@ const Header: React.FC = () => {
                 </form>
               </div>
 
+              {/* Petite roue crantée Paramètres à côté de la barre de recherche */}
+              <button
+                type="button"
+                onClick={() => setIsSettingsModalOpen(true)}
+                title="Paramètres & Aide"
+                aria-label="Paramètres & Aide"
+                className="hidden landscape:flex lg:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white/80 hover:text-white bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 hover:border-emerald-500/30 transition-all duration-200 shadow-sm shrink-0 group cursor-pointer"
+              >
+                <Settings size={15} className="text-emerald-400 group-hover:rotate-45 transition-transform duration-300" />
+                <span>Paramètres</span>
+              </button>
+
               {/* Right section */}
               <div className="flex items-center gap-1 sm:gap-1.5">
+                {/* Mobile Settings Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsModalOpen(true)}
+                  aria-label="Paramètres & Aide"
+                  title="Paramètres & Aide"
+                  className="landscape:hidden lg:hidden flex items-center justify-center p-2 text-gray-400 hover:text-white transition-colors"
+                >
+                  <Settings size={20} className="text-emerald-400" />
+                </button>
                 {/* Mobile Search Button */}
                 <button
                   type="button"
@@ -789,6 +813,12 @@ const Header: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Modal Paramètres & Aide */}
+      <HeaderSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+      />
 
       {/* Spacer */}
       <div className="w-full h-0" aria-hidden="true" />

@@ -359,6 +359,20 @@ export function getSearchNameForId(
       return "Death Note"; // Cas spécial pour Death Note (anime)
     case "250598":
       return "The Ossan Newbie Adventurer"; // Cas spécial pour Shinmai Ossan Bokensha
+    case "312359":
+      return "Dragon Ball Super"; // Dragon Ball Super : Beerus (Arc Beerus)
+    case "126963":
+      return "Dragon Ball Z"; // Dragon Ball Z - Battle of Gods (Film 14)
+    case "62715":
+      return "Dragon Ball Super";
+    case "12971":
+      return "Dragon Ball Z";
+    case "610150":
+      return "Dragon Ball Super"; // Dragon Ball Super : Super Hero
+    case "503314":
+      return "Dragon Ball Super"; // Dragon Ball Super - Broly
+    case "238636":
+      return "Dragon Ball Z"; // Dragon Ball Z : La Résurrection de F (Film 15)
     case "70881":
       return "Boruto"; // Cas spÃ©cial pour Boruto: Naruto Next Generations
     default:
