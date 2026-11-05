@@ -846,16 +846,6 @@ const SettingsPage: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    return subscribeToPrefsChanges((next) => setExtractionPrefsState(next));
-  }, []);
-
-  // Le 10s setInterval qui pollait `cacheStats` vit maintenant dans
-  // <ExtensionCacheStatsBlock />. Ici on garde un fetch one-shot au mount
-  // pour `extractionSessionStats` + `cacheStats` (snapshot) qui alimentent le
-  // panel m3u8 expandable (collapsed par défaut). Pas de polling : ces compteurs
-  // sont des stats de session, ils n'évoluent pas pendant que l'user reste
-  
   const handleNotificationsToggle = async () => {
     const authToken = localStorage.getItem('auth_token');
     if (!authToken || notificationsLoading) return;
