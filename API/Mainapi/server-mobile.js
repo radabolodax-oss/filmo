@@ -13,8 +13,35 @@
  * their implementation at require-time based on these env vars.
  */
 
+// Polyfill Node 18 globals for undici/cheerio compatibility
+if (typeof globalThis.File === 'undefined') {
+  try {
+    const { Blob } = require('buffer');
+    class File extends Blob {
+      constructor(bits, name, opts = {}) {
+        super(bits, opts);
+        this.name = String(name);
+        this.lastModified = opts.lastModified || Date.now();
+      }
+      get [Symbol.toStringTag]() {
+        return 'File';
+      }
+    }
+    globalThis.File = File;
+  } catch (e) {
+    console.error('[File Polyfill] Failed:', e);
+  }
+}
+
 process.env.DB_BACKEND = process.env.DB_BACKEND || 'sqlite';
 process.env.REDIS_BACKEND = process.env.REDIS_BACKEND || 'memory';
+
+process.on('uncaughtException', (err) => {
+  console.error('[CRITICAL] Uncaught exception in mobile server:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRITICAL] Unhandled rejection in mobile server:', reason);
+});
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });

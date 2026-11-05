@@ -203,7 +203,7 @@ function calculateTitleSimilarity(title1, title2) {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[\u00ae\u2122\u00a9]/g, "")
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/[^a-zA-Z0-9\s]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   const norm1 = normalize(t1);

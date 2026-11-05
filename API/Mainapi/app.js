@@ -1,3 +1,23 @@
+// Polyfill Node 18 globals for undici/cheerio compatibility
+if (typeof globalThis.File === 'undefined') {
+  try {
+    const { Blob } = require('buffer');
+    class File extends Blob {
+      constructor(bits, name, opts = {}) {
+        super(bits, opts);
+        this.name = String(name);
+        this.lastModified = opts.lastModified || Date.now();
+      }
+      get [Symbol.toStringTag]() {
+        return 'File';
+      }
+    }
+    globalThis.File = File;
+  } catch (e) {
+    console.error('[File Polyfill] Failed:', e);
+  }
+}
+
 /**
  * Express application setup.
  * Extracted from server.js -- creates the app, mounts middleware and routes.
@@ -47,7 +67,6 @@ const {
 } = require("./utils/proxyManager");
 
 const axios = require("axios");
-const { wrapper } = require("axios-cookiejar-support");
 const tough = require("tough-cookie");
 const axiosHelpers = require("./utils/axiosHelpers");
 
