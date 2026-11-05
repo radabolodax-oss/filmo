@@ -10,20 +10,6 @@ import {
   Zap, RefreshCw, ChevronDown, ListOrdered, Gauge, Film, FastForward, Clock
 } from 'lucide-react';
 import axios from 'axios';
-import {
-  getExtractionPrefs,
-  setExtractionPrefs,
-  resetExtractionPrefs,
-  subscribeToPrefsChanges,
-  pushPrefsToExtension,
-  M3U8_EXTRACTOR_KEYS,
-  EXTRACTION_METHOD_KEYS,
-  type ExtractionPrefs,
-  type M3u8ExtractorKey,
-  type ExtractionMethod,
-} from '../utils/extractionPrefs';
-import { isExtensionAvailable, fetchFromExtension } from '../utils/extensionProxy';
-import { isUserVip } from '../utils/authUtils';
 import { isLowLatencyEnabled, setLowLatencyEnabled } from '../utils/lowLatencyPref';
 import { unsubscribeFromPush } from '../services/pushNotificationService';
 import { clearStoredAuthSession, getResolvedAccountContext, setPendingAuthLink } from '../utils/accountAuth';
@@ -44,24 +30,11 @@ import {
 import { useTranslation } from 'react-i18next';
 import { AVAILABLE_LANGUAGES, changeLanguage, type SupportedLanguage } from '../i18n';
 import { useLightMode } from '../context/LightModeContext';
-import {
-  BG_ACCENT_PRESETS,
-  BG_STORAGE_KEYS,
-  type BgAccentKey,
-  type BgAccentValue,
-  hexToRgbString,
-  notifyBgPrefsChanged,
-} from '../utils/bgPreferences';
 
 const API_URL = import.meta.env.VITE_MAIN_API;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface VipStatus {
-  isVip: boolean;
-  expiresAt?: string;
-  features: string[];
-}
 
 interface UserSession {
   id: string;
@@ -267,72 +240,6 @@ const StorageMetricsBlock: React.FC<StorageMetricsBlockProps> = ({
   );
 };
 
-interface ExtensionCacheStatsBlockProps {
-  extensionPresent: boolean;
-}
-
-const ExtensionCacheStatsBlock: React.FC<ExtensionCacheStatsBlockProps> = ({ extensionPresent }) => {
-  const { t } = useTranslation();
-  const [cacheStats, setCacheStats] = useState<Record<string, number> | null>(null);
-
-  useEffect(() => {
-    if (!extensionPresent) return;
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const cs = await fetchFromExtension<Record<string, number>>('GET_CACHE_STATS').catch(() => null);
-        if (!cancelled) setCacheStats(cs);
-      } catch {
-        // silent
-      }
-    };
-    refresh();
-    const id = window.setInterval(refresh, 10000);
-    return () => { cancelled = true; window.clearInterval(id); };
-  }, [extensionPresent]);
-
-  const handleClearCache = useCallback(async () => {
-    if (!extensionPresent) return;
-    try {
-      await fetchFromExtension('CLEAR_EXTRACTION_CACHE', {});
-      const refreshed = await fetchFromExtension<Record<string, number>>('GET_CACHE_STATS').catch(() => null);
-      setCacheStats(refreshed);
-    } catch (e) {
-      console.warn('[extractions] clear cache failed', e);
-    }
-  }, [extensionPresent]);
-
-  return (
-    <div className="mb-6 rounded-xl border border-white/10 bg-white/5 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-white">{t('settings.extractions.cache.title')}</h3>
-        <button
-          onClick={handleClearCache}
-          disabled={!extensionPresent}
-          className="text-sm text-green-400 hover:text-red-300 disabled:text-gray-600 flex items-center gap-1.5"
-        >
-          <Trash2 className="w-4 h-4" /> {t('settings.extractions.cache.clearAll')}
-        </button>
-      </div>
-      {!extensionPresent ? (
-        <p className="text-sm text-gray-500">{t('settings.extractions.cache.notAvailable')}</p>
-      ) : cacheStats && Object.keys(cacheStats).length > 0 ? (
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          {Object.entries(cacheStats).map(([type, count]) => (
-            <div key={type} className="flex justify-between py-1.5 border-b border-white/5">
-              <span className="text-gray-300 capitalize">{type}</span>
-              <span className="text-gray-500">
-                {t('settings.extractions.cache.entriesOther', { count })}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-gray-500">{t('settings.extractions.cache.empty')}</p>
-      )}
-    </div>
-  );
-};
 
 // ─── Settings Page ───────────────────────────────────────────────────────────
 
@@ -370,182 +277,7 @@ const SettingsPage: React.FC = () => {
     return sessionStorage.getItem('snowfall_active') === 'true';
   });
 
-  // M11 — toggle "se souvenir du dernier lecteur choisi".
-    // Player features state
-  const [autoSkipIntro, setAutoSkipIntro] = useState<boolean>(() => localStorage.getItem('dawger_auto_skip_intro') !== 'false');
-  const [sessionEndPref, setSessionEndPref] = useState<boolean>(() => localStorage.getItem('dawger_session_end_time') !== 'false');
-  const [autoFallbackPref, setAutoFallbackPref] = useState<boolean>(() => localStorage.getItem('dawger_auto_fallback') !== 'false');
-  const [autoNextEpisode, setAutoNextEpisode] = useState<boolean>(() => localStorage.getItem('playerAutoNextEpisodePref') !== 'false');
-  const [saveProgressPref, setSaveProgressPref] = useState<boolean>(() => localStorage.getItem('playerSaveProgressPref') !== 'false');
-  const [speedPref, setSpeedPref] = useState<string>(() => localStorage.getItem('playerPlaybackSpeed') || '1');
-  const [oledPref, setOledPref] = useState<string>(() => localStorage.getItem('playerVideoOled') || 'off');
-
-  useEffect(() => {
-    const syncPlayerPrefs = () => {
-      setAutoSkipIntro(localStorage.getItem('dawger_auto_skip_intro') !== 'false');
-      setSessionEndPref(localStorage.getItem('dawger_session_end_time') !== 'false');
-      setAutoFallbackPref(localStorage.getItem('dawger_auto_fallback') !== 'false');
-      setAutoNextEpisode(localStorage.getItem('playerAutoNextEpisodePref') !== 'false');
-      setSaveProgressPref(localStorage.getItem('playerSaveProgressPref') !== 'false');
-      setSpeedPref(localStorage.getItem('playerPlaybackSpeed') || '1');
-      setOledPref(localStorage.getItem('playerVideoOled') || 'off');
-    };
-    window.addEventListener('dawger-player-prefs-changed', syncPlayerPrefs);
-    window.addEventListener('storage', syncPlayerPrefs);
-    return () => {
-      window.removeEventListener('dawger-player-prefs-changed', syncPlayerPrefs);
-      window.removeEventListener('storage', syncPlayerPrefs);
-    };
-  }, []);
-
-  const notifyPlayerPrefs = () => {
-    window.dispatchEvent(new CustomEvent('dawger-player-prefs-changed'));
-  };
-
-  const handleToggleAutoSkip = () => {
-    const next = !autoSkipIntro;
-    setAutoSkipIntro(next);
-    localStorage.setItem('dawger_auto_skip_intro', next ? 'true' : 'false');
-    notifyPlayerPrefs();
-  };
-
-  const handleToggleSessionEnd = () => {
-    const next = !sessionEndPref;
-    setSessionEndPref(next);
-    localStorage.setItem('dawger_session_end_time', next ? 'true' : 'false');
-    notifyPlayerPrefs();
-  };
-
-  const handleToggleAutoFallback = () => {
-    const next = !autoFallbackPref;
-    setAutoFallbackPref(next);
-    localStorage.setItem('dawger_auto_fallback', next ? 'true' : 'false');
-    notifyPlayerPrefs();
-  };
-
-  const handleToggleAutoNextEpisode = () => {
-    const next = !autoNextEpisode;
-    setAutoNextEpisode(next);
-    localStorage.setItem('playerAutoNextEpisodePref', next ? 'true' : 'false');
-    notifyPlayerPrefs();
-  };
-
-  const handleToggleSaveProgress = () => {
-    const next = !saveProgressPref;
-    setSaveProgressPref(next);
-    localStorage.setItem('playerSaveProgressPref', next ? 'true' : 'false');
-    notifyPlayerPrefs();
-  };
-
-  const handleSpeedChange = (spd: string) => {
-    setSpeedPref(spd);
-    localStorage.setItem('playerPlaybackSpeed', spd);
-    notifyPlayerPrefs();
-  };
-
-  const handleOledChange = (oled: string) => {
-    setOledPref(oled);
-    localStorage.setItem('playerVideoOled', oled);
-    notifyPlayerPrefs();
-  };
-
-  const [rememberLastPlayer, setRememberLastPlayerState] = useState<boolean>(() => getRememberLastPlayer());
-  useEffect(() => subscribeToLastPlayerChanges(() => setRememberLastPlayerState(getRememberLastPlayer())), []);
-  const handleRememberLastPlayerToggle = () => {
-    const next = !rememberLastPlayer;
-    setRememberLastPlayerState(next);
-    setRememberLastPlayer(next);
-  };
-
-  const [bgMode, setBgMode] = useState<'combined' | 'static' | 'animated'>(() => {
-    return (localStorage.getItem('settings_bg_mode') as 'combined' | 'static' | 'animated') || 'combined';
-  });
-
-  // ─── Customisation fond (couleur accent + taille des carrés) ─────────
-  // Presets / helpers partagés dans `utils/bgPreferences.ts` (pour que
-  // SquareBackground puisse aussi les lire quand `forceColor` est activé).
-  const [bgAccent, setBgAccent] = useState<BgAccentValue>(() => {
-    const v = localStorage.getItem(BG_STORAGE_KEYS.accent);
-    if (v === 'custom') return 'custom';
-    return v && v in BG_ACCENT_PRESETS ? (v as BgAccentKey) : 'red';
-  });
-
-  // Couleur custom : seule la valeur committée vit dans la SettingsPage. Le
-  // draft (chaque pixel pendant le drag) est isolé dans `BgColorPickerPanel`
-  // (memo) — sinon chaque pointermove re-render les 3440 lignes de cette
-  // page, d'où le lag perçu. Le panel commit ~100ms après que l'user lâche.
-  const [bgAccentCustomHex, setBgAccentCustomHex] = useState<string>(() => {
-    return localStorage.getItem(BG_STORAGE_KEYS.customHex) || '#ef4444';
-  });
-
-  const [bgSquareSize, setBgSquareSize] = useState<number>(() => {
-    const v = parseInt(localStorage.getItem(BG_STORAGE_KEYS.squareSize) || '48', 10);
-    return [32, 48, 64, 80].includes(v) ? v : 48;
-  });
-
-  const [bgForceColor, setBgForceColor] = useState<boolean>(() => {
-    return localStorage.getItem(BG_STORAGE_KEYS.forceColor) === '1';
-  });
-  const [bgForceSquareSize, setBgForceSquareSize] = useState<boolean>(() => {
-    return localStorage.getItem(BG_STORAGE_KEYS.forceSquareSize) === '1';
-  });
-  const [bgHaloEnabled, setBgHaloEnabled] = useState<boolean>(() => {
-    return localStorage.getItem(BG_STORAGE_KEYS.haloEnabled) !== '0';
-  });
-
-  const bgAccentRgb = bgAccent === 'custom'
-    ? hexToRgbString(bgAccentCustomHex)
-    : BG_ACCENT_PRESETS[bgAccent].rgb;
-  const bgBorderColor = `rgba(${bgAccentRgb}, 0.15)`;
-
-  const handleBgAccentChange = (key: BgAccentValue) => {
-    setBgAccent(key);
-    localStorage.setItem(BG_STORAGE_KEYS.accent, key);
-    notifyBgPrefsChanged();
-  };
-
-  // Appelé par BgColorPickerPanel APRÈS son propre debounce 100ms : ici on
-   // commit direct. Mémorisé pour que la prop `onCommit` soit stable et que
-   // `React.memo` du panel fasse son boulot.
-  const handleBgAccentCustomChange = useCallback((hex: string) => {
-    setBgAccentCustomHex(hex);
-    localStorage.setItem(BG_STORAGE_KEYS.customHex, hex);
-    setBgAccent((prev) => {
-      if (prev !== 'custom') {
-        localStorage.setItem(BG_STORAGE_KEYS.accent, 'custom');
-        return 'custom';
-      }
-      return prev;
-    });
-    notifyBgPrefsChanged();
-  }, []);
-
-  const handleBgSquareSizeChange = (size: number) => {
-    setBgSquareSize(size);
-    localStorage.setItem(BG_STORAGE_KEYS.squareSize, String(size));
-    notifyBgPrefsChanged();
-  };
-
-  const handleBgForceColorToggle = () => {
-    const next = !bgForceColor;
-    setBgForceColor(next);
-    localStorage.setItem(BG_STORAGE_KEYS.forceColor, next ? '1' : '0');
-    notifyBgPrefsChanged();
-  };
-
-  const handleBgHaloToggle = () => {
-    const next = !bgHaloEnabled;
-    setBgHaloEnabled(next);
-    localStorage.setItem(BG_STORAGE_KEYS.haloEnabled, next ? '1' : '0');
-    notifyBgPrefsChanged();
-  };
-
-  const handleBgForceSquareSizeToggle = () => {
-    const next = !bgForceSquareSize;
-    setBgForceSquareSize(next);
-    localStorage.setItem(BG_STORAGE_KEYS.forceSquareSize, next ? '1' : '0');
-    notifyBgPrefsChanged();
-  };
+  
 
   const [introEnabled, setIntroEnabled] = useState(() => {
     return localStorage.getItem('movix_intro_enabled') === 'true';
@@ -561,10 +293,7 @@ const SettingsPage: React.FC = () => {
     return localStorage.getItem('screensaver_mode') || 'backdrop';
   });
 
-  // ─── VIP state ───────────────────────────────────────────────────────────
-
-  const [vipStatus, setVipStatus] = useState<VipStatus>({ isVip: false, features: [] });
-
+  
   // ─── Sessions state ──────────────────────────────────────────────────────
 
   const [sessions, setSessions] = useState<UserSession[]>([]);
@@ -605,10 +334,7 @@ const SettingsPage: React.FC = () => {
   const [historyDisabled, setHistoryDisabled] = useState(() => {
     return localStorage.getItem('settings_disable_history') === 'true';
   });
-  const [commentsSectionHidden, setCommentsSectionHidden] = useState(() => {
-    return localStorage.getItem('settings_hide_comments_section') === 'true';
-  });
-  const [heroHidden, setHeroHidden] = useState(() => {
+    const [heroHidden, setHeroHidden] = useState(() => {
     return localStorage.getItem('settings_hide_hero') === 'true';
   });
   const [showHistoryConfirm, setShowHistoryConfirm] = useState(false);
@@ -646,15 +372,7 @@ const SettingsPage: React.FC = () => {
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // ─── Extractions state ───────────────────────────────────────────────────
-  const [extractionPrefs, setExtractionPrefsState] = useState<ExtractionPrefs>(() => getExtractionPrefs());
-  const [cacheStats, setCacheStats] = useState<Record<string, number> | null>(null);
-  const [extractionSessionStats, setExtractionSessionStats] = useState<{ extractions: number; corsFixed: number; cached: number; byType?: Record<string, number> } | null>(null);
-  const [showResetExtractionsConfirm, setShowResetExtractionsConfirm] = useState(false);
-  const [isClosingResetExtractionsConfirm, setIsClosingResetExtractionsConfirm] = useState(false);
-  const [m3u8SectionExpanded, setM3u8SectionExpanded] = useState(false);
-  const extensionPresent = isExtensionAvailable();
-
+  
   const visibleSections = React.useMemo(() => {
     if (isAuthenticated) return SECTIONS;
     return SECTIONS.filter(s => !['sessions', 'accounts', 'privacy', 'data'].includes(s.id));
@@ -803,27 +521,7 @@ const SettingsPage: React.FC = () => {
     };
   }, [loadServerSyncStats]);
 
-  // ─── Load VIP status ────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const loadVipStatus = () => {
-      const isVip = isUserVip();
-      if (isVip) {
-        const accessCodeExpires = localStorage.getItem('access_code_expires');
-        let expiration = undefined;
-        if (accessCodeExpires && accessCodeExpires !== 'never') {
-          expiration = accessCodeExpires;
-        }
-        setVipStatus({ isVip: true, expiresAt: expiration, features: [t('settings.noAds')] });
-      } else {
-        setVipStatus({ isVip: false, features: [] });
-      }
-    };
-    loadVipStatus();
-    window.addEventListener('storage', loadVipStatus);
-    return () => window.removeEventListener('storage', loadVipStatus);
-  }, [t]);
-
+  
   // ─── Load sessions ──────────────────────────────────────────────────────
 
   const getUserInfo = () => {
@@ -973,7 +671,7 @@ const SettingsPage: React.FC = () => {
   // ─── Lock body scroll on popups ──────────────────────────────────────────
 
   useEffect(() => {
-    if (!showIdPopup && !showLocalStoragePopup && !showNonSyncablePopup && !showImportPopup && !linkModal && !showResetExtractionsConfirm) return;
+    if (!showIdPopup && !showLocalStoragePopup && !showNonSyncablePopup && !showImportPopup && !linkModal) return;
     const original = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const lenis = (window as Window & { lenis?: { stop: () => void; start: () => void } }).lenis;
@@ -982,7 +680,7 @@ const SettingsPage: React.FC = () => {
       document.body.style.overflow = original;
       if (lenis) lenis.start();
     };
-  }, [showIdPopup, showLocalStoragePopup, showNonSyncablePopup, showImportPopup, linkModal, showResetExtractionsConfirm]);
+  }, [showIdPopup, showLocalStoragePopup, showNonSyncablePopup, showImportPopup, linkModal]);
 
   // ─── Handlers ────────────────────────────────────────────────────────────
 
@@ -1032,11 +730,7 @@ const SettingsPage: React.FC = () => {
     window.dispatchEvent(new CustomEvent('snowfall_toggled'));
   };
 
-  const handleBgModeChange = (newMode: 'combined' | 'static' | 'animated') => {
-    setBgMode(newMode);
-    localStorage.setItem('settings_bg_mode', newMode);
-  };
-
+  
   const handleIntroToggle = () => {
     const newValue = !introEnabled;
     setIntroEnabled(newValue);
@@ -1109,13 +803,7 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleCommentsSectionToggle = () => {
-    const newValue = !commentsSectionHidden;
-    setCommentsSectionHidden(newValue);
-    localStorage.setItem('settings_hide_comments_section', String(newValue));
-    window.dispatchEvent(new CustomEvent('comments_section_visibility_changed'));
-  };
-
+  
   const handleHeroToggle = () => {
     const newValue = !heroHidden;
     setHeroHidden(newValue);
@@ -1167,27 +855,7 @@ const SettingsPage: React.FC = () => {
   // pour `extractionSessionStats` + `cacheStats` (snapshot) qui alimentent le
   // panel m3u8 expandable (collapsed par défaut). Pas de polling : ces compteurs
   // sont des stats de session, ils n'évoluent pas pendant que l'user reste
-  // sur la page Settings.
-  useEffect(() => {
-    if (!extensionPresent) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [cs, st] = await Promise.all([
-          fetchFromExtension<Record<string, number>>('GET_CACHE_STATS').catch(() => null),
-          fetchFromExtension<{ extractions: number; corsFixed: number; cached: number; byType?: Record<string, number> }>('GET_STATS').catch(() => null),
-        ]);
-        if (!cancelled) {
-          setCacheStats(cs);
-          setExtractionSessionStats(st);
-        }
-      } catch {
-        // silent
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [extensionPresent]);
-
+  
   const handleNotificationsToggle = async () => {
     const authToken = localStorage.getItem('auth_token');
     if (!authToken || notificationsLoading) return;
@@ -1306,53 +974,7 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  // ─── Extraction handlers ─────────────────────────────────────────────────
-
-  const handleUpdateExtractionPrefs = useCallback((next: ExtractionPrefs) => {
-    setExtractionPrefsState(next);
-    setExtractionPrefs(next);
-    void pushPrefsToExtension(next);
-  }, []);
-
-  const handleToggleM3u8Extractor = useCallback((key: M3u8ExtractorKey, value: boolean) => {
-    handleUpdateExtractionPrefs({
-      ...extractionPrefs,
-      m3u8: { ...extractionPrefs.m3u8, [key]: value },
-    });
-  }, [extractionPrefs, handleUpdateExtractionPrefs]);
-
-  const handleSetExtractionMethod = useCallback((method: ExtractionMethod) => {
-    if (extractionPrefs.method === method) return;
-    handleUpdateExtractionPrefs({ ...extractionPrefs, method });
-  }, [extractionPrefs, handleUpdateExtractionPrefs]);
-
-  const handleToggleAllM3u8 = useCallback((value: boolean) => {
-    const next = { ...extractionPrefs.m3u8 };
-    M3U8_EXTRACTOR_KEYS.forEach((k) => { next[k] = value; });
-    handleUpdateExtractionPrefs({ ...extractionPrefs, m3u8: next });
-  }, [extractionPrefs, handleUpdateExtractionPrefs]);
-
-  // handleClearExtractionCache vit maintenant dans <ExtensionCacheStatsBlock />
-  // (qui possède aussi son propre cacheStats state).
-
-  const handleResetExtractions = useCallback(() => {
-    setShowResetExtractionsConfirm(true);
-  }, []);
-
-  const handleCloseResetExtractionsConfirm = useCallback(() => {
-    setIsClosingResetExtractionsConfirm(true);
-    setTimeout(() => {
-      setShowResetExtractionsConfirm(false);
-      setIsClosingResetExtractionsConfirm(false);
-    }, 300);
-  }, []);
-
-  const handleConfirmResetExtractions = useCallback(() => {
-    resetExtractionPrefs();
-    void pushPrefsToExtension();
-    handleCloseResetExtractionsConfirm();
-  }, [handleCloseResetExtractionsConfirm]);
-
+  
   // Data handlers
   const openIdPopup = () => {
     const account = getResolvedAccountContext();
@@ -2860,69 +2482,7 @@ const SettingsPage: React.FC = () => {
         document.body
       )}
 
-      {/* Reset Extractions Confirmation Popup */}
-      {showResetExtractionsConfirm && createPortal(
-        <AnimatePresence mode="wait">
-          {showResetExtractionsConfirm && !isClosingResetExtractionsConfirm && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[100000]"
-              onClick={(e) => { if (e.target === e.currentTarget) handleCloseResetExtractionsConfirm(); }}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="bg-gray-900 rounded-2xl p-6 max-w-md w-full border border-gray-800 shadow-2xl"
-                data-lenis-prevent
-              >
-                <div className="flex items-start gap-4 mb-5">
-                  <div className="shrink-0 p-3 rounded-xl bg-gradient-to-br from-red-600/20 to-orange-600/20 border border-white/20">
-                    <AlertTriangle className="w-6 h-6 text-green-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-bold text-white mb-1">
-                      {t('settings.extractions.reset')}
-                    </h3>
-                    <p className="text-sm text-gray-400">
-                      {t('settings.extractions.resetConfirm')}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleCloseResetExtractionsConfirm}
-                    className="shrink-0 text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-gray-800 transition-colors"
-                    aria-label={t('common.cancel')}
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-4 border-t border-white/5">
-                  <button
-                    onClick={handleCloseResetExtractionsConfirm}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 transition-colors"
-                  >
-                    {t('common.cancel')}
-                  </button>
-                  <button
-                    onClick={handleConfirmResetExtractions}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white transition-colors"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    {t('common.confirm')}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
-
+      
       {/* ID Popup */}
       {showIdPopup && createPortal(
         <AnimatePresence mode="wait">
