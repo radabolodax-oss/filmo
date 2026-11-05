@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import useWatchStatus from '../../hooks/useWatchStatus';
 
-import { searchWithFallback, getSearchNameForId, getAnimeMatcherForId, getAnimeMatchTerms } from '../../utils/searchUtils';
+import { searchWithFallback, getSearchNameForId, getAnimeMatcherForId, getAnimeMatchTerms, cleanSearchTerm } from '../../utils/searchUtils';
 
 import { encodeId } from '../../utils/idEncoder';
 
@@ -844,44 +844,16 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
 
-  // ——— Fournisseur d'anime actif (Anime-Sama prioritaire, Moviez, Vidzy, etc.) ———
-
+  // ——— Fournisseur d'anime actif (AniCloud prioritaire avec VOE, Anime-Sama, etc.) ———
   const getInitialAnimeProvider = (): 'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy' => {
-
     try {
-
-      if (id) {
-
-        const saved = localStorage.getItem(`dawger_anime_choice_${id}`);
-
-        if (saved) {
-
-          const parsed = JSON.parse(saved);
-
-          if (parsed?.provider && ['animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime'].includes(parsed.provider)) {
-
-            return parsed.provider;
-
-          }
-
-        }
-
-      }
-
       const prefs = getSourcePriorityPrefs();
-
       const first = (prefs.categories.anime?.sourceOrder || []).find((s) => s.enabled);
-
       if (first && ['animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime'].includes(first.id)) {
-
         return first.id as any;
-
       }
-
     } catch (_) {}
-
-    return 'animesama';
-
+    return 'anicloud';
   };
 
   const [provider, setProvider] = useState<'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy'>(getInitialAnimeProvider);
@@ -949,45 +921,35 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
   // Auto-Fallback & Détection de panne Anime (suit la priorité des sources)
+  const handleAutoFallbackNext = useCallback((fromProvider?: string) => {
+    setProvider((currentProvider) => {
+      const activeFrom = fromProvider || currentProvider;
+      console.log('[WatchAnime] Auto-fallback triggered from provider:', activeFrom);
 
-  const handleAutoFallbackNext = useCallback(() => {
+      try {
+        const prefs = getSourcePriorityPrefs();
+        const order = (prefs.categories.anime?.sourceOrder || [
+          { id: 'anicloud', enabled: true },
+          { id: 'animesama', enabled: true },
+          { id: 'franime', enabled: true },
+          { id: 'moviez', enabled: true },
+          { id: 'vidzy', enabled: true },
+          { id: 'wavewatch', enabled: true },
+        ]).filter((s) => s.enabled).map((s) => s.id);
 
-    console.log('[WatchAnime] Auto-fallback triggered from provider:', provider);
-
-    try {
-
-      const prefs = getSourcePriorityPrefs();
-
-      const order = (prefs.categories.anime?.sourceOrder || [
-        { id: 'animesama', enabled: true },
-        { id: 'franime', enabled: true },
-        { id: 'moviez', enabled: true },
-        { id: 'vidzy', enabled: true },
-        { id: 'anicloud', enabled: true },
-        { id: 'wavewatch', enabled: true },
-      ]).filter((s) => s.enabled).map((s) => s.id);
-
-
-
-      const currentIdx = order.indexOf(provider as any);
-
-      if (currentIdx >= 0 && currentIdx < order.length - 1) {
-
-        setProvider(order[currentIdx + 1] as any);
-
-      } else {
-
-        setProvider((order[0] as any) || 'animesama');
-
+        const currentIdx = order.indexOf(activeFrom as any);
+        if (currentIdx >= 0 && currentIdx < order.length - 1) {
+          const next = order[currentIdx + 1] as any;
+          console.log(`[WatchAnime] Auto-fallback next provider: ${next}`);
+          return next;
+        } else {
+          return (order[0] as any) || 'anicloud';
+        }
+      } catch (_) {
+        return 'moviez';
       }
-
-    } catch (_) {
-
-      setProvider('moviez');
-
-    }
-
-  }, [provider]);
+    });
+  }, []);
 
   // Moviez Anime provider states
 
@@ -1048,128 +1010,182 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
   const loadAnicloudEpisode = useCallback(async (lang: 'vf' | 'vostfr' = 'vf') => {
-
-    if (!season || !episode) return;
+    if (!isMovieMode && (!season || !episode)) return;
+    if (!showDetails?.name) return;
 
     setLoadingAnicloud(true);
-
     setAnicloudError(null);
-
     setAnicloudPlayers([]);
 
     try {
-
       let slug = anicloudSlug;
+      if (!slug) {
+        const candidateQueries = [
+          getSearchNameForId(id || '', showDetails.name),
+          showDetails.name,
+          (showDetails as any)?.original_name,
+          cleanSearchTerm(showDetails.name),
+        ].filter(Boolean);
 
-      if (!slug && showDetails?.name) {
+        let match: any = null;
+        for (const query of candidateQueries) {
+          try {
+            const searchRes = await axios.get(`https://anicloud.top/api/search?q=${encodeURIComponent(query)}`);
+            const results: any[] = searchRes.data?.data ?? [];
+            if (results.length > 0) {
+              const queryLower = query.toLowerCase();
+              const words = queryLower.split(/[\s:,\-'’]+/).filter((w: string) => w.length > 2);
+              match = results.find((r: any) => r.name?.toLowerCase() === queryLower) ??
+                      results.find((r: any) => r.name?.toLowerCase().includes(queryLower)) ??
+                      (words.length > 1
+                        ? results.find((r: any) => {
+                            const nameLower = (r.name || '').toLowerCase();
+                            return words.every((w: string) => nameLower.includes(w));
+                          })
+                        : null);
+              if (match) break;
+            }
+          } catch (_) {}
+        }
 
-        const searchRes = await axios.get(`https://anicloud.top/api/search?q=${encodeURIComponent(showDetails.name)}`);
-
-        const results: any[] = searchRes.data?.data ?? [];
-
-        const titleLower = showDetails.name.toLowerCase();
-
-        const match = results.find((r: any) => r.name?.toLowerCase() === titleLower) ?? results[0];
-
-        if (!match) { setAnicloudError('Anime non trouvé sur AniCloud'); return; }
+        if (!match) {
+          setAnicloudError('Anime non trouvé sur AniCloud');
+          handleAutoFallbackNext('anicloud');
+          return;
+        }
 
         slug = match.slug as string;
-
         setAnicloudSlug(slug);
-
       }
 
-      if (!slug) { setAnicloudError('Slug introuvable'); return; }
-
-
+      if (!slug) {
+        setAnicloudError('Slug introuvable');
+        handleAutoFallbackNext('anicloud');
+        return;
+      }
 
       let sections = anicloudSections;
-
       if (!sections.length) {
-
         const loaderRes = await axios.get(`https://anicloud.top/api/anime-loader?slug=${slug}`);
-
         sections = loaderRes.data?.sections ?? [];
-
         setAnicloudSections(sections);
-
       }
 
+      let targetSection: any = null;
+      if (isMovieMode) {
+        targetSection = sections.find((s: any) => s.section_type === 'film' || s.slug === 'film') ?? sections[0];
+      } else {
+        const sNum = Number(season || 1);
+        targetSection = sections.find((s: any) => 
+          s.slug === `saison${sNum}` || 
+          s.name?.toLowerCase().includes(`saison ${sNum}`) ||
+          s.name?.toLowerCase() === `saison ${sNum}`
+        );
+        if (!targetSection) {
+          targetSection = sections.find((s: any) => s.section_type === 'saison') ?? sections[0];
+        }
+      }
 
+      if (!targetSection) {
+        setAnicloudError('Aucune section disponible');
+        handleAutoFallbackNext('anicloud');
+        return;
+      }
 
-      const mainSection = sections.find((s: any) => s.section_type === 'saison' || s.section_type === 'film') ?? sections[0];
-
-      if (!mainSection) { setAnicloudError('Aucune section disponible'); return; }
-
-
-
-      const epsRes = await axios.get(`https://anicloud.top/api/anime-episodes?sectionId=${mainSection.id}`);
-
+      const epsRes = await axios.get(`https://anicloud.top/api/anime-episodes?sectionId=${targetSection.id}`);
       const episodes: any[] = epsRes.data?.episodes ?? [];
+      const targetEpNum = isMovieMode ? 1 : Number(episode || 1);
 
-      const target = episodes.find((e: any) => e.episode_number === Number(episode) && e.language === lang);
+      let target = episodes.find((e: any) => (isMovieMode || e.episode_number === targetEpNum) && e.language === lang);
+      if (!target && lang === 'vf') {
+        target = episodes.find((e: any) => (isMovieMode || e.episode_number === targetEpNum) && e.language === 'vostfr');
+        if (target) {
+          setAnicloudLang('vostfr');
+        }
+      }
+      if (!target) {
+        target = episodes.find((e: any) => isMovieMode || e.episode_number === targetEpNum);
+      }
 
-      if (!target) { setAnicloudError(`Épisode ${episode} indisponible en ${lang.toUpperCase()}`); return; }
-
-
+      if (!target) {
+        setAnicloudError(`Épisode ${episode} indisponible sur AniCloud`);
+        handleAutoFallbackNext('anicloud');
+        return;
+      }
 
       const playersRes = await axios.get(`https://anicloud.top/api/anime-players?episodeId=${target.id}`);
+      let rawPlayers: any[] = playersRes.data?.players ?? [];
 
-      const players = playersRes.data?.players ?? [];
+      const players = rawPlayers.map((p: any) => {
+        let url = p.player_url || '';
+        if (url.startsWith('/')) {
+          url = `https://anicloud.top${url}`;
+        }
+        return { ...p, player_url: url };
+      });
 
-      setAnicloudPlayers(players);
+      if (!players.length) {
+        setAnicloudError('Aucun lecteur disponible sur AniCloud');
+        handleAutoFallbackNext('anicloud');
+        return;
+      }
 
-      // Se souvenir automatiquement du lecteur choisi sur un épisode précédent du même anime.
+      // Priorité VOE pour tous les animes
+      const sortedPlayers = [...players].sort((a: any, b: any) => {
+        const aName = (a.player_name || '').toLowerCase();
+        const aUrl = (a.player_url || '').toLowerCase();
+        const aIsVoe = aName === 'voe' || aName.includes('voe') || aUrl.includes('voe.sx') || aUrl.includes('voembed');
 
-      const savedChoice = readSavedAnimeChoice(id);
+        const bName = (b.player_name || '').toLowerCase();
+        const bUrl = (b.player_url || '').toLowerCase();
+        const bIsVoe = bName === 'voe' || bName.includes('voe') || bUrl.includes('voe.sx') || bUrl.includes('voembed');
 
-      const remembered = rememberedAnicloudPlayerNameRef.current || savedChoice?.playerName || null;
+        if (aIsVoe && !bIsVoe) return -1;
+        if (!aIsVoe && bIsVoe) return 1;
+        return 0;
+      });
 
-      const rememberedIdx = remembered ? players.findIndex((p: any) => p.player_name?.toLowerCase() === remembered.toLowerCase()) : -1;
+      setAnicloudPlayers(sortedPlayers);
 
-      setAnicloudPlayerIdx(rememberedIdx >= 0 ? rememberedIdx : 0);
+      // Chercher VOE en priorité
+      const voeIdx = sortedPlayers.findIndex((p: any) => {
+        const name = (p.player_name || '').toLowerCase();
+        const url = (p.player_url || '').toLowerCase();
+        return name === 'voe' || name.includes('voe') || url.includes('voe.sx') || url.includes('voembed');
+      });
 
+      if (voeIdx >= 0) {
+        setAnicloudPlayerIdx(voeIdx);
+        rememberedAnicloudPlayerNameRef.current = sortedPlayers[voeIdx].player_name;
+      } else {
+        const savedChoice = readSavedAnimeChoice(id);
+        const remembered = rememberedAnicloudPlayerNameRef.current || savedChoice?.playerName || null;
+        const rememberedIdx = remembered ? sortedPlayers.findIndex((p: any) => p.player_name?.toLowerCase() === remembered.toLowerCase()) : -1;
+        setAnicloudPlayerIdx(rememberedIdx >= 0 ? rememberedIdx : 0);
+      }
     } catch {
-
       setAnicloudError('Erreur lors du chargement AniCloud');
-
+      handleAutoFallbackNext('anicloud');
     } finally {
-
       setLoadingAnicloud(false);
-
     }
-
-  }, [showDetails?.name, season, episode, anicloudSlug, anicloudSections]);
-
-
+  }, [showDetails?.name, (showDetails as any)?.original_name, season, episode, isMovieMode, anicloudSlug, anicloudSections, id, handleAutoFallbackNext]);
 
   // Reset AniCloud slug/sections quand on change d'anime
-
   useEffect(() => {
-
     setAnicloudSlug(null);
-
     setAnicloudSections([]);
-
     setAnicloudPlayers([]);
-
     setAnicloudError(null);
-
   }, [id]);
 
-
-
   // Déclenche le fetch AniCloud quand le fournisseur/l'épisode change
-
   useEffect(() => {
-
     if (provider !== 'anicloud') return;
-
+    if (!showDetails?.name) return;
     loadAnicloudEpisode(anicloudLang);
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
-
-  }, [provider, season, episode, anicloudLang]);
+  }, [provider, season, episode, anicloudLang, showDetails?.name]);
 
 
 
@@ -1195,12 +1211,18 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
     setFranimeLoading(true);
     setFranimeError(null);
 
-    const queryUrl = `${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(showDetails.name)}${showDetails.original_name ? `&alt=${encodeURIComponent(showDetails.original_name)}` : ''}`;
+    const effectiveName = getSearchNameForId(id || '', showDetails.name);
+    const queryUrl = `${MAIN_API}/api/franime/lookup?q=${encodeURIComponent(effectiveName)}${showDetails.original_name ? `&alt=${encodeURIComponent(showDetails.original_name)}` : ''}`;
 
     axios.get(queryUrl)
       .then(res => {
         if (cancelled) return;
         const data = res.data as { slug: string; animeId: string; langs: string[] };
+        if (!data || !data.slug) {
+          setFranimeError('Anime non trouvé sur FRAnime');
+          handleAutoFallbackNext('franime');
+          return;
+        }
         setFranimeLookup(data);
         if (data.langs?.length) {
           setFranimeLang(data.langs.includes('vf') ? 'vf' : data.langs[0]);
@@ -1210,6 +1232,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
         if (!cancelled) {
           console.warn('[FRAnime] Erreur lookup:', err);
           setFranimeError('Anime non trouvé sur FRAnime');
+          handleAutoFallbackNext('franime');
         }
       })
       .finally(() => {
@@ -1217,7 +1240,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
       });
 
     return () => { cancelled = true; };
-  }, [provider, showDetails?.name, showDetails?.original_name]);
+  }, [provider, showDetails?.name, showDetails?.original_name, id, handleAutoFallbackNext]);
 
 
 
@@ -2059,18 +2082,19 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
 
-            // Ne prendre que si la similarité est suffisamment élevée (au moins 0.6)
+            // Ne prendre que si la similarité est suffisamment élevée ET que les mots significatifs sont présents
+            const queryWords = searchName.toLowerCase().split(/[\s:,\-'’]+/).filter((w: string) => w.length > 2);
+            const topCandidate = resultsWithSimilarity[0];
+            const candidateMatchesWords = topCandidate && (() => {
+              const candText = [topCandidate.anime.name, ...(topCandidate.anime.alternative_names || [])].join(' ').toLowerCase();
+              return queryWords.length > 0 && queryWords.every((w: string) => candText.includes(w));
+            })();
 
-            if (resultsWithSimilarity.length > 0 && resultsWithSimilarity[0].similarity >= 0.6) {
-
-              bestMatch = resultsWithSimilarity[0].anime;
-
-              console.log(`Correspondance par similarité trouvée: "${bestMatch.name}" (similarité: ${resultsWithSimilarity[0].similarity})`);
-
+            if (topCandidate && (topCandidate.similarity >= 0.85 || (topCandidate.similarity >= 0.65 && candidateMatchesWords))) {
+              bestMatch = topCandidate.anime;
+              console.log(`Correspondance par similarité validée: "${bestMatch.name}" (similarité: ${topCandidate.similarity})`);
             } else if (resultsWithSimilarity.length > 0) {
-
-              console.log(`Aucune correspondance suffisante trouvée. Meilleure similarité: "${resultsWithSimilarity[0].anime.name}" (${resultsWithSimilarity[0].similarity})`);
-
+              console.log(`Aucune correspondance suffisante validée pour "${searchName}". Meilleure candidate rejetée: "${topCandidate.anime.name}" (${topCandidate.similarity})`);
             }
 
           }
@@ -2080,54 +2104,38 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
         // --- FIN PATCH SPECIAL ANIMES ---
 
         if (bestMatch && bestMatch.seasons && bestMatch.seasons.length > 0) {
-
           setAnimeData(bestMatch as AnimeData);
-
         } else {
-
           // Anime-Sama indisponible ou pas de saisons trouvées -> bascule selon l'ordre de priorité utilisateur
-
-          handleAutoFallbackNext();
-
+          handleAutoFallbackNext('animesama');
           setLoading(false);
-
         }
-
       } else {
-
         // Anime-Sama recherche sans résultat -> bascule selon l'ordre de priorité utilisateur
-
-        handleAutoFallbackNext();
-
+        handleAutoFallbackNext('animesama');
         setLoading(false);
-
       }
-
     } catch (error) {
-
       console.error('Error loading anime data:', error);
-
-      handleAutoFallbackNext();
-
+      handleAutoFallbackNext('animesama');
       setLoading(false);
-
     }
+  }, [id, showDetails?.name, handleAutoFallbackNext]);
 
-  }, [id, showDetails?.name]);
-
-
-
-  // Load anime data when show details are available
-
+  // Reset anime data when id changes
   useEffect(() => {
+    setAnimeData(null);
+    setError(null);
+  }, [id]);
 
+  // Load anime data when Anime-Sama provider is active
+  useEffect(() => {
+    if (provider !== 'animesama') return;
+    if (animeData) return;
     if (showDetails) {
-
       loadAnimeData();
-
     }
-
-  }, [showDetails, loadAnimeData]);
+  }, [provider, showDetails, loadAnimeData, animeData]);
 
 
 
@@ -3729,11 +3737,11 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                           const order = (prefs.categories.anime?.sourceOrder || []).filter(s => s.enabled).map(s => s.id);
 
                           const allProviders = [
-                            { key: 'animesama', label: 'Anime-Sama', badge: 'Prioritaire' },
+                            { key: 'anicloud', label: 'AniCloud (VOE)', badge: 'Prioritaire' },
+                            { key: 'animesama', label: 'Anime-Sama' },
                             { key: 'franime', label: 'FRAnime (VF/VOSTFR)', badge: 'Recommandé' },
                             { key: 'moviez', label: 'Moviez (Ultra HD)' },
                             { key: 'vidzy', label: 'Vidzy Direct' },
-                            { key: 'anicloud', label: 'AniCloud' },
                             { key: 'wavewatch', label: 'Wavewatch (Multi/VOSTFR)' },
                           ];
 

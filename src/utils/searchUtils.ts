@@ -331,6 +331,10 @@ export function getSearchNameForId(
 
   // Special cases for specific content IDs
   switch (idStr) {
+    case "241002":
+      return "Adam's Sweet Agony";
+    case "99071":
+      return "Redo of Healer";
     case "291904":
       return "Le Monde merveilleusement bizarre de Gumball";
     case "62745":

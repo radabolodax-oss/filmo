@@ -28,6 +28,7 @@ import type {
  * dans la rangée top-level ou représentent des cas spéciaux.
  */
 const SOURCE_MAIN_TO_TOP_LEVEL: Record<string, TopLevelSourceId> = {
+  webflix_main: 'webflix',
   moviez_main: 'moviez',
   vidzy_main: 'vidzy',
   darkino_main: 'darkino',
@@ -96,6 +97,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
     showCoflixMenu,
     showFstreamMenu,
     showWiflixMenu,
+    showWebflixMenu,
     showMoviezMenu,
     showVidzyMenu,
     showJ1fMenu,
@@ -108,6 +110,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
     coflixSources,
     fstreamSources,
     wiflixSources,
+    webflixSources,
     moviezSources,
     vidzySources,
     j1fSources,
@@ -526,6 +529,8 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                             isActive = src === source.url; // Direct comparison for MP4
                           } else if (source.type === 'm3u8') { // Added check for AdFree M3U8
                             isActive = src === source.url;
+                          } else if (source.type === 'webflix_main') {
+                            isActive = !!(webflixSources && webflixSources.some((ws: any) => ws.url === embedUrl));
                           } else if (source.type === 'moviez_main') {
                             isActive = !!(moviezSources && moviezSources.some((ms: any) => ms.url === embedUrl));
                           } else if (source.type === 'vidzy_main') {
@@ -568,12 +573,13 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                     {group.type === 'hls' && (source.type === 'mp4' || source.type === 'm3u8') && renderSourceQualityMeta(source.url, isActive, source.quality, source.label)}
                                   </div>
                                   <div className="ml-3 flex items-center gap-2">
-                                    {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
+                                    {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'webflix_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
                                       <ChevronRight className={`w-4 h-4 transition-transform ${(source.type === 'darkino_main' && showDarkinoMenu) ||
                                         (source.type === 'omega_main' && showOmegaMenu) ||
                                         (source.type === 'multi_main' && showCoflixMenu) ||
                                         (source.type === 'fstream_main' && showFstreamMenu) ||
                                         (source.type === 'wiflix_main' && showWiflixMenu) ||
+                                    (source.type === 'webflix_main' && showWebflixMenu) ||
                                         (source.type === 'moviez_main' && showMoviezMenu) ||
                                         (source.type === 'vidzy_main' && showVidzyMenu) ||
                                         (source.type === 'j1f_main' && showJ1fMenu) ||
@@ -955,7 +961,78 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                   )}
                                 </AnimatePresence>
                               )}
-                              {/* Menu déroulant Moviez */}
+                              {/* Menu déroulant Webflix */}
+                                  {source.type === 'webflix_main' && (
+                                    <AnimatePresence>
+                                      {showWebflixMenu && (
+                                        <motion.div
+                                          initial={{ opacity: 0, scale: 0.95, transformOrigin: "top" }}
+                                          animate={{ opacity: 1, scale: 1 }}
+                                          exit={{ opacity: 0, scale: 0.95 }}
+                                          transition={{ duration: 0.2, ease: "easeOut" }}
+                                          className="ml-4 pl-2 border-l-2 border-purple-500 mb-2"
+                                        >
+                                          {webflixSources && webflixSources.length > 0 && (() => {
+                                            const sourcesByCategory = webflixSources.reduce((acc: any, s: any) => {
+                                              const cat = s.category || 'VF';
+                                              if (!acc[cat]) acc[cat] = [];
+                                              acc[cat].push(s);
+                                              return acc;
+                                            }, {} as Record<string, any[]>);
+
+                                            const categoryOrder = [
+                                              { key: 'VF', label: t('watch.french'), flagCode: 'FR' },
+                                              { key: 'VOSTFR', label: t('watch.voSubtitledFr'), flagCode: 'GB' }
+                                            ];
+
+                                            return categoryOrder.map((cat) => {
+                                              const catSources = sourcesByCategory[cat.key];
+                                              if (!catSources || catSources.length === 0) return null;
+                                              return (
+                                                <div key={`webflix_cat_${cat.key}`} className="mb-3">
+                                                  <div className="flex items-center gap-2 mb-2 px-2">
+                                                    <span className="text-lg"><ReactCountryFlag countryCode={cat.flagCode} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }} /></span>
+                                                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                                      {cat.label} ({catSources.length})
+                                                    </span>
+                                                  </div>
+                                                  {catSources.map((mSource: any, index: number) => {
+                                                    const globalIndex = webflixSources.findIndex((s: any) => s.url === mSource.url);
+                                                    const isMActive = onlyQualityMenu && embedType === 'webflix' && embedUrl === mSource.url;
+                                                    return (
+                                                      <div key={`webflix_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
+                                                        <motion.button
+                                                          initial={{ opacity: 0, x: -20 }}
+                                                          animate={{ opacity: 1, x: 0 }}
+                                                          transition={{ duration: 0.2, delay: index * 0.03 }}
+                                                          onClick={() => handleSourceChange('webflix', `webflix_${globalIndex}`, mSource.url)}
+                                                          className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isMActive ? 'ring-2 ring-purple-500 bg-gray-800/80' : ''}`}
+                                                        >
+                                                          <span>
+                                                            {mSource.label}
+                                                            {detectHoster(mSource.url) && detectHoster(mSource.url) !== 'unknown' && pinnedHosterId === detectHoster(mSource.url) && (
+                                                              <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
+                                                            )}
+                                                          </span>
+                                                          <div className="flex items-center gap-2">
+                                                            <span className="text-xs text-gray-500">{mSource.category}</span>
+                                                            {isMActive && <span className="text-xs px-2 py-1 bg-purple-600 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                          </div>
+                                                        </motion.button>
+                                                        {detectHoster(mSource.url) && detectHoster(mSource.url) !== 'unknown' && renderHosterPin(detectHoster(mSource.url))}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              );
+                                            }).filter(Boolean);
+                                          })()}
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
+                                  )}
+                                  
+                                  {/* Menu déroulant Moviez */}
                               {source.type === 'moviez_main' && (
                                 <AnimatePresence>
                                   {showMoviezMenu && (

@@ -7,7 +7,7 @@
 // Security headers (minimal set -- replaces Helmet)
 function securityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  if (!req.path.startsWith('/api/moviez/miaw-')) {
+  if (!req.path.startsWith('/api/moviez/miaw-') && !req.path.startsWith('/api/webflix/')) {
     res.setHeader('X-Frame-Options', 'DENY');
   }
   res.setHeader('X-XSS-Protection', '0'); // Disabled per OWASP recommendation (use CSP instead)

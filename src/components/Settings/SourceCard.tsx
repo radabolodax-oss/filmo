@@ -1,4 +1,4 @@
-﻿// src/components/Settings/SourceCard.tsx
+// src/components/Settings/SourceCard.tsx
 //
 // Card présentant une source top-level (Films/Séries) dans le panneau
 // "Priorité des sources". Compose :
@@ -20,10 +20,12 @@ import type { TopLevelSourceId } from '../../types/sourcePriority';
  * Exporté pour réutilisation par M6 (overrides dialog).
  */
 export const SOURCE_LABELS: Record<string, string> = {
+  webflix: 'Webflix (FastFlux 1080p)',
+  fastflux: 'FastFlux (MP4 Direct)',
   moviez: 'Moviez (Ultra HD)',
   vidzy: 'Vidzy Direct (TMDB)',
-  animesama: 'Anime-Sama (Prioritaire)',
-  anicloud: 'AniCloud',
+  anicloud: 'AniCloud (Prioritaire)',
+  animesama: 'Anime-Sama',
   franime: 'FRAnime',
   darkino: 'Darkino',
   mp4: 'MP4 direct',

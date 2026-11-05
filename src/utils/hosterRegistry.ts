@@ -23,6 +23,8 @@ import {
  * aux consommateurs (detectHoster lit le registre via getEffectivePatterns).
  */
 export const BUILTIN_HOSTER_PATTERNS: Record<BuiltinHosterId, string[]> = {
+  webflix: ['webflix\\.bio', 'webflix'],
+  fastflux: ['fastflux', 'zen-blk'],
   miaw: ['miaw-embed', 'miaw-video', 'zen-blk', 'miaw\\.tv'],
   moviez: ['moviez\\.ac'],
   voe: [
@@ -160,6 +162,8 @@ export function getHosterDisplayName(url: string, hoster: BuiltinHosterId): stri
 
 /** Labels human-readable pour UI. */
 export const HOSTER_LABELS: Record<BuiltinHosterId, string> = {
+  webflix: 'Webflix (Lecteur HD)',
+  fastflux: 'Webflix FastFlux (1080p FHD)',
   miaw: 'Serveur Ultra (1080p HD)',
   moviez: 'Moviez',
   voe: 'Voe',

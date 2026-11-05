@@ -65,6 +65,7 @@ import type {
 // Milestone 4 — mapping des `source.type` (top-level row) vers `TopLevelSourceId`.
 // Doit rester en phase avec `SOURCE_MAIN_TO_TOP_LEVEL` dans HLSPlayerSettingsPanel.tsx.
 const SOURCE_MAIN_TO_TOP_LEVEL: Record<string, TopLevelSourceId> = {
+  webflix_main: 'webflix',
   moviez_main: 'moviez',
   vidzy_main: 'vidzy',
   darkino_main: 'darkino',
@@ -560,6 +561,7 @@ interface HLSPlayerProps {
   coflixSources?: any[];
   fstreamSources?: { url: string; label: string; category: string }[];
   wiflixSources?: { url: string; label: string; category: string }[];
+  webflixSources?: { url: string; label: string; category: string }[];
   moviezSources?: { url: string; label: string; category: string }[];
   vidzySources?: { url: string; label: string; category: string }[];
   j1fSources?: { url: string; label: string; category: string }[];
@@ -828,6 +830,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   coflixSources = [],
   fstreamSources = [],
   wiflixSources = [],
+  webflixSources = [],
   moviezSources = [],
   vidzySources = [],
   j1fSources = [],
@@ -1194,6 +1197,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [showNexusMenu, setShowNexusMenu] = useState(false);
   const [showFstreamMenu, setShowFstreamMenu] = useState(false);
   const [showWiflixMenu, setShowWiflixMenu] = useState(false);
+  const [showWebflixMenu, setShowWebflixMenu] = useState(false);
   const [showMoviezMenu, setShowMoviezMenu] = useState(false);
   const [showVidzyMenu, setShowVidzyMenu] = useState(false);
   const [showJ1fMenu, setShowJ1fMenu] = useState(false);
@@ -1962,6 +1966,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       console.log('❌ [HLSPlayer] No Wiflix/Lynx sources available:', wiflixSources);
     }
 
+    // Add Webflix sources
+    if (webflixSources && webflixSources.length > 0) {
+      embedSources.push({
+        type: 'webflix_main',
+        id: 'webflix_main',
+        label: `Lecteurs Webflix (${webflixSources.length})`,
+        url: '#',
+      });
+    }
+
     // Add Moviez sources
     if (moviezSources && moviezSources.length > 0) {
       embedSources.push({
@@ -2140,6 +2154,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       const getOrderRank = (src: SourceOption): number => {
         let topId: string = src.type;
         if (src.id === 'wavewatch') topId = 'wavewatch';
+        else if (src.type === 'webflix_main') topId = 'webflix';
         else if (src.type === 'moviez_main') topId = 'moviez';
         else if (src.type === 'vidzy_main') topId = 'vidzy';
         else if (src.type === 'darkino_main') topId = 'darkino';
@@ -2161,8 +2176,19 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       embedSources.sort((a, b) => getOrderRank(a) - getOrderRank(b));
     } catch (_) {}
 
-    // Organiser en groupes
+    // Organiser en groupes avec Webflix tout en haut des sources
     const groups: SourceGroup[] = [];
+
+    const webflixSource = embedSources.find(s => s.type === 'webflix_main');
+    const remainingEmbedSources = embedSources.filter(s => s.type !== 'webflix_main');
+
+    if (webflixSource) {
+      groups.push({
+        type: 'embed',
+        title: 'Lecteurs Webflix (Recommandé)',
+        sources: [webflixSource]
+      });
+    }
 
     if (hlsSources.length > 0) {
       groups.push({
@@ -2172,11 +2198,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       });
     }
 
-    if (embedSources.length > 0) {
+    if (remainingEmbedSources.length > 0) {
       groups.push({
         type: 'embed',
         title: t('watch.embedPlayers'),
-        sources: embedSources
+        sources: remainingEmbedSources
       });
     }
 
@@ -2195,6 +2221,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     coflixSources?.length,
     fstreamSources?.length,
     wiflixSources?.length,
+    webflixSources?.length,
+    moviezSources?.length,
+    vidzySources?.length,
     j1fSources?.length,
     viperSources?.length,
     movieId,
@@ -2205,6 +2234,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     showNexusMenu,
     showFstreamMenu,
     showWiflixMenu,
+    showWebflixMenu,
+    showMoviezMenu,
+    showVidzyMenu,
     showJ1fMenu,
     showViperMenu,
     showVostfrMenu,
@@ -2246,7 +2278,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   // Fonction pour gérer le changement de source
   const handleSourceChange = (sourceType: string, sourceId: string, sourceUrl: string) => {
     // --- Dropdown Toggle Handling (Doesn't close settings) ---
-    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'moviez_main' || sourceType === 'vidzy_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main') {
+    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'webflix_main' || sourceType === 'moviez_main' || sourceType === 'vidzy_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main') {
       setShowDarkinoMenu(sourceType === 'darkino_main' ? !showDarkinoMenu : false);
       setShowOmegaMenu(sourceType === 'omega_main' ? !showOmegaMenu : false);
       setShowCoflixMenu(sourceType === 'multi_main' ? !showCoflixMenu : false);
@@ -2254,6 +2286,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       setShowNexusMenu(sourceType === 'nexus_main' ? !showNexusMenu : false);
       setShowFstreamMenu(sourceType === 'fstream_main' ? !showFstreamMenu : false);
       setShowWiflixMenu(sourceType === 'wiflix_main' ? !showWiflixMenu : false);
+      setShowWebflixMenu(sourceType === 'webflix_main' ? !showWebflixMenu : false);
       setShowMoviezMenu(sourceType === 'moviez_main' ? !showMoviezMenu : false);
       setShowVidzyMenu(sourceType === 'vidzy_main' ? !showVidzyMenu : false);
       setShowJ1fMenu(sourceType === 'j1f_main' ? !showJ1fMenu : false);
@@ -2301,6 +2334,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       const index = parseInt(sourceId.split('_')[1], 10);
       if (wiflixSources && wiflixSources[index]) {
         targetUrl = wiflixSources[index].url || '';
+      }
+    } else if (sourceType === 'webflix') {
+      const index = parseInt(sourceId.split('_')[1], 10);
+      if (webflixSources && webflixSources[index]) {
+        targetUrl = webflixSources[index].url || sourceUrl || '';
+      } else {
+        targetUrl = sourceUrl || '';
       }
     } else if (sourceType === 'moviez') {
       const index = parseInt(sourceId.split('_')[1], 10);
@@ -2362,7 +2402,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     }, 500);
 
     // Close settings panel for embed sources (keep open for HLS sources to allow quality selection)
-    const embedTypes = ['frembed', 'custom', 'omega', 'coflix', 'vostfr', 'adfree', 'fstream', 'wiflix', 'moviez', 'vidzy', 'j1f', 'viper', 'vox'];
+    const embedTypes = ['webflix', 'frembed', 'custom', 'omega', 'coflix', 'vostfr', 'adfree', 'fstream', 'wiflix', 'moviez', 'vidzy', 'j1f', 'viper', 'vox'];
     if (embedTypes.includes(sourceType)) {
       // For embed sources, always close settings
       setShowSettings(false);
@@ -7755,6 +7795,12 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                         isActive = src === source.url; // Direct comparison for MP4
                       } else if (source.type === 'm3u8') { // Added check for AdFree M3U8
                         isActive = src === source.url;
+                      } else if (source.type === 'webflix_main') {
+                        isActive = !!(webflixSources && webflixSources.some(ws => ws.url === embedUrl));
+                      } else if (source.type === 'moviez_main') {
+                        isActive = !!(moviezSources && moviezSources.some(ms => ms.url === embedUrl));
+                      } else if (source.type === 'vidzy_main') {
+                        isActive = !!(vidzySources && vidzySources.some(vs => vs.url === embedUrl));
                       } else {
                         // Existing logic for embed sources
                         isActive = !!source.isActive || (onlyQualityMenu && embedType === source.type && embedUrl === source.url);
@@ -7786,12 +7832,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                 {group.type === 'hls' && (source.type === 'mp4' || source.type === 'm3u8') && renderSourceQualityMeta(source.url, isActive, source.quality, source.label)}
                               </div>
                               <div className="ml-3 flex items-center gap-2">
-                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
+                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'webflix_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
                                   <ChevronRight className={`w-4 h-4 transition-transform ${(source.type === 'darkino_main' && showDarkinoMenu) ||
                                     (source.type === 'omega_main' && showOmegaMenu) ||
                                     (source.type === 'multi_main' && showCoflixMenu) ||
                                     (source.type === 'fstream_main' && showFstreamMenu) ||
                                     (source.type === 'wiflix_main' && showWiflixMenu) ||
+                                    (source.type === 'webflix_main' && showWebflixMenu) ||
                                     (source.type === 'moviez_main' && showMoviezMenu) ||
                                     (source.type === 'vidzy_main' && showVidzyMenu) ||
                                     (source.type === 'j1f_main' && showJ1fMenu) ||
@@ -8242,6 +8289,76 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                                   </div>
                                                 </motion.button>
                                                 {__renderHosterPin(wiflixHosterId)}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    }).filter(Boolean);
+                                  })()}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          )}
+                          {/* Menu déroulant Webflix */}
+                          {source.type === 'webflix_main' && (
+                            <AnimatePresence>
+                              {showWebflixMenu && (
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.95, transformOrigin: "top" }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.95 }}
+                                  transition={{ duration: 0.2, ease: "easeOut" }}
+                                  className="ml-4 pl-2 border-l-2 border-purple-500 mb-2"
+                                >
+                                  {webflixSources && webflixSources.length > 0 && (() => {
+                                    const sourcesByCategory = webflixSources.reduce((acc, s) => {
+                                      const cat = s.category || 'VF';
+                                      if (!acc[cat]) acc[cat] = [];
+                                      acc[cat].push(s);
+                                      return acc;
+                                    }, {} as Record<string, typeof webflixSources>);
+
+                                    const categoryOrder = [
+                                      { key: 'VF', label: t('watch.french'), flagCode: 'FR' },
+                                      { key: 'VOSTFR', label: t('watch.voSubtitledFr'), flagCode: 'GB' }
+                                    ];
+
+                                    return categoryOrder.map((cat) => {
+                                      const catSources = sourcesByCategory[cat.key];
+                                      if (!catSources || catSources.length === 0) return null;
+                                      return (
+                                        <div key={`webflix_cat_${cat.key}`} className="mb-3">
+                                          <div className="flex items-center gap-2 mb-2 px-2">
+                                            <span className="text-lg"><ReactCountryFlag countryCode={cat.flagCode} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }} /></span>
+                                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                              {cat.label} ({catSources.length})
+                                            </span>
+                                          </div>
+                                          {catSources.map((mSource, index) => {
+                                            const globalIndex = webflixSources.findIndex(s => s.url === mSource.url);
+                                            const isMActive = onlyQualityMenu && embedType === 'webflix' && embedUrl === mSource.url;
+                                            return (
+                                              <div key={`webflix_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
+                                                <motion.button
+                                                  initial={{ opacity: 0, x: -20 }}
+                                                  animate={{ opacity: 1, x: 0 }}
+                                                  transition={{ duration: 0.2, delay: index * 0.03 }}
+                                                  onClick={() => handleSourceChange('webflix', `webflix_${globalIndex}`, mSource.url)}
+                                                  className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isMActive ? 'ring-2 ring-purple-500 bg-gray-800/80' : ''}`}
+                                                >
+                                                  <span>
+                                                    {mSource.label}
+                                                    {detectHoster(mSource.url) && detectHoster(mSource.url) !== 'unknown' && __pinnedHosterId === detectHoster(mSource.url) && (
+                                                      <span className="ml-2 text-xs text-amber-400 font-semibold">#1</span>
+                                                    )}
+                                                  </span>
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-gray-500">{mSource.category}</span>
+                                                    {isMActive && <span className="text-xs px-2 py-1 bg-purple-600 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                  </div>
+                                                </motion.button>
+                                                {detectHoster(mSource.url) && detectHoster(mSource.url) !== 'unknown' && __renderHosterPin(detectHoster(mSource.url))}
                                               </div>
                                             );
                                           })}
@@ -10815,6 +10932,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             showCoflixMenu,
             showFstreamMenu,
             showWiflixMenu,
+            showWebflixMenu,
             showMoviezMenu,
             showVidzyMenu,
             showJ1fMenu,
@@ -10827,6 +10945,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             coflixSources,
             fstreamSources,
             wiflixSources,
+            webflixSources,
             moviezSources,
             vidzySources,
             j1fSources,

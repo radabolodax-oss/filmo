@@ -504,7 +504,7 @@ interface EpisodeInfo {
 
 
 
-type PlayerSourceType = 'moviez' | 'vidzy' | 'darkino' | 'mp4' | 'm3u8' | 'frembed' | 'custom' | 'vostfr' | 'omega' | 'coflix' | 'fstream' | 'wiflix' | 'j1f' | 'viper' | 'vox' | string | number; // Allow string for embed types
+type PlayerSourceType = 'webflix' | 'moviez' | 'vidzy' | 'darkino' | 'mp4' | 'm3u8' | 'frembed' | 'custom' | 'vostfr' | 'omega' | 'coflix' | 'fstream' | 'wiflix' | 'j1f' | 'viper' | 'vox' | string | number; // Allow string for embed types
 
 
 
@@ -1194,6 +1194,11 @@ const WatchTv: React.FC = () => {
 
 
 
+  // Webflix TV source states
+  const [webflixSources, setWebflixSources] = useState<{ url: string; label: string; category: string }[]>([]);
+  const [selectedWebflixSource, setSelectedWebflixSource] = useState<number>(0);
+  const [loadingWebflix, setLoadingWebflix] = useState(true);
+
   // Moviez TV source states
 
   const [moviezSources, setMoviezSources] = useState<{ url: string; label: string; category: string }[]>([]);
@@ -1449,6 +1454,14 @@ const WatchTv: React.FC = () => {
   }, [wiflixSources]);
 
 
+
+  const sortedWebflix = useMemo(() => {
+    const annotated = webflixSources.map((s) => ({
+      ...s,
+      type: 'webflix',
+    }));
+    return sortHostersByPriority(annotated, { category: 'moviesTv', topLevel: 'webflix' });
+  }, [webflixSources]);
 
   const sortedMoviez = useMemo(() => {
 
@@ -2998,6 +3011,19 @@ const WatchTv: React.FC = () => {
 
 
 
+        // ========== CHECK WEBFLIX TV SOURCE ==========
+        const webflixPromise = (async () => {
+          try {
+            const resp = await axios.get(`${MAIN_API}/api/webflix/tv/${id}/season/${seasonNumber}/episode/${episodeNumber}`);
+            return resp.data;
+          } catch (error) {
+            console.error('Error fetching Webflix TV source:', error);
+            return null;
+          } finally {
+            setLoadingWebflix(false);
+          }
+        })();
+
         // ========== CHECK MOVIEZ TV SOURCE ==========
 
         const moviezPromise = (async () => {
@@ -3172,6 +3198,7 @@ const WatchTv: React.FC = () => {
           voxResult,
           j1fResult,
           wavewatchUrlResult,
+          webflixResult,
           moviezResult,
           vidzyResult
         ] = await Promise.all([
@@ -3186,6 +3213,7 @@ const WatchTv: React.FC = () => {
           withTimeout(voxPromise, 5000, null),
           withTimeout(j1fPromise, 5000, null),
           withTimeout(wavewatchPromise, 6000, null),
+          withTimeout(webflixPromise, 5000, null),
           withTimeout(moviezPromise, 5000, null),
           withTimeout(vidzyPromise, 5000, null)
         ]);
@@ -4391,6 +4419,30 @@ const WatchTv: React.FC = () => {
         console.log('?? [WatchTv] Wiflix/Lynx TV sources set:', wiflixProcessedSources.length, wiflixProcessedSources);
 
 
+
+        // ========== TRAITEMENT DES RESULTATS WEBFLIX TV ==========
+        let webflixProcessedSources: { url: string; label: string; category: string }[] = [];
+        if (webflixResult && webflixResult.success && webflixResult.players) {
+          console.log('Processing Webflix TV result:', webflixResult);
+          const categories = ['vf', 'vostfr'];
+          const vfSources: { url: string; label: string; category: string }[] = [];
+          const vostfrSources: { url: string; label: string; category: string }[] = [];
+
+          categories.forEach(category => {
+            const categoryPlayers = webflixResult.players[category as keyof typeof webflixResult.players] || [];
+            categoryPlayers.forEach((player: any) => {
+              const source = {
+                url: player.url,
+                label: player.name || `Webflix ${category.toUpperCase()}`,
+                category: category.toUpperCase(),
+              };
+              if (category === 'vf') vfSources.push(source);
+              else vostfrSources.push(source);
+            });
+          });
+          webflixProcessedSources = [...vfSources, ...vostfrSources];
+        }
+        setWebflixSources(webflixProcessedSources);
 
         // =========== TRAITEMENT DES RÉSULTATS MOVIEZ TV ===========
 
@@ -6150,6 +6202,23 @@ const WatchTv: React.FC = () => {
 
             }
 
+            case 'webflix': {
+              if (!webflixProcessedSources.length) return false;
+              console.log('Selecting WEBFLIX TV as source');
+              const sortedWebflixLocal = sortHostersByPriority(
+                webflixProcessedSources.map((s) => ({ ...s, type: detectHoster(s.url) ?? 'webflix' })),
+                { category: 'moviesTv', topLevel: 'webflix' },
+              );
+              const pickIdx = pickRememberedSubIndex(sortedWebflixLocal, 'webflix', s => s.url || '');
+              setSelectedSource('webflix');
+              setSelectedWebflixSource(pickIdx);
+              setEmbedUrl(sortedWebflixLocal[pickIdx].url);
+              setEmbedType('webflix');
+              currentSourceRef.current = 'webflix';
+              setOnlyVostfrAvailable(false);
+              return true;
+            }
+
             case 'moviez': {
 
               if (!moviezProcessedSources.length) return false;
@@ -6524,6 +6593,7 @@ const WatchTv: React.FC = () => {
 
             { id: 'wiflix', hasData: wiflixProcessedSources.length > 0 },
 
+            { id: 'webflix', hasData: webflixProcessedSources.length > 0 },
             { id: 'moviez', hasData: moviezProcessedSources.length > 0 },
 
             { id: 'vidzy', hasData: vidzyProcessedSources.length > 0 },
@@ -6674,6 +6744,12 @@ const WatchTv: React.FC = () => {
 
     // Priorité 1: Moviez
 
+    sortedWebflix.forEach((s, idx) => {
+      if (s.url && s.url !== embedUrl) {
+        candidates.push({ type: 'webflix', id: `webflix_${idx}`, url: s.url });
+      }
+    });
+
     sortedMoviez.forEach((s, idx) => {
 
       if (s.url && s.url !== embedUrl) {
@@ -6823,7 +6899,15 @@ const WatchTv: React.FC = () => {
 
         let pickedCategory: string | undefined;
 
-        if (type === 'moviez') {
+        if (type === 'webflix') {
+
+          const item = sortedWebflix.find(s => s.url === url);
+
+          pickedLabel = item?.label;
+
+          pickedCategory = item?.category;
+
+        } else if (type === 'moviez') {
 
           const item = sortedMoviez.find(s => s.url === url);
 
@@ -7205,7 +7289,7 @@ const WatchTv: React.FC = () => {
 
       // Handle Embed source selections
 
-      else if (type === 'frembed' || type === 'custom' || type === 'vostfr' || type === 'omega' || type === 'coflix' || type === 'fstream' || type === 'wiflix' || type === 'moviez' || type === 'vidzy' || type === 'j1f' || type === 'viper' || type === 'adfree' || type === 'vox') {
+      else if (type === 'webflix' || type === 'frembed' || type === 'custom' || type === 'vostfr' || type === 'omega' || type === 'coflix' || type === 'fstream' || type === 'wiflix' || type === 'moviez' || type === 'vidzy' || type === 'j1f' || type === 'viper' || type === 'adfree' || type === 'vox') {
 
         setEmbedUrl(type === 'fstream' ? getProxyUrl(url) : url);
 
@@ -7267,6 +7351,18 @@ const WatchTv: React.FC = () => {
 
         // Handle Moviez source selection
 
+        else if (type === 'webflix') {
+          const index = sortedWebflix.findIndex(s => s.url === url);
+          if (index !== -1) {
+            setSelectedWebflixSource(index);
+            setEmbedUrl(sortedWebflix[index].url);
+          } else if (url) {
+            setEmbedUrl(url);
+          } else if (sortedWebflix.length > 0) {
+            setSelectedWebflixSource(0);
+            setEmbedUrl(sortedWebflix[0].url);
+          }
+        }
         else if (type === 'moviez') {
 
           const index = sortedMoviez.findIndex(s => s.url === url);
@@ -7690,6 +7786,38 @@ const WatchTv: React.FC = () => {
         } else {
 
           console.error(`[WatchTv] M3U8 URL not available`);
+
+        }
+
+        break;
+
+      case 'webflix':
+
+        if (typeof id === 'number' && sortedWebflix.length > id) {
+
+          setEmbedUrl(sortedWebflix[id].url);
+
+          setEmbedType('webflix');
+
+          setSelectedSource('webflix');
+
+          setSelectedWebflixSource(id);
+
+        } else if (typeof url === 'string') {
+
+          const wIndex = sortedWebflix.findIndex(s => s.url === url);
+
+          if (wIndex !== -1) setSelectedWebflixSource(wIndex);
+
+          setEmbedUrl(url);
+
+          setEmbedType('webflix');
+
+          setSelectedSource('webflix');
+
+        } else {
+
+          console.error(`[WatchTv] Invalid Webflix source index/URL: ${id}`);
 
         }
 
@@ -9697,7 +9825,8 @@ const WatchTv: React.FC = () => {
 
               wiflixSources={sortedWiflix}
 
-              moviezSources={sortedMoviez}
+              webflixSources={sortedWebflix}
+                      moviezSources={sortedMoviez}
 
               vidzySources={sortedVidzy}
 
@@ -9919,6 +10048,7 @@ const WatchTv: React.FC = () => {
 
                       wiflixSources={sortedWiflix}
 
+                      webflixSources={sortedWebflix}
                       moviezSources={sortedMoviez}
 
               vidzySources={sortedVidzy}
@@ -10031,6 +10161,7 @@ const WatchTv: React.FC = () => {
 
             wiflixSources={sortedWiflix}
 
+                      webflixSources={sortedWebflix}
                       moviezSources={sortedMoviez}
 
               vidzySources={sortedVidzy}
@@ -10161,6 +10292,7 @@ const WatchTv: React.FC = () => {
 
                       wiflixSources={sortedWiflix}
 
+                      webflixSources={sortedWebflix}
                       moviezSources={sortedMoviez}
 
               vidzySources={sortedVidzy}
@@ -10251,6 +10383,7 @@ const WatchTv: React.FC = () => {
 
             wiflixSources={sortedWiflix}
 
+                      webflixSources={sortedWebflix}
                       moviezSources={sortedMoviez}
 
               vidzySources={sortedVidzy}

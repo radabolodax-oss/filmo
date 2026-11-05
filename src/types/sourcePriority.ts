@@ -2,7 +2,7 @@
 
 /** Sources top-level disponibles pour Films/Séries. Ordre = default hardcodé actuel. */
 export const TOP_LEVEL_SOURCE_IDS = [
-  'moviez', 'vidzy', 'darkino', 'mp4', 'nexus_hls',
+  'webflix', 'moviez', 'vidzy', 'darkino', 'mp4', 'nexus_hls',
   'fstream', 'wiflix', 'omega', 'coflix', 'frembed', 'vostfr',
   'viper', 'vox', 'custom',
   // Ids propres au fork (movix.chat), sans équivalent upstream direct.
@@ -15,7 +15,7 @@ export type TopLevelSourceId = typeof TOP_LEVEL_SOURCE_IDS[number];
 
 /** Sources / Fournisseurs pour la section Animes */
 export const ANIME_SOURCE_IDS = [
-  'animesama', 'franime', 'moviez', 'vidzy', 'anicloud', 'wavewatch',
+  'anicloud', 'animesama', 'franime', 'moviez', 'vidzy', 'wavewatch',
 ] as const;
 export type AnimeSourceId = typeof ANIME_SOURCE_IDS[number];
 
@@ -28,7 +28,7 @@ export const DEPRECATED_HOSTER_IDS = [] as const;
 
 /** Hosters built-in connus. Les custom hosters utilisent des ids prefixés `custom_`. */
 export const BUILTIN_HOSTER_IDS = [
-  'miaw', 'moviez',
+  'webflix', 'fastflux', 'miaw', 'moviez',
   'voe', 'vidmoly', 'uqload', 'sibnet', 'doodstream',
   'seekstreaming', 'smoothpre', 'minochinos', 'vidzy', 'darkibox',
   'supervideo', 'dropload', 'oneupload', 'fsvid',

@@ -1,3 +1,12 @@
+
+const dns = require('dns');
+try {
+  dns.setServers(['1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4']);
+  console.log('[DNS] Node DNS servers explicitly set to Cloudflare & Google (1.1.1.1, 8.8.8.8)');
+} catch (e) {
+  console.warn('[DNS] Failed to set custom DNS servers:', e.message);
+}
+
 /**
  * Mobile/offline entry point -- single process, no cluster forking, SQLite
  * (sql.js) instead of MySQL, in-memory Map instead of Redis.

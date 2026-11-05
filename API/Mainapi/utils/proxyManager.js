@@ -18,13 +18,17 @@ const tough = require("tough-cookie");
 // which the (already try/catch-wrapped) LecteurVideo/1jour1film/CineStream
 // /AnimeSama call sites turn into a normal "source unavailable" failure.
 let initCycleTLS = null;
-try {
-  initCycleTLS = require("cycletls");
-} catch (e) {
-  console.warn(
-    "[proxyManager] cycletls not installed (expected in mobile/local mode) — TLS-fingerprint bypass sources will be skipped:",
-    e.message,
-  );
+if (process.platform !== 'android') {
+  try {
+    initCycleTLS = require("cycletls");
+  } catch (e) {
+    console.warn(
+      "[proxyManager] cycletls not installed (expected in mobile/local mode) — TLS-fingerprint bypass sources will be skipped:",
+      e.message,
+    );
+  }
+} else {
+  console.log("[proxyManager] Running on Android: disabling CycleTLS (using direct/proxiesembed fallbacks)");
 }
 
 // === PROXY AGENT CACHES ===
@@ -961,6 +965,28 @@ async function makeAnimeSamaRequest(targetUrl, options = {}) {
   const pool = [...ANIMESAMA_SOCKS5_PROXIES]
     .sort(() => Math.random() - 0.5)
     .slice(0, MAX_ANIMESAMA_CYCLETLS_ATTEMPTS);
+
+  if (!initCycleTLS) {
+    try {
+      const resp = await axios({
+        url: cleanTargetUrl,
+        method: lowerMethod,
+        data: body || undefined,
+        headers: {
+          "User-Agent": CHROME_UA,
+          Referer: "https://anime-sama.to/",
+          ...defaultHeaders,
+        },
+        timeout: timeout * 1000,
+        validateStatus: () => true,
+      });
+      const data = typeof resp.data === "string" ? resp.data : JSON.stringify(resp.data);
+      return { data, status: resp.status, headers: resp.headers || {} };
+    } catch (err) {
+      console.warn("[AnimeSama] Direct request error:", err.message);
+      throw err;
+    }
+  }
 
   const cycleTLS = await getCycleTLS();
 

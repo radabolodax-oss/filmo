@@ -666,8 +666,13 @@ async function createWindow() {
   });
 
   // Gestion des erreurs de chargement pour eviter toute page blanche figee
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-    log('ERROR', `[WINDOW] Echec chargement URL (${errorCode}): ${errorDescription} sur ${validatedURL}`);
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    log('ERROR', `[WINDOW] Echec chargement URL (${errorCode}): ${errorDescription} sur ${validatedURL} (isMainFrame: ${Boolean(isMainFrame)})`);
+    // Ignorer les erreurs venant de sous-frames/iframes ou de redirections publicitaires externes
+    if (isMainFrame === false) return;
+    if (typeof validatedURL === 'string' && !validatedURL.startsWith(`http://127.0.0.1:${frontendPort}`) && !validatedURL.startsWith(`http://localhost:${frontendPort}`)) {
+      return;
+    }
     if (errorCode !== -3) { // ignore ABORTED
       setTimeout(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
