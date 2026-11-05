@@ -468,27 +468,7 @@ const WishboardPage: React.FC = () => {
                                         tvCount={stats.tv}
                                     />
 
-                                    {/* VIP Widget for mobile */}
-                                    <div className="p-6 rounded-2xl bg-gradient-to-br from-green-500/10 to-emerald-600/5 border border-green-500/10 relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 p-4 opacity-20">
-                                            <Zap className="h-24 w-24 text-green-500 -mr-6 -mt-6" />
-                                        </div>
-                                        <ShinyText text={t('greenlight.becomeVip')} speed={3} color="#ffffff" shineColor="#facc15" className="text-lg font-bold mb-2 relative z-10 block" />
-                                        <p className="text-sm text-green-100/70 mb-4 relative z-10">
-                                            {t('greenlight.vipPriorityDesc')}
-                                        </p>
-                                        <Link to="/vip">
-                                            <AnimatedBorderCard
-                                                highlightColor="34 197 94"
-                                                backgroundColor="23 23 23"
-                                                className="w-full flex items-center justify-center h-10 px-4 cursor-pointer hover:scale-105 active:scale-95 transition-all group rounded-xl"
-                                            >
-                                                <span className="font-bold text-sm text-white group-hover:text-green-500 transition-colors">
-                                                    {t('greenlight.discoverAdvantages')}
-                                                </span>
-                                            </AnimatedBorderCard>
-                                        </Link>
-                                    </div>
+                                    
                                 </div>
                             </>
                         )}
@@ -505,27 +485,7 @@ const WishboardPage: React.FC = () => {
                                 tvCount={stats.tv}
                             />
 
-                            {/* Additional Widget */}
-                            <div className="mt-6 p-6 rounded-2xl bg-gradient-to-br from-green-500/10 to-emerald-600/5 border border-green-500/10 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-4 opacity-20">
-                                    <Zap className="h-24 w-24 text-green-500 -mr-6 -mt-6" />
-                                </div>
-                                <ShinyText text={t('greenlight.becomeVip')} speed={3} color="#ffffff" shineColor="#facc15" className="text-lg font-bold mb-2 relative z-10 block" />
-                                <p className="text-sm text-green-100/70 mb-4 relative z-10">
-                                    {t('greenlight.vipPriorityDesc')}
-                                </p>
-                                <Link to="/vip">
-                                    <AnimatedBorderCard
-                                        highlightColor="34 197 94"
-                                        backgroundColor="23 23 23"
-                                        className="w-full flex items-center justify-center h-10 px-4 cursor-pointer hover:scale-105 active:scale-95 transition-all group lg:rounded-xl"
-                                    >
-                                        <span className="font-bold text-sm text-white group-hover:text-green-500 transition-colors">
-                                            {t('greenlight.discoverAdvantages')}
-                                        </span>
-                                    </AnimatedBorderCard>
-                                </Link>
-                            </div>
+                            
                         </div>
                     </div>
                 </div>

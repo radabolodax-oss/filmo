@@ -342,7 +342,7 @@ const Footer: React.FC = () => {
                     className="inline-flex items-center gap-1.5 text-xs font-medium text-pink-400 hover:text-pink-300 transition-colors"
                   >
                     <Instagram className="w-4 h-4 text-pink-400" />
-                    Instagram (@cineviseur_)
+                    Instagram
                     <ArrowUpRight className="w-3 h-3 opacity-60" />
                   </a>
 

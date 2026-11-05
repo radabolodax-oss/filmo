@@ -99,7 +99,7 @@ const WhatIsMovixPage: React.FC = () => {
               className="flex justify-center mb-8"
             >
               <img
-                src="/movix.png"
+                src="/dawger.png"
                 alt="Prowler Logo"
                 className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 drop-shadow-[0_0_40px_rgba(220,38,38,0.35)]"
                 style={{ transform: 'rotate(-8deg)' }}
@@ -186,29 +186,7 @@ const WhatIsMovixPage: React.FC = () => {
           viewport={{ once: true }}
           className="max-w-2xl mx-auto mb-20"
         >
-          <Link to="/vip" className="block group">
-            <AnimatedBorderCard
-              highlightColor="234 179 8"
-              backgroundColor="12 12 12"
-              className="p-5 sm:p-6 text-center hover:scale-[1.01] transition-transform duration-300"
-            >
-              <div className="flex flex-col items-center gap-3">
-                <div className="flex items-center justify-center gap-3">
-                  <Crown className="w-6 h-6 text-yellow-500 group-hover:scale-110 transition-transform" />
-                  <div>
-                    <p className="text-white/50 text-sm">{t('whatIsMovix.wantMore')}</p>
-                    <p className="text-yellow-400 font-semibold text-base sm:text-lg group-hover:text-yellow-300 transition-colors">
-                      {t('whatIsMovix.discoverVip')}
-                    </p>
-                  </div>
-                  <Crown className="w-6 h-6 text-yellow-500 group-hover:scale-110 transition-transform" />
-                </div>
-                <p className="text-white/40 text-xs sm:text-sm text-center max-w-md leading-relaxed">
-                  {t('whatIsMovix.vipKeepsSiteAlive')}
-                </p>
-              </div>
-            </AnimatedBorderCard>
-          </Link>
+          
         </motion.div>
 
         {/* Histoire de Prowler */}
@@ -335,7 +313,7 @@ const WhatIsMovixPage: React.FC = () => {
             className="p-8 backdrop-blur-sm"
           >
             <img
-              src="/movix.png"
+              src="/dawger.png"
               alt="Prowler Logo"
               className="w-12 h-12 mx-auto mb-4 drop-shadow-lg"
             />
@@ -350,12 +328,7 @@ const WhatIsMovixPage: React.FC = () => {
                   {t('whatIsMovix.exploreMovix')}
                 </Button>
               </Link>
-              <Link to="/vip">
-                <Button variant="secondary" className="px-6 h-11 gap-2 border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10">
-                  <Crown className="w-4 h-4" />
-                  {t('whatIsMovix.becomeVip')}
-                </Button>
-              </Link>
+              
               <Link to="/">
                 <Button variant="ghost" className="border border-white/20 hover:border-white/40 text-white h-11 px-5 gap-2">
                   <ArrowLeft className="w-4 h-4" />

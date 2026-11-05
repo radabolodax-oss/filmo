@@ -494,11 +494,7 @@ const WishboardNewRequest: React.FC = () => {
                                                         <Zap className="w-4 h-4" />
                                                         <span>{t('greenlight.creditsRemaining', { remaining: limitStatus.remaining, limit: limitStatus.limit })}</span>
                                                     </div>
-                                                    {limitStatus.remaining === 0 && !limitStatus.isVip && (
-                                                        <Link to="/vip" className="text-sm text-yellow-400 hover:text-yellow-300 underline underline-offset-4 decoration-yellow-500/30 font-medium transition-colors">
-                                                            {t('greenlight.upgradeVipCredits')}
-                                                        </Link>
-                                                    )}
+                                                    
                                                 </motion.div>
                                             )}
                                         </div>

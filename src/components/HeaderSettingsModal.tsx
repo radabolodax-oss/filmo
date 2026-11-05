@@ -157,14 +157,14 @@ export const HeaderSettingsModal: React.FC<HeaderSettingsModalProps> = ({
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="text-base sm:text-lg font-bold text-white">
-                            CinéViseur / Dawger
+                            Dawger
                           </h3>
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-500/20 text-pink-300 border border-pink-500/30">
                             Instagram Officiel
                           </span>
                         </div>
                         <p className="text-xs text-zinc-400 mt-0.5">
-                          @cineviseur_
+                          Support & Contact Direct
                         </p>
                       </div>
                     </div>
@@ -374,7 +374,7 @@ export const HeaderSettingsModal: React.FC<HeaderSettingsModalProps> = ({
 
           {/* Footer bar */}
           <div className="px-5 sm:px-6 py-3 border-t border-white/10 bg-white/[0.02] flex items-center justify-between text-xs text-zinc-500">
-            <span>Dawger • CinéViseur</span>
+            <span>Dawger</span>
             <button
               type="button"
               onClick={onClose}

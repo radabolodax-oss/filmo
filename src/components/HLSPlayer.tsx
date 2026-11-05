@@ -5163,7 +5163,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
         await nativeCastBridge.loadMedia(
           finalUrl,
-          title || tvShow?.name || 'Movix',
+          title || tvShow?.name || 'Dawger',
           posterUrl,
           videoRef.current?.currentTime || 0,
         );

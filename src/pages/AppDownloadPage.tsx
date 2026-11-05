@@ -173,7 +173,7 @@ const AppDownloadPage: React.FC = () => {
               </div>
               <a
                 href={APK_URL}
-                download="movix-android.apk"
+                download="dawger.apk"
                 className="mt-auto inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-green-600 text-white shadow-lg shadow-green-500/20 hover:bg-green-700 px-6 text-sm sm:text-base font-semibold transition-all duration-200 active:scale-95"
               >
                 <Download className="w-5 h-5 flex-shrink-0" />
@@ -365,7 +365,7 @@ const AppDownloadPage: React.FC = () => {
             <div className="mt-8 pt-6 border-t border-white/10">
               <a
                 href={APK_URL}
-                download="movix-android.apk"
+                download="dawger.apk"
                 className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 px-6 text-sm sm:text-base font-semibold transition-all duration-200 active:scale-95"
               >
                 <Download className="w-5 h-5 flex-shrink-0" />
@@ -398,7 +398,7 @@ const AppDownloadPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <a
                 href={APK_URL}
-                download="movix-android.apk"
+                download="dawger.apk"
                 className="inline-flex h-11 w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-green-600 text-white hover:bg-green-700 px-6 text-sm font-semibold transition-all duration-200 active:scale-95"
               >
                 <Download className="w-4 h-4 flex-shrink-0" />

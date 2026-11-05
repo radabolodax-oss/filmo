@@ -215,10 +215,10 @@ const WatchPartyList: React.FC = () => {
             <div className="p-4 rounded-lg bg-white/5 border border-white/5">
               <div className="flex items-center mb-2 text-green-400">
                 <Film className="h-5 w-5 mr-2" />
-                <h3 className="font-semibold text-white">{t('watchParty.vipPlayersOnly')}</h3>
+                <h3 className="font-semibold text-white">Lecteurs synchronisés</h3>
               </div>
               <p className="text-sm text-white/60">
-                {t('watchParty.vipPlayersOnlyDesc')} <Link to="/vip" className="text-green-400 hover:text-red-300 hover:underline">{t('watchParty.vipPageLabel')}</Link>
+                Les flux synchronisés s'adaptent automatiquement à tous les participants.
               </p>
             </div>
           </div>

@@ -114,7 +114,7 @@ const FranceTVPlayer: React.FC = () => {
   const [isPipActive, setIsPipActive] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  const isVip = isUserVip();
+  const isVip = true;
 
   useEffect(() => {
     if (videoRef.current) {
