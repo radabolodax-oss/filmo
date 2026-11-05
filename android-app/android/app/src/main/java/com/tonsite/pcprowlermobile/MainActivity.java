@@ -1,15 +1,22 @@
 package com.tonsite.pcprowlermobile;
 
+import android.app.PictureInPictureParams;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
+import android.content.res.Configuration;
+import android.net.VpnService;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
+import android.util.Rational;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
 import androidx.activity.OnBackPressedCallback;
@@ -18,6 +25,7 @@ import com.chaquo.python.PyException;
 import com.chaquo.python.Python;
 import com.chaquo.python.android.AndroidPlatform;
 import com.getcapacitor.BridgeActivity;
+import com.tonsite.pcprowlermobile.dns.DnsVpnService;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -31,20 +39,18 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Boots the real Movix Mainapi backend via an embedded modern Node.js
- * (nodejs-mobile v18.20.4, JNI bridge in native-lib.cpp) instead of the
- * stale Node-12 nodejs-mobile-cordova plugin used in Phase 1.
+ * Boots the real Dawger Mainapi backend via an embedded modern Node.js
+ * (nodejs-mobile v18.20.4, JNI bridge in native-lib.cpp) and Python proxiesembed.
  *
- * Pattern adapted from JaneaSystems/nodejs-mobile-samples
- * android/native-gradle-node-folder. No JS<->Java bridge is needed here:
- * www/index.html polls http://127.0.0.1:3000 itself and navigates once the
- * server responds, so we just need to get Node running in the background
- * as early as possible -- we do not need to block Capacitor's own
- * super.onCreate()/WebView bring-up on it.
+ * Inclut également :
+ * 1. Picture-in-Picture (PiP) natif avec bascule automatique quand la vidéo joue.
+ * 2. Service VPN DNS 1.1.1.1 local (anti-blocage des FAI français sans serveur tiers).
+ * 3. Curseur virtuel pour télécommande Android TV.
  */
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "MainActivity";
+    private static final int VPN_REQUEST_CODE = 1010;
 
     static {
         System.loadLibrary("native-lib");
@@ -58,22 +64,23 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Same lockdown as pc-app/main.js's will-navigate/setWindowOpenHandler:
-        // ads/redirects can't carry the user out of the app to Chrome/Play Store/etc.
+        // Lockdown du WebView
         getBridge().setWebViewClient(new AppLockedWebViewClient(getBridge()));
         getBridge().getWebView().setWebChromeClient(new AppLockedWebChromeClient(getBridge()));
 
-        // Nothing was consuming the system back button/gesture (Capacitor
-        // doesn't wire this up for us here), so it did nothing inside the
-        // SPA. Go back through the WebView's own history first (React
-        // Router pushState entries land in it), only falling through to
-        // backgrounding the app once there's nowhere left to go back to.
+        // Injection du bridge natif Dawger (PiP, DNS)
+        WebView webView = getBridge().getWebView();
+        if (webView != null) {
+            webView.addJavascriptInterface(new DawgerNativeBridge(), "DawgerNative");
+        }
+
+        // Gestion du bouton retour physique / gestuel
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                WebView webView = getBridge().getWebView();
-                if (webView != null && webView.canGoBack()) {
-                    webView.goBack();
+                WebView wv = getBridge().getWebView();
+                if (wv != null && wv.canGoBack()) {
+                    wv.goBack();
                 } else {
                     setEnabled(false);
                     getOnBackPressedDispatcher().onBackPressed();
@@ -82,6 +89,7 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
+        // Démarrage Node.js embarqué
         if (!startedNodeAlready) {
             startedNodeAlready = true;
             new Thread(new Runnable() {
@@ -105,12 +113,7 @@ public class MainActivity extends BridgeActivity {
             }).start();
         }
 
-        // Starts the embedded Python proxiesembed server (Chaquopy) --
-        // resolves video-stream-URLs/DRM proxying for ~67 sources, the
-        // second half of the real Movix backend alongside Node/Mainapi
-        // above. Same fire-and-forget background-thread pattern: the
-        // frontend just needs VITE_PROXIES_EMBED_API to eventually become
-        // reachable, not at cold boot.
+        // Démarrage Python proxiesembed embarqué
         if (!startedPythonAlready) {
             startedPythonAlready = true;
             new Thread(new Runnable() {
@@ -134,14 +137,119 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    /**
-     * Some OEM Android TV WebViews swallow hardware D-pad key events into
-     * their own native view-focus navigation before the events ever reach
-     * the page's JS `keydown` listener (RemoteCursor.tsx normally relies on
-     * that listener alone, which is enough on stock/emulator WebViews).
-     * As a guaranteed-delivery fallback, intercept D-pad/OK here and push
-     * them straight into the page via the window.__remoteCursor bridge.
-     */
+    // =========================================================================
+    // PICTURE-IN-PICTURE (PiP)
+    // =========================================================================
+
+    @Override
+    public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        autoEnterPipIfPlaying();
+    }
+
+    public void enterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runOnUiThread(() -> {
+                try {
+                    PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
+                    builder.setAspectRatio(new Rational(16, 9));
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        builder.setAutoEnterEnabled(true);
+                    }
+                    enterPictureInPictureMode(builder.build());
+                } catch (Exception e) {
+                    Log.w(TAG, "Erreur enterPictureInPictureMode: " + e.getMessage());
+                }
+            });
+        }
+    }
+
+    private void autoEnterPipIfPlaying() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WebView webView = getBridge().getWebView();
+            if (webView == null) return;
+            webView.evaluateJavascript(
+                "(function(){ var v = document.querySelector('video'); return !!(v && !v.paused && !v.ended && v.readyState > 2); })()",
+                isPlaying -> {
+                    if ("true".equals(isPlaying)) {
+                        enterPipMode();
+                    }
+                }
+            );
+        }
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        WebView webView = getBridge().getWebView();
+        if (webView != null) {
+            String js = "window.dispatchEvent(new CustomEvent('dawger:pip-change', { detail: { active: " + isInPictureInPictureMode + " } }));";
+            webView.evaluateJavascript(js, null);
+        }
+    }
+
+    // =========================================================================
+    // CONTOURNEMENT DNS 1.1.1.1 (Anti-blocage FAI)
+    // =========================================================================
+
+    public void startDnsService() {
+        try {
+            Intent vpnIntent = VpnService.prepare(this);
+            if (vpnIntent != null) {
+                startActivityForResult(vpnIntent, VPN_REQUEST_CODE);
+            } else {
+                startService(new Intent(this, DnsVpnService.class));
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Erreur démarrage DNS Service:", e);
+        }
+    }
+
+    public void stopDnsService() {
+        try {
+            Intent intent = new Intent(this, DnsVpnService.class);
+            intent.setAction(DnsVpnService.ACTION_STOP);
+            startService(intent);
+        } catch (Exception e) {
+            Log.e(TAG, "Erreur arrêt DNS Service:", e);
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == VPN_REQUEST_CODE && resultCode == RESULT_OK) {
+            startService(new Intent(this, DnsVpnService.class));
+        }
+    }
+
+    public class DawgerNativeBridge {
+        @JavascriptInterface
+        public void enterPip() {
+            enterPipMode();
+        }
+
+        @JavascriptInterface
+        public void startDns() {
+            startDnsService();
+        }
+
+        @JavascriptInterface
+        public void stopDns() {
+            stopDnsService();
+        }
+
+        @JavascriptInterface
+        public boolean isDnsActive() {
+            return DnsVpnService.isActive;
+        }
+    }
+
+    // =========================================================================
+    // TV REMOTE D-PAD & CURSOR INTERCEPTION
+    // =========================================================================
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         String jsCall = null;
@@ -161,8 +269,6 @@ public class MainActivity extends BridgeActivity {
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER:
-                // OK/Enter is handled separately below via a synthetic touch tap
-                // instead of a scripted call -- see dispatchSyntheticTapAtCursor().
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     dispatchSyntheticTapAtCursor();
                 }
@@ -170,9 +276,6 @@ public class MainActivity extends BridgeActivity {
             default:
                 return super.dispatchKeyEvent(event);
         }
-        // Recognized D-pad key: consume both ACTION_DOWN and ACTION_UP so Android's
-        // native view-focus navigation never gets a chance to also react to it, and only
-        // push the JS call once, on ACTION_DOWN.
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
@@ -182,17 +285,6 @@ public class MainActivity extends BridgeActivity {
         return true;
     }
 
-    /**
-     * OK/Enter used to just call window.__remoteCursor.select(), which runs
-     * el.click() from injected script. Chromium only grants "user
-     * activation" (required for window.open()-gated ad-unlock flows some
-     * video sources use -- confirmed some sources show a "click through this
-     * ad" step that a real touch satisfies but a scripted click doesn't) to
-     * genuine input events, and an evaluateJavascript() call never carries
-     * that, no matter how it was triggered. Read the cursor's tracked
-     * position back from JS, then synthesize a real touch DOWN/UP at that
-     * point so the click looks exactly like the tap that's known to work.
-     */
     private void dispatchSyntheticTapAtCursor() {
         WebView webView = getBridge().getWebView();
         if (webView == null) return;
@@ -203,8 +295,6 @@ public class MainActivity extends BridgeActivity {
                 if (value == null || "null".equals(value)) return;
                 try {
                     String json = value;
-                    // evaluateJavascript wraps string results in an extra pair of
-                    // quotes and escapes inner ones -- unwrap before parsing.
                     if (json.length() >= 2 && json.charAt(0) == '"') {
                         json = json.substring(1, json.length() - 1).replace("\\\"", "\"");
                     }
@@ -276,14 +366,6 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    /**
-     * Extracts a zip asset in one streamed pass instead of the ~3000
-     * individual AssetManager.open() calls a plain recursive folder copy
-     * needed -- each of those has real fixed overhead reading a compressed
-     * APK entry, so on a real device the old approach took minutes on first
-     * launch (looked like the backend never loads). See
-     * android-app/scripts/zip_node_backend.py.
-     */
     private static boolean extractZipAsset(AssetManager assetManager, String zipAssetName, String toPath) {
         try (ZipInputStream zin = new ZipInputStream(assetManager.open(zipAssetName))) {
             ZipEntry entry;

@@ -4,12 +4,15 @@
 
 cmake_minimum_required(VERSION 3.22.1)
 
-project(pcprowlermobile-native)
+project(dawger-native)
 
 add_library(native-lib SHARED
             src/main/cpp/native-lib.cpp)
 
-include_directories(${CMAKE_SOURCE_DIR}/libnode/include/node/)
+include_directories(
+    ${CMAKE_SOURCE_DIR}/libnode/include/
+    ${CMAKE_SOURCE_DIR}/libnode/include/node/
+)
 
 add_library(libnode SHARED IMPORTED)
 set_target_properties(libnode PROPERTIES IMPORTED_LOCATION
