@@ -7,8 +7,7 @@ import { TooltipProvider } from './components/ui/tooltip';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import Home from './pages/Home';
-// import { useTVMode } from './hooks/useTVMode'; // Remplacé par RemoteCursor (curseur visible façon Google TV, plutôt que la nav par focus)
-import RemoteCursor from './components/RemoteCursor';
+// import { useTVMode } from './hooks/useTVMode';
 import { useSpaceToPlayIframe } from './hooks/useSpaceToPlayIframe';
 import DnsBlockBanner from './components/DnsBlockBanner';
 import { AdFreePopupProvider } from './context/AdFreePopupContext';
@@ -1563,7 +1562,7 @@ const AppWithIntro: React.FC = () => {
       navigate('/', { replace: true });
     }
   }, [location.pathname, navigate]);
-  // useTVMode(); // Remplacé par RemoteCursor
+  // useTVMode();
   useSpaceToPlayIframe();
   useAutoTabDetection();
 
@@ -1710,8 +1709,6 @@ const AppWithIntro: React.FC = () => {
       {shouldShowHeader && <Header />}
       {/* Bottom navigation mobile (< 768px) */}
       <BottomNav />
-      {/* Curseur visible piloté à la télécommande/D-pad (Android TV) */}
-      <RemoteCursor />
       <PersistenceManager />
       <div className={[
         shouldShowHeader && !isHeroHeaderPage ? 'pt-20' : '',
