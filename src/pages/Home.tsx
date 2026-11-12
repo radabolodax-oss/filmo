@@ -18,6 +18,9 @@ import { getTmdbLanguage } from '../i18n';
 import { getPersonalizedRecommendations, isRecommendationsEnabled, PersonalizedRecommendations } from '../services/recommendationService';
 import CarouselTitle from '../components/CarouselTitle';
 import { encodeId } from '../utils/idEncoder';
+import InfiniteCatalogSection from '../components/InfiniteCatalogSection';
+import { useInfiniteCatalog } from '../hooks/useInfiniteCatalog';
+import { HOME_ROW_RECIPES } from '../utils/infiniteCatalogRows';
 
 const TMDB_GENRES: Record<number, string> = {
   28: 'Action', 12: 'Aventure', 16: 'Animation', 35: 'Comédie',
@@ -213,6 +216,13 @@ const Home: React.FC = () => {
   const [personalizedReco, setPersonalizedReco] = useState<PersonalizedRecommendations | null>(null);
   const sliderIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const cancelTokenSourceRef = useRef<CancelTokenSource | null>(null);
+
+  const {
+    rows: infiniteRows,
+    isLoadingBatch: isLoadingInfiniteBatch,
+    sentinelRef: infiniteSentinelRef,
+    loadMoreRowItems: loadMoreInfiniteRowItems,
+  } = useInfiniteCatalog(HOME_ROW_RECIPES, { enabled: !loading });
 
   // Track page visit for Prowler Wrapped
   useWrappedTracker({
@@ -873,8 +883,8 @@ const Home: React.FC = () => {
       newCategories.push({ id: 'top-rated', title: t('home.bestRated'), items: topRated });
     }
 
-    // Limit total categories
-    setCategories(newCategories.slice(0, 10).map(normalizeHomeCategory)); // Réduit de 12 à 10 catégories max
+    // Keep all populated categories for deep catalog exploration
+    setCategories(newCategories.map(normalizeHomeCategory));
   };
 
   const removeFromContinueWatching = useCallback((itemId: number, mediaType: string, skipConfirmation = false) => {
@@ -1047,6 +1057,7 @@ const Home: React.FC = () => {
                     items={continueWatching as any[]}
                     mediaType="history"
                     isHistory={true}
+                    disableLoop={true}
                     onRemoveItem={removeFromContinueWatching}
                     onRemoveAll={removeAllContinueWatching}
                   />
@@ -1262,6 +1273,15 @@ const Home: React.FC = () => {
                       </LazySection>
                     </div>
                   ))}
+
+                  {/* Infinite Cultural (KR / IN / NG) & Thematic Carousels */}
+                  <InfiniteCatalogSection
+                    rows={infiniteRows}
+                    isLoadingBatch={isLoadingInfiniteBatch}
+                    sentinelRef={infiniteSentinelRef}
+                    onLoadMoreRowItems={loadMoreInfiniteRowItems}
+                    rowClassName="mb-3 px-4 md:px-8"
+                  />
                 </div>
               )}
             </motion.div>

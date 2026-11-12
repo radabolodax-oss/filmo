@@ -2145,3 +2145,9 @@ body,
 .video-container .dawger-center-btn:hover {
   color: #ffffff !important;
 }
+
+/* Infinite vertical catalog optimization */
+.infinite-carousel-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 340px;
+}

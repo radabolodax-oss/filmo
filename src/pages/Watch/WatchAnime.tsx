@@ -19,6 +19,7 @@ import { searchWithFallback, getSearchNameForId, getAnimeMatcherForId, getAnimeM
 import { encodeId } from '../../utils/idEncoder';
 
 import HLSPlayer from '../../components/HLSPlayer';
+import PlayerStage from '../../components/PlayerAmbilight';
 
 import EmbedPlayerChrome from '../../components/EmbedPlayerChrome';
 
@@ -3283,7 +3284,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
 
-      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-900">
+      <PlayerStage backdrop={showDetails?.backdrop_path} className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-900">
 
       <style dangerouslySetInnerHTML={{
 
@@ -4924,7 +4925,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
       <AdFreePlayerAds />
 
-      </div>
+      </PlayerStage>
 
 
 

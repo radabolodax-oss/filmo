@@ -461,13 +461,17 @@ const Search: React.FC = () => {
 
     const CATEGORY_PRESETS = useMemo(() => [
         { id: 'kdrama', label: 'K-Drama', flagCode: 'KR', type: 'tv' as const, country: 'KR', language: 'ko', genres: [18] },
+        { id: 'kfilm', label: 'Films Coréens', flagCode: 'KR', type: 'movie' as const, country: 'KR', language: 'ko', genres: [] },
+        { id: 'bollywood', label: 'Bollywood / Indien', flagCode: 'IN', type: 'movie' as const, country: 'IN', language: 'hi', genres: [] },
+        { id: 'indian_tv', label: 'Séries Indiennes', flagCode: 'IN', type: 'tv' as const, country: 'IN', language: 'hi', genres: [] },
+        { id: 'nollywood', label: 'Nollywood Films', flagCode: 'NG', type: 'movie' as const, country: 'NG', language: '', genres: [] },
+        { id: 'nollywood_tv', label: 'Nollywood Séries', flagCode: 'NG', type: 'tv' as const, country: 'NG', language: '', genres: [] },
         { id: 'cdrama', label: 'C-Drama', flagCode: 'CN', type: 'tv' as const, country: 'CN', language: 'zh', genres: [18] },
         { id: 'jdrama', label: 'J-Drama', flagCode: 'JP', type: 'tv' as const, country: 'JP', language: 'ja', genres: [18] },
         { id: 'thaï', label: 'Thaï-Drama', flagCode: 'TH', type: 'tv' as const, country: 'TH', language: 'th', genres: [18] },
         { id: 'tdrama', label: 'T-Drama', flagCode: 'TR', type: 'tv' as const, country: 'TR', language: 'tr', genres: [18] },
         { id: 'anime', label: 'Anime', emoji: '🎌', type: 'tv' as const, country: 'JP', language: 'ja', genres: [16] },
         { id: 'anime_film', label: 'Film Anime', emoji: '🎬', type: 'movie' as const, country: 'JP', language: 'ja', genres: [16] },
-        { id: 'bollywood', label: 'Bollywood', flagCode: 'IN', type: 'movie' as const, country: 'IN', language: 'hi', genres: [] },
         { id: 'telenovela', label: 'Telenovela', flagCode: 'MX', type: 'tv' as const, country: '', language: 'es', genres: [18] },
         { id: 'british', label: 'Séries UK', flagCode: 'GB', type: 'tv' as const, country: 'GB', language: 'en', genres: [] },
         { id: 'nordic_noir', label: 'Nordic Noir', flagCode: 'SE', type: 'tv' as const, country: '', language: '', genres: [80, 9648], presetCountries: ['SE', 'DK', 'NO', 'FI', 'IS'] },

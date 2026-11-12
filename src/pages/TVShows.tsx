@@ -12,6 +12,9 @@ import CarouselTitle from '../components/CarouselTitle';
 import { useWrappedTracker } from '../hooks/useWrappedTracker';
 import { getTmdbLanguage } from '../i18n';
 import { getMinimumCarouselCategoryItems, makeExclusiveCategories } from '../utils/exclusiveCategories';
+import InfiniteCatalogSection from '../components/InfiniteCatalogSection';
+import { useInfiniteCatalog } from '../hooks/useInfiniteCatalog';
+import { TV_ROW_RECIPES } from '../utils/infiniteCatalogRows';
 
 // Nombre de sections à charger immédiatement
 const IMMEDIATE_LOAD_COUNT = 2;
@@ -307,6 +310,13 @@ const TVShows: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const sliderIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const {
+    rows: infiniteRows,
+    isLoadingBatch: isLoadingInfiniteBatch,
+    sentinelRef: infiniteSentinelRef,
+    loadMoreRowItems: loadMoreInfiniteRowItems,
+  } = useInfiniteCatalog(TV_ROW_RECIPES, { enabled: !loading && tvShows.length > 0 });
   const [isTop10CardHovered, setIsTop10CardHovered] = useState(false);
   const top10RowRef = useRef<HTMLDivElement>(null);
   const [hoveredCardIndex, setHoveredCardIndex] = useState<number | null>(null);
@@ -867,6 +877,15 @@ const TVShows: React.FC = () => {
             </LazySection>
           </div>
         ))}
+
+        {/* Infinite Cultural (KR / IN / NG) & Thematic Series Carousels */}
+        <InfiniteCatalogSection
+          rows={infiniteRows}
+          isLoadingBatch={isLoadingInfiniteBatch}
+          sentinelRef={infiniteSentinelRef}
+          onLoadMoreRowItems={loadMoreInfiniteRowItems}
+          rowClassName="px-4 md:px-8"
+        />
 
       </div>
 

@@ -1,8 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { TFunction } from 'i18next';
 import {
   DEFAULT_CUSTOM_OLED,
+  PREFS_CHANGED_EVENT,
+  readAmbilightEnabled,
+  saveAmbilightEnabled,
   type CustomOledSettings,
   type OledMode,
 } from '../utils/playerVisualPrefs';
@@ -76,6 +79,18 @@ export const OledSettingsSection: React.FC<OledSettingsSectionProps> = ({
   onResetCustom,
   activeFilterPreview,
 }) => {
+  const [ambilightEnabled, setAmbilightEnabled] = useState<boolean>(() => readAmbilightEnabled());
+
+  useEffect(() => {
+    const sync = () => setAmbilightEnabled(readAmbilightEnabled());
+    window.addEventListener(PREFS_CHANGED_EVENT, sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener(PREFS_CHANGED_EVENT, sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
   const sliders: Array<{
     key: keyof CustomOledSettings;
     label: string;
@@ -132,7 +147,34 @@ export const OledSettingsSection: React.FC<OledSettingsSectionProps> = ({
       transition={{ duration: 0.25 }}
       className="pr-2 space-y-3"
     >
-      <div className="mb-2">
+      {/* Mode Ambilight derrière le lecteur */}
+      <button
+        type="button"
+        onClick={() => {
+          const next = !ambilightEnabled;
+          setAmbilightEnabled(next);
+          saveAmbilightEnabled(next);
+        }}
+        className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center transition-colors border ${
+          ambilightEnabled
+            ? 'bg-emerald-950/40 border-emerald-500/40 text-white'
+            : 'bg-gray-900/60 border-gray-800 text-gray-300 hover:bg-gray-800/80'
+        }`}
+      >
+        <div className="flex flex-col pr-3">
+          <span className="font-semibold text-white">Mode Ambilight</span>
+          <span className="text-xs text-gray-400">Halo lumineux dynamique derrière le lecteur vidéo</span>
+        </div>
+        <span
+          className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
+            ambilightEnabled ? 'bg-emerald-500 text-black' : 'bg-gray-700 text-gray-300'
+          }`}
+        >
+          {ambilightEnabled ? 'Activé' : 'Désactivé'}
+        </span>
+      </button>
+
+      <div className="mb-2 pt-1">
         <h3 className="text-base font-semibold text-white mb-1">{t('watch.oledTitle')}</h3>
         <p className="text-xs text-gray-400 mb-3">{t('watch.oledDesc')}</p>
       </div>

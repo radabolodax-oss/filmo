@@ -60,6 +60,10 @@ interface EmblaCarouselProps {
   showRanking?: boolean;
   priorityZIndex?: boolean; // Pour les sections qui doivent être au-dessus des autres
   onViewAll?: () => void; // Callback pour le bouton "Voir tous"
+  disableLoop?: boolean;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
 }
 
 interface LazyImageProps {
@@ -392,13 +396,21 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
   onRemoveAll,
   showRanking = false,
   priorityZIndex = false,
-  onViewAll
+  onViewAll,
+  disableLoop = false,
+  onLoadMore,
+  hasMore = false,
+  isLoadingMore = false,
 }) => {
   const { t } = useTranslation();
+  // Autorise jusqu'à 120 cartes chargées dynamiquement tout en gardant un DOM raisonnable
+  const limitedItems = useMemo(() => items.slice(0, 120), [items]);
+  const shouldLoop = !disableLoop && !isHistory && limitedItems.length >= 6;
+
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: 'start',
     dragFree: true,
-    containScroll: 'keepSnaps',
+    containScroll: shouldLoop ? false : 'keepSnaps',
     slidesToScroll: 1,
     skipSnaps: false,
     // P7 — 25 → 15 : snap plus rapide = moins de frames pendant lesquelles
@@ -406,7 +418,7 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
     // saccadé sur trackpad/molette, remonter à 20.
     duration: 15,
     startIndex: 0,
-    loop: false
+    loop: shouldLoop
   });
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(false);
@@ -423,9 +435,6 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
   const watchlistCollections = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('watchlist_collections') || '[]'); } catch { return []; }
   }, []);
-
-  // Limite le nombre d'items pour éviter de surcharger le DOM (max 30 items par carousel)
-  const limitedItems = useMemo(() => items.slice(0, 30), [items]);
 
   // Pré-warmer idle (P1 + P3) : dès le mount du carousel, on pré-décode toutes
   // les bitmaps poster (élimine le coût de décode synchrone pendant le scroll
@@ -506,13 +515,21 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
     return 4;                 // sm/xs
   }, []);
 
-  // Effect 2: track arrow-button state via 'select' + 'reInit' only.
+  // Effect 2: track arrow-button state + trigger dynamic horizontal page loading near right end
   useEffect(() => {
     if (!emblaApi) return;
     const updateArrows = () => {
       try {
         setCanScrollPrev(emblaApi.canScrollPrev());
         setCanScrollNext(emblaApi.canScrollNext());
+
+        if (onLoadMore && hasMore && !isLoadingMore && limitedItems.length < 120) {
+          const snaps = emblaApi.scrollSnapList().length;
+          const current = emblaApi.selectedScrollSnap();
+          if (snaps > 0 && current >= Math.max(0, snaps - 8)) {
+            onLoadMore();
+          }
+        }
       } catch (_) {
         // no-op
       }
@@ -524,7 +541,7 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
       emblaApi.off('select', updateArrows);
       emblaApi.off('reInit', updateArrows);
     };
-  }, [emblaApi]);
+  }, [emblaApi, onLoadMore, hasMore, isLoadingMore, limitedItems.length]);
 
   // Support molette horizontale (tilt wheel / trackpad) -> scroll du carousel
   useEffect(() => {
@@ -570,26 +587,36 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (!emblaApi) return;
     try {
+      const snaps = emblaApi.scrollSnapList().length;
+      if (snaps === 0) return;
       const current = emblaApi.selectedScrollSnap();
-      const target = Math.max(0, current - getStep());
+      const target = shouldLoop
+        ? (current - getStep() + snaps) % snaps
+        : Math.max(0, current - getStep());
       emblaApi.scrollTo(target);
     } catch (_) {
       emblaApi.scrollPrev();
     }
-  }, [emblaApi, getStep]);
+  }, [emblaApi, getStep, shouldLoop]);
 
   const handleNext = useCallback((e?: React.MouseEvent) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (!emblaApi) return;
     try {
-      const current = emblaApi.selectedScrollSnap();
       const snaps = emblaApi.scrollSnapList().length;
-      const target = Math.min(snaps - 1, current + getStep());
+      if (snaps === 0) return;
+      const current = emblaApi.selectedScrollSnap();
+      if (onLoadMore && hasMore && !isLoadingMore && limitedItems.length < 120 && current >= Math.max(0, snaps - getStep() - 4)) {
+        onLoadMore();
+      }
+      const target = shouldLoop
+        ? (current + getStep()) % snaps
+        : Math.min(snaps - 1, current + getStep());
       emblaApi.scrollTo(target);
     } catch (_) {
       emblaApi.scrollNext();
     }
-  }, [emblaApi, getStep]);
+  }, [emblaApi, getStep, shouldLoop, onLoadMore, hasMore, isLoadingMore, limitedItems.length]);
 
   // Open in new tab on middle-click
   const handleAuxOpen = useCallback((e: React.MouseEvent, path: string) => {
@@ -740,8 +767,8 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
                   />
                 );
               })}
-              {/* Spacer to ensure last card hover is fully visible */}
-              <div className="flex-none w-8 md:w-24" aria-hidden="true" />
+              {/* Spacer only when finite scrolling (avoid gap in seamless infinite loop) */}
+              {!shouldLoop && <div className="flex-none w-8 md:w-24" aria-hidden="true" />}
             </div>
           </div>
           {/* Boutons de navigation - verticaux noirs avec slide-in au hover */}

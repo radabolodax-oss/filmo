@@ -12,6 +12,9 @@ import CarouselTitle from '../components/CarouselTitle';
 import { useWrappedTracker } from '../hooks/useWrappedTracker';
 import { getTmdbLanguage } from '../i18n';
 import { getMinimumCarouselCategoryItems, makeExclusiveCategories } from '../utils/exclusiveCategories';
+import InfiniteCatalogSection from '../components/InfiniteCatalogSection';
+import { useInfiniteCatalog } from '../hooks/useInfiniteCatalog';
+import { MOVIE_ROW_RECIPES } from '../utils/infiniteCatalogRows';
 
 // Nombre de sections à charger immédiatement
 const IMMEDIATE_LOAD_COUNT = 2;
@@ -300,6 +303,13 @@ const Movies: React.FC = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const observer = useRef<IntersectionObserver>();
   const sliderIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const {
+    rows: infiniteRows,
+    isLoadingBatch: isLoadingInfiniteBatch,
+    sentinelRef: infiniteSentinelRef,
+    loadMoreRowItems: loadMoreInfiniteRowItems,
+  } = useInfiniteCatalog(MOVIE_ROW_RECIPES, { enabled: !loading && movies.length > 0 });
   const [isTop10CardHovered, setIsTop10CardHovered] = React.useState(false);
   const top10RowRef = React.useRef<HTMLDivElement>(null);
   const [genreItems, setGenreItems] = useState<{ id: number; name: string; route: string; imageUrl?: string }[]>([
@@ -977,6 +987,15 @@ const Movies: React.FC = () => {
             </LazySection>
           </div>
         ))}
+
+        {/* Infinite Cultural (KR / IN / NG) & Thematic Movie Carousels */}
+        <InfiniteCatalogSection
+          rows={infiniteRows}
+          isLoadingBatch={isLoadingInfiniteBatch}
+          sentinelRef={infiniteSentinelRef}
+          onLoadMoreRowItems={loadMoreInfiniteRowItems}
+          rowClassName="px-4 md:px-8"
+        />
 
         {/* Movie Category Rows - replaced by unified EmblaCarousel above */}
       </div>

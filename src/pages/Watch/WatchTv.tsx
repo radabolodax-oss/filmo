@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 
 import HLSPlayer from '../../components/HLSPlayer';
+import PlayerStage from '../../components/PlayerAmbilight';
 
 import FrameRedirectWatch from '../../components/FrameRedirectWatch';
 
@@ -9893,7 +9894,7 @@ const WatchTv: React.FC = () => {
 
 
 
-      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
+      <PlayerStage backdrop={backdropPath || tvMeta?.backdrop_path} className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
 
       <style dangerouslySetInnerHTML={{
 
@@ -10330,7 +10331,7 @@ const WatchTv: React.FC = () => {
 
       )}
 
-      </div>
+      </PlayerStage>
 
 
 

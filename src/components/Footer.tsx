@@ -336,7 +336,7 @@ const Footer: React.FC = () => {
                   </a>
 
                   <a
-                    href="https://www.instagram.com/cineviseur_/"
+                    href="https://www.instagram.com/cineviseur_dawger/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs font-medium text-pink-400 hover:text-pink-300 transition-colors"

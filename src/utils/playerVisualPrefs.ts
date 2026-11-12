@@ -93,3 +93,15 @@ export function savePlayerPrefFlag(key: string, enabled: boolean): void {
     emitPlayerPrefsChanged();
   } catch { /* ignore */ }
 }
+
+export function readAmbilightEnabled(): boolean {
+  try {
+    return localStorage.getItem('playerAmbilightMode') !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export function saveAmbilightEnabled(enabled: boolean): void {
+  savePlayerPrefFlag('playerAmbilightMode', enabled);
+}

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 
 import HLSPlayer from '../../components/HLSPlayer';
+import PlayerStage from '../../components/PlayerAmbilight';
 
 import { useAdFreePopup } from '../../context/AdFreePopupContext';
 
@@ -7173,7 +7174,7 @@ const WatchMovie: React.FC = () => {
 
 
 
-      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
+      <PlayerStage backdrop={backdropPath || movieMeta?.backdrop_path} className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
 
       <style dangerouslySetInnerHTML={{
 
@@ -8367,7 +8368,7 @@ const WatchMovie: React.FC = () => {
 
       )}
 
-      </div>
+      </PlayerStage>
 
 
 
