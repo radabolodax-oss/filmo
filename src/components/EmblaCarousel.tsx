@@ -1,10 +1,11 @@
-﻿import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
 import { Star, Calendar, Trash, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { getSavedPosition } from '../utils/watchStateCache';
 import { encodeId } from '../utils/idEncoder';
 import { useTmdbImages, prefetchTmdbImages } from '../hooks/useTmdbImages';
 import { useEmblaScrollSuppress } from '../hooks/useEmblaScrollSuppress';
@@ -231,7 +232,7 @@ const CarouselCard = React.memo<{
       : t('common.movie');
 
   return (
-    <div className="embla-slide flex-none relative w-[160px] md:w-[192px] tv:w-[220px]">
+    <div className="embla-slide flex-none relative w-[clamp(112px,29vw,156px)] sm:w-[160px] md:w-[192px] tv:w-[220px]">
       <div
         style={{ animationDelay: `${Math.min(index * 0.03, 0.5)}s` }}
         className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 hover:scale-105 transition-transform duration-200 ease-out animate-card-enter"
@@ -608,18 +609,13 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
   // Function to get movie progress data - memoized
   const getMovieProgress = useCallback((movieId: number): { percentage: number, position?: number, duration?: number } => {
     try {
-      const progressKey = `progress_${movieId}`;
-      const savedData = localStorage.getItem(progressKey);
-
-      if (savedData) {
-        const progressData = JSON.parse(savedData);
-        if (progressData.position && progressData.duration) {
-          return {
-            percentage: Math.min((progressData.position / progressData.duration) * 100, 100),
-            position: progressData.position,
-            duration: progressData.duration
-          };
-        }
+      const saved = getSavedPosition('movie', movieId);
+      if (saved && saved.durationSec > 0) {
+        return {
+          percentage: Math.min((saved.positionSec / saved.durationSec) * 100, 100),
+          position: saved.positionSec,
+          duration: saved.durationSec,
+        };
       }
       return { percentage: 0 };
     } catch (error) {
@@ -631,18 +627,13 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
   // Function to get episode progress data - memoized
   const getEpisodeProgress = useCallback((showId: number, seasonNumber: number, episodeNumber: number): { percentage: number, position?: number, duration?: number } => {
     try {
-      const progressKey = `progress_tv_${showId}_s${seasonNumber}_e${episodeNumber}`;
-      const savedData = localStorage.getItem(progressKey);
-
-      if (savedData) {
-        const progressData = JSON.parse(savedData);
-        if (progressData.position && progressData.duration) {
-          return {
-            percentage: Math.min((progressData.position / progressData.duration) * 100, 100),
-            position: progressData.position,
-            duration: progressData.duration
-          };
-        }
+      const saved = getSavedPosition('tv', showId, seasonNumber, episodeNumber);
+      if (saved && saved.durationSec > 0) {
+        return {
+          percentage: Math.min((saved.positionSec / saved.durationSec) * 100, 100),
+          position: saved.positionSec,
+          duration: saved.durationSec,
+        };
       }
       return { percentage: 0 };
     } catch (error) {
@@ -711,7 +702,7 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
         <div className="relative w-full overflow-visible" data-carousel>
           <div className="overflow-visible" ref={emblaRef}>
             <div
-              className="flex gap-4 pr-4 md:pr-6 pl-4 md:pl-6"
+              className="flex gap-2.5 sm:gap-3.5 md:gap-4 pr-4 md:pr-6 pl-4 md:pl-6"
               style={{ overflow: 'visible' }}
             >
               {limitedItems.map((item, index) => {

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useLayoutEffect, useState, useRef, lazy } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigationType, useNavigate, matchPath, useParams } from 'react-router-dom';
 
 // Redirects: /watch/* → cleaner URLs without /watch/ prefix
@@ -36,6 +36,7 @@ import { startVipVerification } from './utils/vipUtils';
 import { useAutoTabDetection } from './hooks/useAutoTabDetection';
 import { broadcastAuthChange, clearStoredAuthSession, getResolvedAccountContext } from './utils/accountAuth';
 import { isSyncableStorageKey, SYNC_OUTBOX_STORAGE_KEY } from './utils/syncStorage';
+import { hydrateWatchStateCache } from './utils/watchStateCache';
 import i18n, { detectInitialLanguage } from './i18n';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
@@ -1545,8 +1546,23 @@ const ProfileGate: React.FC<{ children: React.ReactNode }> = ({ children }) => <
 
 const AppWithIntro: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [showRedirectPopup, setShowRedirectPopup] = useState(false);
   const { showIntro, completeIntro } = useIntro();
+
+  // À la fin de l'intro, renvoyer directement sur l'accueil
+  const handleIntroComplete = React.useCallback(() => {
+    completeIntro();
+    navigate('/', { replace: true });
+  }, [completeIntro, navigate]);
+
+  // Si l'application s'initialise sur /index.html (chargement WebView Android),
+  // basculer immédiatement et proprement sur la racine /
+  React.useEffect(() => {
+    if (location.pathname === '/index.html' || location.pathname.endsWith('/index.html')) {
+      navigate('/', { replace: true });
+    }
+  }, [location.pathname, navigate]);
   // useTVMode(); // Remplacé par RemoteCursor
   useSpaceToPlayIframe();
   useAutoTabDetection();
@@ -1670,7 +1686,7 @@ const AppWithIntro: React.FC = () => {
   return (
     <div className="min-h-screen bg-black text-white relative overflow-hidden">
       {/* Intro overlay — le site charge derrière */}
-      {showIntro && <IntroAnimation onAnimationComplete={completeIntro} />}
+      {showIntro && <IntroAnimation onAnimationComplete={handleIntroComplete} />}
       {/* Global styles for profile pages */}
       <style>
         {`
@@ -1706,6 +1722,7 @@ const AppWithIntro: React.FC = () => {
           <Routes>
             {/* Eager — landing page, kept in main bundle */}
             <Route path="/" element={<Home />} />
+            <Route path="/index.html" element={<Home />} />
 
             {/* Routes spéciales avec props ou logique conditionnelle */}
             <Route path="/terms" element={<Navigate to="/terms-of-service" replace />} />
@@ -1787,6 +1804,10 @@ const AnimationMotionConfig: React.FC<{ children: React.ReactNode }> = ({ childr
 
 function App() {
   const [forceContinue, setForceContinue] = React.useState(false);
+
+  React.useEffect(() => {
+    void hydrateWatchStateCache();
+  }, []);
 
   // Vérifier si le site est embarqué depuis wavewatch.xyz (DÉSACTIVÉ)
   const isEmbeddedFromWavewatch = React.useMemo(() => {

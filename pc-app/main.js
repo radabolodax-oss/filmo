@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-const CURRENT_VERSION = '1.0.5';
+const CURRENT_VERSION = '1.0.8';
 const VERSION_CHECK_URL = 'https://dawgerwebsite.vercel.app/api/version.json';
 const isPackaged = app.isPackaged;
 
@@ -177,7 +177,7 @@ async function startBackend() {
     NODE_PATH: path.join(backendDir, 'node_modules'),
     JWT_SECRET: process.env.JWT_SECRET || 'dawger-desktop-jwt-secret-offline-2026',
     TMDB_API_KEY: '15d2ea6d0dc1d476efbca3eba2b9bbfb',
-    WIFLIX_BASE_URL: 'https://flemmix.studio',
+    WIFLIX_BASE_URL: 'https://www.neufneuf.space',
     CPASMAL_BASE_URL: 'https://www.cpasmal.top',
     FSTREAM_BASE_URL: 'https://french-stream.net',
     FRONTEND_BASE_URL: 'http://127.0.0.1:3000',
@@ -534,10 +534,9 @@ async function checkUpdates(win) {
     if (!data) return;
 
     // 1. Verifie si un patch OTA (micro-correctif JS/CSS de 2 Mo) est en attente
+    // Note: ne pas court-circuiter la verification binaire (.exe) tant que le deploiement zip OTA n'est pas actif
     if (data.ota_patch && data.ota_patch.url && isNewerVersion(data.ota_patch.version, getLocalPatchVersion())) {
-      log('INFO', `[OTA] Nouveau micro-patch detecte: v${data.ota_patch.version}`);
-      // L'application telecharge le patch zip et le deploie en arriere-plan
-      return;
+      log('INFO', `[OTA] Nouveau micro-patch detecte: v${data.ota_patch.version} (verification binaire maintenue)`);
     }
 
     // 2. Verifie si une nouvelle version binaire (.exe) est disponible
@@ -628,6 +627,95 @@ ipcMain.handle('dawger:install-update', () => {
 });
 
 // ---------------------------------------------------------------------------
+// GESTION DU MODE D'AFFICHAGE DE LA FENETRE (Fenetre / Fenetre sans bordure / Plein ecran)
+// ---------------------------------------------------------------------------
+
+function getDisplayModeFilePath() {
+  return path.join(app.getPath('userData'), 'display-mode.json');
+}
+
+function getSavedDisplayMode() {
+  try {
+    const p = getDisplayModeFilePath();
+    if (fs.existsSync(p)) {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (['fullscreen', 'borderless', 'windowed'].includes(data.mode)) {
+        return data.mode;
+      }
+    }
+  } catch (_) {}
+  return 'fullscreen';
+}
+
+function saveDisplayMode(mode) {
+  try {
+    const p = getDisplayModeFilePath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify({ mode, updatedAt: new Date().toISOString() }), 'utf8');
+  } catch (_) {}
+}
+
+function applyDisplayMode(mode) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  log('INFO', `[DISPLAY] Application du mode d'affichage: ${mode}`);
+  if (mode === 'windowed') {
+    mainWindow.setFullScreen(false);
+    mainWindow.unmaximize();
+    mainWindow.setSize(1280, 800);
+    mainWindow.center();
+  } else if (mode === 'borderless') {
+    mainWindow.setFullScreen(false);
+    mainWindow.maximize();
+  } else {
+    mainWindow.maximize();
+    mainWindow.setFullScreen(true);
+  }
+  saveDisplayMode(mode);
+}
+
+ipcMain.handle('dawger:get-display-mode', () => {
+  return getSavedDisplayMode();
+});
+
+ipcMain.handle('dawger:set-display-mode', (event, mode) => {
+  applyDisplayMode(mode);
+  return { success: true, mode };
+});
+
+function getWatchStateFilePath() {
+  const dataDir = path.join(app.getPath('userData'), 'data');
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+  } catch (_) {}
+  return path.join(dataDir, 'dawger-watch-state.json');
+}
+
+ipcMain.handle('dawger:watch-state-read', () => {
+  try {
+    const filePath = getWatchStateFilePath();
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch (err) {
+    log('WARN', '[WATCH_STATE] Erreur lecture:', err.message);
+    return null;
+  }
+});
+
+ipcMain.handle('dawger:watch-state-write', (event, data) => {
+  try {
+    const filePath = getWatchStateFilePath();
+    const tmpPath = filePath + '.tmp';
+    fs.writeFileSync(tmpPath, JSON.stringify(data || {}), 'utf8');
+    fs.renameSync(tmpPath, filePath);
+    return true;
+  } catch (err) {
+    log('ERROR', '[WATCH_STATE] Erreur ecriture:', err.message);
+    return false;
+  }
+});
+
+// ---------------------------------------------------------------------------
 // CREATION DE LA FENETRE PRINCIPALE
 // ---------------------------------------------------------------------------
 
@@ -636,11 +724,13 @@ async function createWindow() {
   const iconPngPath = path.join(__dirname, 'icon.png');
   const resolvedIcon = fs.existsSync(iconPath) ? iconPath : (fs.existsSync(iconPngPath) ? iconPngPath : undefined);
   const preloadPath = path.join(__dirname, 'preload.js');
+  const initialMode = getSavedDisplayMode();
 
   mainWindow = new BrowserWindow({
     title: 'Dawger',
     width: 1280,
     height: 800,
+    fullscreen: initialMode === 'fullscreen',
     backgroundColor: '#0a0a0c', // Fond sombre immediat, empeche tout ecran blanc !
     icon: resolvedIcon,
     autoHideMenuBar: true,
@@ -654,7 +744,27 @@ async function createWindow() {
     },
   });
 
+  if (initialMode === 'borderless') {
+    mainWindow.maximize();
+  } else if (initialMode === 'windowed') {
+    mainWindow.unmaximize();
+    mainWindow.setSize(1280, 800);
+    mainWindow.center();
+  } else {
+    mainWindow.maximize();
+    mainWindow.setFullScreen(true);
+  }
+
   mainWindow.setMenu(null);
+
+  // Raccourci F11 pour basculer facilement entre plein ecran et fenetre sans bordure
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F11' && input.type === 'keyDown') {
+      const nextMode = mainWindow.isFullScreen() ? 'borderless' : 'fullscreen';
+      applyDisplayMode(nextMode);
+      event.preventDefault();
+    }
+  });
 
   mainWindow.on('page-title-updated', (e) => {
     e.preventDefault();

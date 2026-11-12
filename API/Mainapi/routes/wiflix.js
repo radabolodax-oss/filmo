@@ -31,7 +31,7 @@ const { fetchCinestreamMovieData } = require("./cinestream");
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "";
 const TMDB_API_URL = "https://api.themoviedb.org/3";
-const WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || "https://flemmix.studio";
+const WIFLIX_BASE_URL = process.env.WIFLIX_BASE_URL || "https://www.neufneuf.space";
 
 // === Cache helpers (local, since getFromCacheNoExpiration is not yet in cacheManager) ===
 const getFromCacheNoExpiration = async (cacheDir, key) => {
@@ -481,13 +481,13 @@ async function extractWiflixPlayers(pageUrl) {
           batch.map(async (t) => {
             try {
               const ajaxRes = await axios.post(
-                'https://flemmix.studio/ajax_player.php',
+                `${WIFLIX_BASE_URL}/ajax_player.php`,
                 new URLSearchParams({ v: t.dataV, k: fxK, b: '1' }).toString(),
                 {
                   headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Referer': pageUrl,
-                    'Origin': 'https://flemmix.studio',
+                    'Origin': WIFLIX_BASE_URL,
                     'X-Requested-With': 'XMLHttpRequest',
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
                   },

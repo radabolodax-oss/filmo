@@ -12,6 +12,8 @@ const SYNCABLE_EXACT_KEYS = new Set([
   'favorites_tv',
   'miniPlayerPosition',
   'miniPlayerVolume',
+  'dawger_intro_enabled',
+  'dawger_intro_seen',
   'movix_intro_enabled',
   'movix_intro_seen',
   'privacy_data_collection',

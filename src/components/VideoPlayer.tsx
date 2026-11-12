@@ -27,7 +27,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ movieId, nextMovie }) => {
 
   return (
     <iframe
-      src={`https://frembed.click/embed/movie/${movieId}`}
+      src={`https://frembed.uno/embed/movie/${movieId}`}
       width="100%"
       height="500px"
       frameBorder="0"

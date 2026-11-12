@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Snowfall from 'react-snowfall';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
@@ -485,7 +485,7 @@ const Header: React.FC = () => {
               <div className="flex-1" />
 
               {/* Desktop Search */}
-              <div className="hidden landscape:block lg:block relative w-[14rem] phone-ls:w-[9.5rem] lg:w-[15rem] xl:w-[20rem] 2xl:w-[22rem]">
+              <div className="hidden landscape:block lg:block relative w-[14rem] phone-ls:w-[7.5rem] lg:w-[15rem] xl:w-[20rem] 2xl:w-[22rem]">
                 <form
                   onSubmit={handleSearchSubmit}
                   onFocus={() => setSearchFocused(true)}
@@ -533,10 +533,10 @@ const Header: React.FC = () => {
                 onClick={() => setIsSettingsModalOpen(true)}
                 title="Paramètres & Aide"
                 aria-label="Paramètres & Aide"
-                className="hidden landscape:flex lg:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white/80 hover:text-white bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 hover:border-emerald-500/30 transition-all duration-200 shadow-sm shrink-0 group cursor-pointer"
+                className="hidden landscape:flex lg:flex items-center gap-1.5 px-3 phone-ls:px-2 py-2 phone-ls:py-1.5 rounded-xl text-xs font-semibold text-white/80 hover:text-white bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 hover:border-emerald-500/30 transition-all duration-200 shadow-sm shrink-0 group cursor-pointer"
               >
                 <Settings size={15} className="text-emerald-400 group-hover:rotate-45 transition-transform duration-300" />
-                <span>Paramètres</span>
+                <span className="phone-ls:hidden">Paramètres</span>
               </button>
 
               {/* Right section */}
@@ -696,7 +696,7 @@ const Header: React.FC = () => {
               className="h-11 lg:h-[105px]"
               style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',objectFit:'contain',filter:'blur(20px) contrast(6) brightness(5) saturate(2)',opacity:0,transition:'opacity 0.35s ease',pointerEvents:'none'}}
             />
-            <img src="/prowler-logo.png" alt="Prowler" className="h-11 lg:h-[105px]" style={{objectFit:'contain',position:'relative'}} />
+            <img src="/prowler-logo.png" alt="Dawger" className="h-11 lg:h-[105px]" style={{objectFit:'contain',position:'relative'}} />
           </div>
         </Link>
       </div>

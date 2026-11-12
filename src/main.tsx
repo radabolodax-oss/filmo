@@ -8,6 +8,7 @@ import App from './App.tsx'
 import axios from 'axios'
 import { api } from './services/api'
 import { registerBlockDetection } from './services/blockDetection'
+import { installMobileStandaloneApi } from './utils/mobileStandaloneApi'
 import './index.css'
 import './styles/light-mode.css'
 
@@ -124,6 +125,8 @@ startMovixConsoleSafetyWarning();
 // Register block detection on both the default axios (used by most services)
 // and the api instance (used by contentAPI). Both need their own interceptors
 // since instances created via axios.create() don't inherit from the default.
+installMobileStandaloneApi(axios)
+installMobileStandaloneApi(api)
 registerBlockDetection(axios)
 registerBlockDetection(api)
 

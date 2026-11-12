@@ -19,6 +19,28 @@ const https = require('https');
 const WEBFLIX_BASE = 'https://webflix.bio';
 const VIDZY_BASE = 'https://vidzy.org';
 const MOVIEZ_BASE = 'https://api.moviez.ac';
+
+function parseSizeInGb(rawSize) {
+  if (typeof rawSize !== 'string') return 0;
+  const m = rawSize.trim().match(/([\d.,]+)\s*(tb|to|gb|go|mb|mo)?/i);
+  if (!m) return 0;
+  const val = parseFloat(m[1].replace(',', '.'));
+  if (!Number.isFinite(val)) return 0;
+  const unit = (m[2] || '').toLowerCase();
+  if (unit === 'tb' || unit === 'to') return val * 1024;
+  if (unit === 'mb' || unit === 'mo') return val / 1024;
+  return val;
+}
+
+function isTrue4KStream(rawSize, url, quality) {
+  const hasGbUnit = typeof rawSize === 'string' && /(gb|go|tb|to)\b/i.test(rawSize);
+  const gb = hasGbUnit ? parseSizeInGb(rawSize) : 0;
+  return (
+    gb >= 7.5 ||
+    /\b(4k|2160p?|uhd)\b/i.test(String(url || '')) ||
+    /\b(4k|2160p?|uhd)\b/i.test(String(quality || ''))
+  );
+}
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes de cache
 const cache = new Map();
 
@@ -120,7 +142,7 @@ router.get('/embed', (req, res) => {
   }
   const baseApiUrl = getBaseApiUrl(req);
   const videoSrc = `${baseApiUrl}/api/webflix/video?url=${encodeURIComponent(targetUrl)}`;
-  const title = req.query.title || 'Webflix FastFlux 1080p';
+  const title = req.query.title || 'Webflix FastFlux 4K UHD';
 
   res.removeHeader('X-Frame-Options');
   res.setHeader('Content-Security-Policy', 'frame-ancestors *');
@@ -204,16 +226,23 @@ router.get('/movie/:tmdbId', async (req, res) => {
       const d = fastfluxResp.data.data;
       const embedUrl = `${baseApiUrl}/api/webflix/embed?url=${encodeURIComponent(d.url)}`;
       const proxyUrl = `${baseApiUrl}/api/webflix/video?url=${encodeURIComponent(d.url)}`;
-      vf.push({
-        name: 'Webflix FastFlux 1080p (VF)',
+      const rawSize = d.size || '';
+      const is4K = isTrue4KStream(rawSize, d.url, d.quality);
+      const quality = is4K ? '4K Ultra HD' : (d.quality || '1080p FHD');
+      const name = is4K
+        ? `👑 FastFlux 4K Ultra HD (VF)${rawSize ? ` (${rawSize})` : ''}`
+        : `FastFlux 1080p FHD (VF)${rawSize ? ` (${rawSize})` : ''}`;
+      vf.unshift({
+        name,
         url: embedUrl,
         directUrl: proxyUrl,
         rawUrl: d.url,
         hoster: 'fastflux',
         language: 'vf',
         type: 'webflix',
-        quality: '1080p FHD',
-        size: d.size || null,
+        quality,
+        is4K,
+        size: rawSize || null,
       });
     }
 
@@ -249,13 +278,14 @@ router.get('/movie/:tmdbId', async (req, res) => {
         url: `${VIDZY_BASE}/movie/${tmdbId}/vostfr?autoplay=1`,
         hoster: 'vidzy',
         language: 'vostfr',
+        type: 'webflix',
       });
     }
 
     // 4. Frembed & Cinesrc
     vf.push({
       name: 'Webflix Frembed (VF)',
-      url: `https://frembed.cyou/api/film.php?id=${tmdbId}`,
+      url: `https://frembed.uno/api/film.php?id=${tmdbId}`,
       hoster: 'frembed',
       language: 'vf',
       type: 'webflix',
@@ -313,16 +343,23 @@ async function handleTv(tmdbId, season, episode, req, res) {
       const d = fastfluxResp.data.data;
       const embedUrl = `${baseApiUrl}/api/webflix/embed?url=${encodeURIComponent(d.url)}`;
       const proxyUrl = `${baseApiUrl}/api/webflix/video?url=${encodeURIComponent(d.url)}`;
-      vf.push({
-        name: 'Webflix FastFlux 1080p (VF)',
+      const rawSize = d.size || '';
+      const is4K = isTrue4KStream(rawSize, d.url, d.quality);
+      const quality = is4K ? '4K Ultra HD' : (d.quality || '1080p FHD');
+      const name = is4K
+        ? `👑 FastFlux 4K Ultra HD (VF)${rawSize ? ` (${rawSize})` : ''}`
+        : `FastFlux 1080p FHD (VF)${rawSize ? ` (${rawSize})` : ''}`;
+      vf.unshift({
+        name,
         url: embedUrl,
         directUrl: proxyUrl,
         rawUrl: d.url,
         hoster: 'fastflux',
         language: 'vf',
         type: 'webflix',
-        quality: '1080p FHD',
-        size: d.size || null,
+        quality,
+        is4K,
+        size: rawSize || null,
       });
     }
 
@@ -358,13 +395,14 @@ async function handleTv(tmdbId, season, episode, req, res) {
         url: `${VIDZY_BASE}/serie/${tmdbId}/${season}/${episode}/vostfr?autoplay=1`,
         hoster: 'vidzy',
         language: 'vostfr',
+        type: 'webflix',
       });
     }
 
     // 4. Frembed & Cinesrc TV
     vf.push({
       name: 'Webflix Frembed (VF)',
-      url: `https://frembed.cyou/api/serie.php?id=${tmdbId}&sa=${season}&epi=${episode}`,
+      url: `https://frembed.uno/api/serie.php?id=${tmdbId}&sa=${season}&epi=${episode}`,
       hoster: 'frembed',
       language: 'vf',
       type: 'webflix',

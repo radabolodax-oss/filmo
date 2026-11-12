@@ -451,7 +451,7 @@ const Footer: React.FC = () => {
                 <ul className="space-y-2.5 text-xs sm:text-sm">
                   <li>
                     <Link to="/app" className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1.5">
-                      <span>Applications PC & Android</span>
+                      <span>Applications PC, Android & iOS (Bêta)</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Nouveau</span>
                     </Link>
                   </li>

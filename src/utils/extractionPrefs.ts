@@ -7,7 +7,7 @@
  */
 
 export const M3U8_EXTRACTOR_KEYS = [
-  'voe', 'fsvid', 'vidzy', 'vidmoly', 'sibnet', 'uqload', 'doodstream', 'seekstreaming',
+  'voe', 'fsvid', 'vidzy', 'vidmoly', 'sibnet', 'uqload', 'doodstream', 'seekstreaming', 'lulustream', 'veev', 'vidara',
 ] as const;
 
 export const EXTRACTION_METHOD_KEYS = [

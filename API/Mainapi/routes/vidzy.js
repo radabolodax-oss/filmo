@@ -16,7 +16,7 @@ const axios = require('axios');
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
-const FS_BASE = process.env.FSTREAM_BASE_URL || 'https://french-stream.ac';
+const FS_BASE = process.env.FSTREAM_BASE_URL || 'https://french-stream.my';
 const VIDZY_BASE = 'https://vidzy.org';
 
 const vidzyClient = axios.create({

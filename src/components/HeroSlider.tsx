@@ -248,7 +248,7 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
         `}
       </style>
       <div
-        className="relative w-full overflow-hidden h-[88vh] md:h-[550px] tv:h-[650px]"
+        className="relative w-full overflow-hidden h-[68dvh] min-h-[410px] max-h-[620px] sm:h-[76dvh] md:h-[550px] md:max-h-none tv:h-[650px]"
       >
         {/* Edge fades */}
         <div className="absolute inset-y-0 left-0 w-10 sm:w-14 md:w-20 z-20 pointer-events-none bg-gradient-to-r from-black via-black/40 to-transparent" />
@@ -296,7 +296,7 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
 
                   {/* ── Content ── */}
                   <div className="absolute inset-0 flex items-end md:items-center z-20">
-                    <div className="w-full md:max-w-2xl px-4 sm:px-6 md:px-12 pb-24 md:pb-16 tv:pb-20 tv:max-w-4xl">
+                    <div className="w-full md:max-w-2xl px-4 sm:px-6 md:px-12 pb-14 sm:pb-20 md:pb-16 tv:pb-20 tv:max-w-4xl">
                       <AnimatePresence mode="wait">
                         {isActive && (
                           <motion.div
@@ -336,7 +336,7 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
                                   decoding="async"
                                 />
                               ) : (
-                                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white leading-tight line-clamp-2 drop-shadow-lg">
+                                <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold text-white leading-tight line-clamp-2 drop-shadow-lg">
                                   {item.title || item.name || ''}
                                 </h1>
                               )}

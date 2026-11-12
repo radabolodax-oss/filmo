@@ -1,0 +1,62 @@
+name: Build Dawger Standalone iOS (.ipa) & Android (.apk)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-ios-standalone:
+    name: Build Standalone iOS (.ipa) on macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Standalone Web Bundle (dist)
+        run: |
+          npm install --legacy-peer-deps
+          npx vite build
+          rm -rf dist/avatars
+
+      - name: Install Mobile App Dependencies & CocoaPods
+        working-directory: app
+        run: |
+          npm install --legacy-peer-deps
+          npm run build:userscript
+          npx pod-install ios
+
+      - name: Build iOS Release Archive (Unsigned)
+        working-directory: app/ios
+        run: |
+          xcodebuild \
+            -workspace Movix.xcworkspace \
+            -scheme Movix \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Embed Standalone Web Bundle into Movix.app & Package Unsigned IPA
+        working-directory: app
+        run: |
+          APP_BUNDLE="ios/build/Build/Products/Release-iphoneos/Movix.app"
+          mkdir -p "$APP_BUNDLE/dist"
+          cp -R ../dist/* "$APP_BUNDLE/dist/"
+          IOS_APP_PATH="$APP_BUNDLE" IOS_OUTPUT_DIR="build/ios-ipa" bash scripts/package-unsigned-ios.sh
+          mv build/ios-ipa/Movix-unsigned.ipa build/ios-ipa/Dawger-Autonome-v1.0.0-unsigned.ipa
+
+      - name: Upload Dawger iOS Unsigned IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dawger-Autonome-iOS-IPA
+          path: app/build/ios-ipa/Dawger-Autonome-v1.0.0-unsigned.ipa
+          if-no-files-found: error

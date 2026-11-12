@@ -163,8 +163,8 @@ export function getHosterDisplayName(url: string, hoster: BuiltinHosterId): stri
 /** Labels human-readable pour UI. */
 export const HOSTER_LABELS: Record<BuiltinHosterId, string> = {
   webflix: 'Webflix (Lecteur HD)',
-  fastflux: 'Webflix FastFlux (1080p FHD)',
-  miaw: 'Serveur Ultra (1080p HD)',
+  fastflux: '👑 FastFlux (4K UHD / 1080p)',
+  miaw: 'Miaw (1080p HD)',
   moviez: 'Moviez',
   voe: 'Voe',
   vidmoly: 'Vidmoly',
@@ -188,8 +188,7 @@ export const HOSTER_LABELS: Record<BuiltinHosterId, string> = {
 export function formatPlayerDisplayName(rawName: string | undefined): string {
   if (!rawName) return 'Lecteur HD';
   let name = String(rawName).trim();
-  name = name.replace(/miaw[\s_-]*(1080p)?/gi, 'Serveur Ultra $1');
-  name = name.replace(/\bmiaw\b/gi, 'Serveur Ultra');
+  name = name.replace(/\bmiaw\b/gi, 'Miaw');
   if (/^moviez$/i.test(name)) name = 'Lecteur Moviez';
   name = name.replace(/\s+/g, ' ').trim();
   return name.charAt(0).toUpperCase() + name.slice(1);

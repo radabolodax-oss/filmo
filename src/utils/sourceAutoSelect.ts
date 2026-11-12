@@ -109,6 +109,12 @@ export function sortHostersByPriority<
   return [...items].sort((a, b) => {
     const langDiff = langRank(a) - langRank(b);
     if (langDiff !== 0) return langDiff;
+
+    // Priorité absolue 4K Ultra HD au sein de la même langue
+    const aIs4K = (a as any).is4K || (a as any).quality?.includes('4K') || (a as any).label?.includes('4K') || (a as any).name?.includes('4K') ? 1 : 0;
+    const bIs4K = (b as any).is4K || (b as any).quality?.includes('4K') || (b as any).label?.includes('4K') || (b as any).name?.includes('4K') ? 1 : 0;
+    if (aIs4K !== bIs4K) return bIs4K - aIs4K;
+
     return hosterRank(a.type) - hosterRank(b.type);
   });
 }

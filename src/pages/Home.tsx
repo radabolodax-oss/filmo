@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import axios, { CancelTokenSource } from 'axios';
 import { useLocation } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
@@ -62,7 +62,7 @@ const homeStyles = `
 }
 
 .section-title {
-  font-size: 1.5rem;
+  font-size: clamp(1.05rem, 4.2vw, 1.5rem);
   font-weight: 700;
   position: relative;
   background: linear-gradient(90deg, #ffffff, #e2e2e2);
@@ -758,6 +758,14 @@ const Home: React.FC = () => {
     };
 
     loadContinueWatching();
+
+    const onHydrated = () => {
+      void loadContinueWatching();
+    };
+    window.addEventListener('dawger-watch-state-hydrated', onHydrated);
+    return () => {
+      window.removeEventListener('dawger-watch-state-hydrated', onHydrated);
+    };
   }, [location.pathname]);
 
   // Auto-rotate hero items
@@ -903,13 +911,13 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     // Simple title for homepage
-    document.title = 'Prowler';
+    document.title = 'Dawger';
 
     // Add or update structured data for a WebSite
     const structuredData = {
       "@context": "https://schema.org",
       "@type": "WebSite",
-      "name": "Prowler",
+      "name": "Dawger",
       "url": SITE_URL,
       "potentialAction": {
         "@type": "SearchAction",
@@ -1165,7 +1173,7 @@ const Home: React.FC = () => {
                       style={{ zIndex: 11 }}
                     >
                       <div
-                        className="w-full min-h-[400px] h-[65svh] max-h-[700px] relative overflow-hidden"
+                        className="w-full min-h-[340px] h-[56dvh] sm:h-[65svh] max-h-[700px] relative overflow-hidden"
                         style={{ background: '#000' }}
                       >
                         <img
@@ -1186,7 +1194,7 @@ const Home: React.FC = () => {
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs font-semibold uppercase tracking-wider">
                             🔥 {t('home.teamSelection')}
                           </span>
-                          <span className="text-white text-4xl sm:text-5xl font-bold leading-tight">
+                          <span className="text-white text-2xl sm:text-4xl md:text-5xl font-bold leading-tight line-clamp-2">
                             {featuredSeries.title || featuredSeries.name}
                           </span>
                           <div className="flex flex-row gap-2 items-center flex-wrap">

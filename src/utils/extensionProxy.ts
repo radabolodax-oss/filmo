@@ -17,6 +17,10 @@ export const isExtensionAvailable = (): boolean => {
         w.hasMovixExtension === true ||
         w.__MOVIX_EXTENSION_INSTALLED === true ||
         w.hasMovixUserscript === true ||
+        (w as any).hasMovixNexusExtractor === true ||
+        typeof (w as any).GM_xmlhttpRequest === 'function' ||
+        typeof (w as any).ReactNativeWebView !== 'undefined' ||
+        window.location.hostname === 'appassets.androidplatform.net' ||
         document.documentElement?.dataset.movixExtension === 'true'
     );
 };

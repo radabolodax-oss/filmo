@@ -44,13 +44,13 @@ type SchemaVersion = 1 | 2;
  * les fournissent pas.
  */
 export const DEFAULT_MOVIES_TV_ORDER: readonly TopLevelSourceId[] = [
-  'webflix', 'moviez', 'vidzy', 'wavewatch', 'fstream', 'darkino', 'mp4', 'nexus_hls',
+  'webflix', 'miaw', 'wavewatch', 'moviez', 'vidzy', 'fstream', 'darkino', 'mp4', 'nexus_hls',
   'omega', 'wiflix', 'viper', 'coflix',
   'j1f', 'custom', 'frembed', 'vox', 'vostfr',
 ];
 
 export const DEFAULT_ANIME_SOURCE_ORDER: readonly AnimeSourceId[] = [
-  'anicloud', 'animesama', 'franime', 'moviez', 'vidzy', 'wavewatch',
+  'anicloud', 'miaw', 'animesama', 'franime', 'moviez', 'vidzy', 'wavewatch',
 ];
 
 const DEFAULT_ANIME_HOSTER_ORDER: readonly HosterId[] = [
@@ -216,11 +216,13 @@ function mergeWithDefaults(parsed: SourcePriorityPrefs): SourcePriorityPrefs {
     deprecatedSources,
   );
   const webflixEntry = mergedMoviesTvSources.find((e) => e.id === 'webflix') ?? { id: 'webflix' as TopLevelSourceId, enabled: true };
+  const miawEntry = mergedMoviesTvSources.find((e) => e.id === 'miaw') ?? { id: 'miaw' as TopLevelSourceId, enabled: true };
   const moviezEntry = mergedMoviesTvSources.find((e) => e.id === 'moviez') ?? { id: 'moviez' as TopLevelSourceId, enabled: true };
   const enforcedMoviesTvSources = [
+    { ...miawEntry, enabled: true },
     { ...webflixEntry, enabled: true },
     { ...moviezEntry, enabled: true },
-    ...mergedMoviesTvSources.filter((e) => e.id !== 'webflix' && e.id !== 'moviez'),
+    ...mergedMoviesTvSources.filter((e) => e.id !== 'webflix' && e.id !== 'miaw' && e.id !== 'moviez'),
   ];
 
   const mergedMoviesTvHosters = mergeOrderedList(
@@ -229,9 +231,9 @@ function mergeWithDefaults(parsed: SourcePriorityPrefs): SourcePriorityPrefs {
     deprecatedHosters,
   );
   const enforcedMoviesTvHosters: HosterId[] = [
+    'miaw',
     'webflix',
     'fastflux',
-    'miaw',
     'moviez',
     ...mergedMoviesTvHosters.filter((id) => id !== 'webflix' && id !== 'fastflux' && id !== 'miaw' && id !== 'moviez'),
   ];
@@ -241,9 +243,11 @@ function mergeWithDefaults(parsed: SourcePriorityPrefs): SourcePriorityPrefs {
     defaults.categories.anime.sourceOrder,
   );
   const anicloudEntry = mergedAnimeSources.find((e) => e.id === 'anicloud') ?? { id: 'anicloud' as AnimeSourceId, enabled: true };
+  const miawAnimeEntry = mergedAnimeSources.find((e) => e.id === 'miaw') ?? { id: 'miaw' as AnimeSourceId, enabled: true };
   const enforcedAnimeSources = [
     { ...anicloudEntry, enabled: true },
-    ...mergedAnimeSources.filter((e) => e.id !== 'anicloud'),
+    { ...miawAnimeEntry, enabled: true },
+    ...mergedAnimeSources.filter((e) => e.id !== 'anicloud' && e.id !== 'miaw'),
   ];
 
   const mergedAnimeHosters = mergeOrderedList(
@@ -271,8 +275,8 @@ function mergeWithDefaults(parsed: SourcePriorityPrefs): SourcePriorityPrefs {
         overrides: purgeOverrides<TopLevelSourceId>(parsed.categories.moviesTv.overrides),
         pinnedSource: (() => {
           const raw = purgePinSource(parsed.categories.moviesTv.pinnedSource ?? null);
-          return (!raw || raw.id === 'moviez')
-            ? { id: 'webflix' as TopLevelSourceId, snapshot: defaults.categories.moviesTv.sourceOrder }
+          return (!raw || raw.id === 'moviez' || raw.id === 'webflix')
+            ? { id: 'miaw' as TopLevelSourceId, snapshot: defaults.categories.moviesTv.sourceOrder }
             : raw;
         })(),
         pinnedHoster: purgePinHoster(parsed.categories.moviesTv.pinnedHoster ?? null),

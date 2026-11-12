@@ -10,8 +10,6 @@ import axios from 'axios';
 
 import HLSPlayer from '../../components/HLSPlayer';
 
-import { motion, AnimatePresence } from 'framer-motion';
-
 import { useAdFreePopup } from '../../context/AdFreePopupContext';
 
 import AdFreePlayerAds from '../../components/AdFreePlayerAds';
@@ -29,6 +27,7 @@ import { getSourcePriorityPrefs, subscribeToPriorityChanges } from '../../utils/
 import { detectHoster } from '../../utils/hosterRegistry';
 
 import { setLastPlayer } from '../../utils/lastPlayerPref';
+import { saveWatchState } from '../../utils/watchStateCache';
 
 import { getTmdbId, encodeId } from '../../utils/idEncoder';
 
@@ -43,6 +42,7 @@ import { isExtensionAvailable } from '../../utils/extensionProxy';
 import { RIVESTREAM_PROXIES } from '../../config/rivestreamProxy';
 
 import { buildProxyUrl } from '../../config/runtime';
+import { FREMBED_BASE, isFrembedResultAvailable, resolveFrembedPlayerUrl } from '../../utils/providerCheck';
 
 import { getTmdbLanguage } from '../../i18n';
 
@@ -77,6 +77,7 @@ const getCleanMainApi = () => {
         custom.includes('billy-affairs') ||
 
         custom.includes('pichunter-linda') ||
+        custom.includes('highlight-gave') || custom.includes('musicians-times') || custom.includes('indication-live') ||
 
         (isLocal && custom.includes('trycloudflare.com'))
 
@@ -110,7 +111,11 @@ const getCleanMainApi = () => {
 
 };
 
-const MAIN_API = getCleanMainApi();
+const MAIN_API = {
+  toString: () => getCleanMainApi(),
+  valueOf: () => getCleanMainApi(),
+  [Symbol.toPrimitive]: () => getCleanMainApi(),
+} as unknown as string;
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
 
@@ -476,6 +481,18 @@ interface WebflixMovieResponse {
   embedUrl?: string;
 }
 
+// Interface Miaw
+interface MiawMovieResponse {
+  success: boolean;
+  source: 'miaw';
+  tmdbId: number;
+  players: {
+    vf: Array<{ name: string; url: string; hoster: string; language: string; type: string }>;
+    vostfr: Array<{ name: string; url: string; hoster: string; language: string; type: string }>;
+  };
+  embedUrl?: string;
+}
+
 // Interface Moviez
 
 interface MoviezMovieResponse {
@@ -524,7 +541,7 @@ interface VidzyMovieResponse {
 
 
 
-type PlayerSourceType = 'webflix' | 'moviez' | 'vidzy' | 'primary' | 'vostfr' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'coflix' | 'frembed' | 'custom' | 'nexus_hls' | 'nexus_file' | 'fstream' | 'wiflix' | 'j1f' | 'viper' | 'vidmoly' | 'dropload' | 'adfree' | 'rivestream_hls' | 'rivestream' | number;
+type PlayerSourceType = 'webflix' | 'miaw' | 'moviez' | 'vidzy' | 'primary' | 'vostfr' | 'videasy' | 'vidsrccc' | 'vidsrcsu' | 'vidsrcwtf1' | 'vidsrcwtf5' | 'multi' | 'omega' | 'darkino' | 'mp4' | 'coflix' | 'frembed' | 'custom' | 'nexus_hls' | 'nexus_file' | 'fstream' | 'wiflix' | 'j1f' | 'viper' | 'vidmoly' | 'dropload' | 'adfree' | 'rivestream_hls' | 'rivestream' | number;
 
 
 
@@ -654,11 +671,11 @@ const checkMovieAvailability = async (movieId: string) => {
 
     try {
 
-      const frembedResponse = await axios.get(`https://frembed.click/api/public/v1/movies/${movieId}`, { timeout: 1000 });
+      const frembedResponse = await axios.get(`${FREMBED_BASE}/api/public/v1/movies/${movieId}`, { timeout: 3500 });
 
       console.log(`Checking Frembed for ID ${movieId}:`, frembedResponse.data);
 
-      const isFrembedAvailable = frembedResponse.data.status === 200 && frembedResponse.data.result?.totalItems > 0;
+      const isFrembedAvailable = isFrembedResultAvailable(frembedResponse.data);
 
 
 
@@ -1021,9 +1038,15 @@ const WatchMovie: React.FC = () => {
 
 
   // Webflix source states
-  const [webflixSources, setWebflixSources] = useState<{ url: string; label: string; category: string }[]>([]);
+  const [webflixSources, setWebflixSources] = useState<{ url: string; label: string; category: string; directUrl?: string; hoster?: string; is4K?: boolean; quality?: string; size?: string }[]>([]);
   const [selectedWebflixSource, setSelectedWebflixSource] = useState<number>(0);
   const [loadingWebflix, setLoadingWebflix] = useState(true);
+
+    // Miaw source states
+  const [miawSources, setMiawSources] = useState<{ url: string; label: string; category: string; directUrl?: string; hoster?: string; is4K?: boolean; quality?: string; size?: string }[]>([]);
+  const [selectedMiawSource, setSelectedMiawSource] = useState<number>(0);
+  const [loadingMiaw, setLoadingMiaw] = useState(true);
+  const failedDirectUrlsRef = useRef<Set<string>>(new Set());
 
   // Moviez source states
 
@@ -1188,6 +1211,15 @@ const WatchMovie: React.FC = () => {
     }));
     return sortHostersByPriority(annotated, { category: 'moviesTv', topLevel: 'webflix' });
   }, [webflixSources]);
+
+    const sortedMiaw = useMemo(() => {
+    const prefs = getSourcePriorityPrefs();
+    const annotated = miawSources.map((s) => ({
+      ...s,
+      type: 'miaw',
+    }));
+    return sortHostersByPriority(annotated, { category: 'moviesTv', topLevel: 'miaw' });
+  }, [miawSources]);
 
   const sortedMoviez = useMemo(() => {
 
@@ -1772,6 +1804,17 @@ const WatchMovie: React.FC = () => {
 
 
         localStorage.setItem('continueWatching', JSON.stringify(continueWatching));
+        if (id) {
+          saveWatchState({
+            mediaType: 'movie',
+            id,
+            title: movieTitle || undefined,
+            posterPath,
+            backdropPath,
+            lastSource: currentSourceRef.current || undefined,
+            exactFlush: true,
+          });
+        }
 
       }
 
@@ -1949,6 +1992,14 @@ const WatchMovie: React.FC = () => {
           return null;
         }).finally(() => setLoadingWebflix(false));
 
+            // =========== CHECK MIAW SOURCE ===========
+      const miawPromise: Promise<MiawMovieResponse | null> = axios.get(`${MAIN_API}/api/miaw/movie/${id}`)
+        .then(response => response.data as MiawMovieResponse)
+        .catch(error => {
+          console.error('Error fetching Miaw source:', error);
+          return null;
+        }).finally(() => setLoadingMiaw(false));
+
       // =========== CHECK MOVIEZ SOURCE ===========
 
       const moviezPromise: Promise<MoviezMovieResponse | null> = axios.get(`${MAIN_API}/api/moviez/movie/${id}`)
@@ -2017,9 +2068,9 @@ const WatchMovie: React.FC = () => {
       // Même pattern que WatchTv.tsx : ping via le proxy backend (CORS) avec timeout
       // court pour savoir si le film existe côté Wavewatch avant de l'auto-sélectionner.
       const wavewatchPromise: Promise<string | null> = (async () => {
-        const wwUrl = `https://wwembed.wavewatch.top/api/v1/streaming/ww-movie-${id}`;
+        const wwUrl = `https://wwembed.wavewatch.icu/api/v1/streaming/ww-movie-${id}`;
         const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 8000);
+        const timer = setTimeout(() => ctrl.abort(), 11000);
         try {
           const r = await fetch(`${MAIN_API}/proxy/${encodeURIComponent(wwUrl)}`, { signal: ctrl.signal });
           return r.ok ? wwUrl : null;
@@ -2052,6 +2103,7 @@ const WatchMovie: React.FC = () => {
         j1fResult,
         wavewatchUrlResult,
         webflixResult,
+        miawResult,
         moviezResult,
         vidzyResult
       ] = await Promise.all([
@@ -2063,18 +2115,13 @@ const WatchMovie: React.FC = () => {
         withTimeout(wiflixPromise, 5000, null),
         withTimeout(viperPromise, 5000, null),
         withTimeout(j1fPromise, 5000, null),
-        withTimeout(wavewatchPromise, 6000, null),
+        withTimeout(wavewatchPromise, 12000, null),
         withTimeout(webflixPromise, 5000, null),
+        withTimeout(miawPromise, 15000, null),
         withTimeout(moviezPromise, 5000, null),
         withTimeout(vidzyPromise, 5000, null)
       ]);
 
-        omegaPromise,
-        fstreamPromise,
-        wiflixPromise,
-        viperPromise,
-        j1fPromise,
-        wavewatchPromise,
       // =========== DÉBUT DES EXTRACTIONS (APRÈS LES REQUÊTES PRINCIPALES) ===========
 
       console.log('🔄 Début des extractions M3U8...');
@@ -3740,28 +3787,95 @@ const WatchMovie: React.FC = () => {
 
 
       // =========== TRAITEMENT DES RÉSULTATS WEBFLIX ===========
-      let webflixProcessedSources: { url: string; label: string; category: string }[] = [];
+      type RichMovieSource = { url: string; label: string; category: string; directUrl?: string; hoster?: string; is4K?: boolean; quality?: string; size?: string };
+      let webflixProcessedSources: RichMovieSource[] = [];
       if (webflixResult && webflixResult.success && webflixResult.players) {
         console.log('🎬 Processing Webflix result:', webflixResult);
         const categories = ['vf', 'vostfr'];
-        const vfSources: { url: string; label: string; category: string }[] = [];
-        const vostfrSources: { url: string; label: string; category: string }[] = [];
+        const vfSources: RichMovieSource[] = [];
+        const vostfrSources: RichMovieSource[] = [];
 
         categories.forEach(category => {
           const categoryPlayers = webflixResult.players[category as keyof typeof webflixResult.players] || [];
           categoryPlayers.forEach((player: any) => {
-            const source = {
+            let label = player.name;
+            const is4K = Boolean(
+              player.is4K ||
+              (player.quality && /4k|2160|uhd/i.test(String(player.quality))) ||
+              (label && /\b4k\b|2160|uhd/i.test(String(label))) ||
+              (player.size && parseFloat(player.size) >= 7.5)
+            );
+            if (is4K && !label?.includes('👑')) {
+              label = `👑 FastFlux 4K Ultra HD (${player.size || category.toUpperCase()})`;
+            }
+            const source: RichMovieSource = {
               url: player.url,
-              label: player.name || `Webflix ${category.toUpperCase()}`,
+              label: label || `Webflix ${category.toUpperCase()}`,
               category: category.toUpperCase(),
+              is4K,
+              quality: is4K ? '4K Ultra HD' : (player.quality || '1080p FHD'),
+              size: player.size || '',
+              directUrl: player.directUrl || '',
+              hoster: player.hoster || 'fastflux',
             };
-            if (category === 'vf') vfSources.push(source);
-            else vostfrSources.push(source);
+            if (is4K) {
+              if (category === 'vf') vfSources.unshift(source);
+              else vostfrSources.unshift(source);
+            } else {
+              if (category === 'vf') vfSources.push(source);
+              else vostfrSources.push(source);
+            }
           });
         });
         webflixProcessedSources = [...vfSources, ...vostfrSources];
       }
       setWebflixSources(webflixProcessedSources);
+
+      // =========== TRAITEMENT DES RÉSULTATS MIAW ===========
+      let miawProcessedSources: RichMovieSource[] = [];
+      if (miawResult && miawResult.success && miawResult.players) {
+        console.log('🎬 Processing Miaw result:', miawResult);
+        const categories = ['vf', 'vostfr'];
+        const vfSources: RichMovieSource[] = [];
+        const vostfrSources: RichMovieSource[] = [];
+
+        categories.forEach(category => {
+          const categoryPlayers = miawResult.players[category as keyof typeof miawResult.players] || [];
+          categoryPlayers.forEach((player: any) => {
+            let label = player.name;
+            if (!label || label === `Miaw ${category.toUpperCase()}`) {
+              const h = (player.hoster || player.type || '').toLowerCase();
+              const lowerUrl = (player.url || '').toLowerCase();
+              if (h === 'blink' || player.isBlink || lowerUrl.includes('blink') || lowerUrl.includes('.mp4') || Boolean(player.directUrl)) {
+                label = `Miaw Direct 1080p (${category.toUpperCase()})`;
+              } else if (h.includes('sharecloudy') || lowerUrl.includes('sharecloudy')) {
+                label = `Miaw ShareCloudy (${category.toUpperCase()})`;
+              } else if (h.includes('uqload') || lowerUrl.includes('uqload')) {
+                label = `Miaw Uqload (${category.toUpperCase()})`;
+              } else if (h.includes('vidzy') || lowerUrl.includes('vidzy')) {
+                label = `Miaw Vidzy (${category.toUpperCase()})`;
+              } else if (h.includes('moviez') || lowerUrl.includes('moviez')) {
+                label = `Miaw Moviez (${category.toUpperCase()})`;
+              } else {
+                let hostName = '';
+                try { hostName = new URL(player.url).hostname.replace(/^www\./, '').split('.')[0]; } catch {}
+                label = hostName ? `Miaw ${hostName.charAt(0).toUpperCase() + hostName.slice(1)} (${category.toUpperCase()})` : `Miaw Direct (${category.toUpperCase()})`;
+              }
+            }
+            const source: RichMovieSource = {
+              url: player.url,
+              label,
+              category: category.toUpperCase(),
+              directUrl: player.directUrl || '',
+              hoster: player.hoster || '',
+            };
+            if (category === 'vf') vfSources.push(source);
+            else vostfrSources.push(source);
+          });
+        });
+        miawProcessedSources = [...vfSources, ...vostfrSources];
+      }
+      setMiawSources(miawProcessedSources);
 
       // =========== TRAITEMENT DES RÉSULTATS MOVIEZ ===========
 
@@ -3780,29 +3894,22 @@ const WatchMovie: React.FC = () => {
 
 
         categories.forEach(category => {
-
           const categoryPlayers = moviezResult.players[category as keyof typeof moviezResult.players] || [];
-
-          categoryPlayers.forEach((player: any) => {
-
+          categoryPlayers.forEach((player: any, idx: number) => {
+            let label = player.name;
+            if (!label || label === `Moviez ${category.toUpperCase()}`) {
+              const h = (player.hoster || player.type || '').toUpperCase();
+              label = h && h !== 'EMBED' ? `Moviez ${h} (${category.toUpperCase()})` : `Moviez Lecteur ${idx + 1} (${category.toUpperCase()})`;
+            }
             const source = {
-
               url: player.url,
-
-              label: `Moviez ${category.toUpperCase()}`,
-
+              label,
               category: category.toUpperCase(),
-
             };
-
             if (category === 'vf') vfSources.push(source);
-
             else vostfrSources.push(source);
-
           });
-
         });
-
         moviezProcessedSources = [...vfSources, ...vostfrSources];
 
       }
@@ -4779,16 +4886,48 @@ const WatchMovie: React.FC = () => {
 
           case 'webflix': {
             if (!webflixProcessedSources.length) return false;
-            console.log('✅ Selecting WEBFLIX as source');
+            console.log('⚡ Selecting WEBFLIX as source');
             const sortedWebflixLocal = sortHostersByPriority(
               webflixProcessedSources.map((s) => ({ ...s, type: detectHoster(s.url) ?? 'webflix' })),
               { category: 'moviesTv', topLevel: 'webflix' },
             );
+            const chosen = sortedWebflixLocal[0];
             setSelectedSource('webflix');
             setSelectedWebflixSource(0);
-            setEmbedUrl(sortedWebflixLocal[0].url);
-            setEmbedType('webflix');
+            if (chosen?.directUrl && !failedDirectUrlsRef.current.has(chosen.directUrl)) {
+              setVideoSource(chosen.directUrl);
+              setEmbedUrl(null);
+              setEmbedType(null);
+            } else {
+              setEmbedUrl(chosen.url);
+              setEmbedType('webflix');
+              setVideoSource(null);
+            }
             currentSourceRef.current = 'webflix';
+            setOnlyVostfrAvailable(false);
+            return true;
+          }
+
+                    case 'miaw': {
+            if (!miawProcessedSources.length) return false;
+            console.log('✅ Selecting MIAW as source');
+            const sortedMiawLocal = sortHostersByPriority(
+              miawProcessedSources.map((s) => ({ ...s, type: detectHoster(s.url) ?? 'miaw' })),
+              { category: 'moviesTv', topLevel: 'miaw' },
+            );
+            const chosen = sortedMiawLocal[0];
+            setSelectedSource('miaw');
+            setSelectedMiawSource(0);
+            if (chosen?.directUrl && !failedDirectUrlsRef.current.has(chosen.directUrl)) {
+              setVideoSource(chosen.directUrl);
+              setEmbedUrl(null);
+              setEmbedType(null);
+            } else {
+              setEmbedUrl(chosen.url);
+              setEmbedType('miaw');
+              setVideoSource(null);
+            }
+            currentSourceRef.current = 'miaw';
             setOnlyVostfrAvailable(false);
             return true;
           }
@@ -4940,14 +5079,17 @@ const WatchMovie: React.FC = () => {
             if (!isFrembedAvailable) return false;
 
             setSelectedSource('frembed');
-
-            setVideoSource(`https://frembed.click/api/film.php?id=${id}`);
-
-            setEmbedUrl(`https://frembed.click/api/film.php?id=${id}`);
-
+            const initialFrembed = `${FREMBED_BASE}/embed/movie/${id}`;
+            setVideoSource(initialFrembed);
+            setEmbedUrl(initialFrembed);
             setEmbedType('frembed');
-
             currentSourceRef.current = 'frembed';
+            resolveFrembedPlayerUrl(String(id), 'movie').then((resolvedUrl) => {
+              if (currentSourceRef.current === 'frembed' && resolvedUrl) {
+                setVideoSource(resolvedUrl);
+                setEmbedUrl(resolvedUrl);
+              }
+            });
 
             return true;
 
@@ -5166,6 +5308,7 @@ const WatchMovie: React.FC = () => {
           { id: 'wiflix', hasData: wiflixProcessedSources.length > 0 },
 
           { id: 'webflix', hasData: webflixProcessedSources.length > 0 },
+          { id: 'miaw', hasData: miawProcessedSources.length > 0 },
 
           { id: 'moviez', hasData: moviezProcessedSources.length > 0 },
 
@@ -5237,7 +5380,7 @@ const WatchMovie: React.FC = () => {
 
         if (!applied) {
           // Au lieu d'un écran noir sans vidéo, auto-select clean VOSTFR embed (Peachify ou Videasy)
-          const cleanVostfrUrl = wavewatchUrlResult || (id ? `https://player.videasy.net/movie/${id}` : `https://peachify.top/embed/movie/${id}?sub=French&accent=dc2626`);
+          const cleanVostfrUrl = wavewatchUrlResult || (id ? `https://player.videasy.to/movie/${id}` : `https://peachify.top/embed/movie/${id}?sub=French&accent=dc2626`);
           console.log('⚡ [WatchMovie] Fallback VOSTFR direct playback:', cleanVostfrUrl);
           setSelectedSource('vostfr');
           setEmbedUrl(cleanVostfrUrl);
@@ -5689,8 +5832,21 @@ const WatchMovie: React.FC = () => {
 
     // Priorité 0: Webflix
     sortedWebflix.forEach((s, idx) => {
-      if (s.url && s.url !== embedUrl) {
-        candidates.push({ type: 'webflix', id: `webflix_${idx}`, url: s.url });
+      const isSameActive = s.url === embedUrl || (s.directUrl && s.directUrl === videoSource);
+      const isFailedDirect = Boolean(s.directUrl && failedDirectUrlsRef.current.has(s.directUrl));
+      const isFailedEmbed = Boolean(s.url && failedDirectUrlsRef.current.has(s.url));
+      if ((s.url || s.directUrl) && !isSameActive && !(isFailedDirect && (!s.url || s.url === s.directUrl || isFailedEmbed))) {
+        candidates.push({ type: 'webflix', id: `webflix_${idx}`, url: s.url || s.directUrl || '' });
+      }
+    });
+
+    // Priorité Miaw
+    sortedMiaw.forEach((s, idx) => {
+      const isSameActive = s.url === embedUrl || (s.directUrl && s.directUrl === videoSource);
+      const isFailedDirect = Boolean(s.directUrl && failedDirectUrlsRef.current.has(s.directUrl));
+      const isFailedEmbed = Boolean(s.url && failedDirectUrlsRef.current.has(s.url));
+      if ((s.url || s.directUrl) && !isSameActive && !(isFailedDirect && (!s.url || s.url === s.directUrl || isFailedEmbed))) {
+        candidates.push({ type: 'miaw', id: `miaw_${idx}`, url: s.url || s.directUrl || '' });
       }
     });
 
@@ -5770,7 +5926,7 @@ const WatchMovie: React.FC = () => {
       candidates.push({
         type: 'vostfr',
         id: 'videasy',
-        url: `https://player.videasy.net/movie/${id}`
+        url: `https://player.videasy.to/movie/${id}`
       });
     }
 
@@ -5794,7 +5950,7 @@ const WatchMovie: React.FC = () => {
 
     }
 
-  }, [sortedWebflix, sortedMoviez, sortedVidzy, sortedFstream, darkinoSources, sortedWiflix, embedUrl, videoSource]);
+  }, [sortedWebflix, sortedMiaw, sortedMoviez, sortedVidzy, sortedFstream, darkinoSources, sortedWiflix, embedUrl, videoSource]);
 
 
 
@@ -5849,9 +6005,18 @@ const WatchMovie: React.FC = () => {
       // valide en interne contre TOP_LEVEL_SOURCE_IDS et ignore les ids hors-liste.
 
       if (origin !== 'auto-fallback' && typeof type === 'string') {
-
         setLastPlayer(type);
-
+        if (id) {
+          saveWatchState({
+            mediaType: 'movie',
+            id,
+            title: movieTitle || undefined,
+            posterPath,
+            backdropPath,
+            lastSource: type,
+            exactFlush: true,
+          });
+        }
       }
 
 
@@ -6102,7 +6267,7 @@ const WatchMovie: React.FC = () => {
 
       // Handle Embed source selections
 
-      else if (['webflix', 'frembed', 'custom', 'vostfr', 'omega', 'coflix', 'fstream', 'wiflix', 'moviez', 'vidzy', 'j1f', 'viper', 'vox'].includes(type)) {
+      else if (['webflix', 'miaw', 'frembed', 'custom', 'vostfr', 'omega', 'coflix', 'fstream', 'wiflix', 'moviez', 'vidzy', 'j1f', 'viper', 'vox'].includes(type)) {
 
         let finalEmbedUrl = url;
 
@@ -6166,16 +6331,49 @@ const WatchMovie: React.FC = () => {
 
         // Handle Webflix source selection
         else if (type === 'webflix') {
-          const index = sortedWebflix.findIndex(s => s.url === url);
-          if (index !== -1) {
-            setSelectedWebflixSource(index);
-            setEmbedUrl(sortedWebflix[index].url);
+          const index = sortedWebflix.findIndex(s => s.url === url || (s.directUrl && s.directUrl === url));
+          const picked = index !== -1 ? sortedWebflix[index] : (sortedWebflix.length > 0 && !url ? sortedWebflix[0] : null);
+          if (picked) {
+            setSelectedWebflixSource(index !== -1 ? index : 0);
+            if (picked.directUrl && !failedDirectUrlsRef.current.has(picked.directUrl)) {
+              setVideoSource(picked.directUrl);
+              setEmbedUrl(null);
+              setEmbedType(null);
+            } else {
+              setEmbedUrl(picked.url);
+              setVideoSource(null);
+            }
           } else if (url) {
             setEmbedUrl(url);
-          } else if (sortedWebflix.length > 0) {
-            setSelectedWebflixSource(0);
-            setEmbedUrl(sortedWebflix[0].url);
           }
+        }
+
+        // Handle Miaw source selection
+        else if (type === 'miaw') {
+          const index = sortedMiaw.findIndex(s => s.url === url || (s.directUrl && s.directUrl === url));
+          const picked = index !== -1 ? sortedMiaw[index] : (sortedMiaw.length > 0 ? sortedMiaw[0] : null);
+          if (picked) {
+            setSelectedMiawSource(index !== -1 ? index : 0);
+            if (picked.directUrl && !failedDirectUrlsRef.current.has(picked.directUrl)) {
+              setVideoSource(picked.directUrl);
+              setEmbedUrl(null);
+              setEmbedType(null);
+            } else {
+              setEmbedUrl(picked.url);
+              setVideoSource(null);
+            }
+          }
+        }
+
+        // Handle Frembed source selection (resout serveur sans 403)
+        else if (type === 'frembed' && id) {
+          const fallbackUrl = `${FREMBED_BASE}/embed/movie/${id}`;
+          setEmbedUrl(fallbackUrl);
+          resolveFrembedPlayerUrl(String(id), 'movie').then((resolvedUrl) => {
+            if (currentSourceRef.current === 'frembed' && resolvedUrl) {
+              setEmbedUrl(resolvedUrl);
+            }
+          });
         }
 
         // Handle Moviez source selection
@@ -6298,7 +6496,7 @@ const WatchMovie: React.FC = () => {
 
     // State values used in logic
 
-    darkinoSources, mp4Sources, darkinoAvailable, nexusHlsSources, nexusFileSources, fstreamSources, wiflixSources, webflixSources, sortedWebflix, moviezSources, vidzyDirectSources, sortedMoviez, sortedVidzy, j1fSources, sortedFstream, sortedWiflix, sortedJ1f, viperSources, rivestreamSources, rivestreamLoaded, loadingRivestream,
+    darkinoSources, mp4Sources, darkinoAvailable, nexusHlsSources, nexusFileSources, fstreamSources, wiflixSources, webflixSources, sortedWebflix, miawSources, sortedMiaw, moviezSources, vidzyDirectSources, sortedMoviez, sortedVidzy, j1fSources, sortedFstream, sortedWiflix, sortedJ1f, viperSources, rivestreamSources, rivestreamLoaded, loadingRivestream,
 
     // State setters
 
@@ -6826,9 +7024,44 @@ const WatchMovie: React.FC = () => {
 
 
 
+  const renderMovieSourcesOnlyMenu = () => (
+    <HLSPlayer
+      priorityCategory="moviesTv"
+      src={videoSource || ''}
+      className="hidden"
+      movieId={id || undefined}
+      controls={false}
+      nexusHlsSources={nexusHlsSources}
+      nexusFileSources={nexusFileSources}
+      rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
+      rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
+      loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
+      darkinoSources={darkinoSources}
+      mp4Sources={mp4Sources}
+      frembedAvailable={frembedAvailable}
+      customSources={customSources}
+      omegaSources={sortedOmega}
+      coflixSources={sortedCoflix}
+      fstreamSources={sortedFstream}
+      wiflixSources={sortedWiflix}
+      webflixSources={sortedWebflix}
+      miawSources={sortedMiaw}
+      moviezSources={sortedMoviez}
+      vidzySources={sortedVidzy}
+      j1fSources={sortedJ1f}
+      viperSources={sortedViper}
+      autoPlay={false}
+      onlyQualityMenu={true}
+      embedType={embedType || undefined}
+      embedUrl={embedUrl || undefined}
+      title={movieTitle}
+      initialTime={watchProgress}
+    />
+  );
+
   return (
 
-    <div className="w-full max-w-4xl mx-auto my-6">
+    <div className="w-full max-w-4xl mx-auto mt-16 sm:mt-20 mb-6 px-3 sm:px-6 pb-20">
 
       {/* En-tête — titre + métadonnées, au-dessus de l'encadré du player */}
 
@@ -7122,68 +7355,7 @@ const WatchMovie: React.FC = () => {
 
             <h3 className="text-white text-lg font-bold mb-4">{t('watch.changeSource')}</h3>
 
-            <HLSPlayer
-
-              priorityCategory="moviesTv"
-
-              src={''}
-
-              className="hidden"
-
-              movieId={id || undefined}
-
-              controls={false}
-
-              nexusHlsSources={nexusHlsSources}
-
-              nexusFileSources={nexusFileSources}
-
-              rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
-
-              rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
-
-              loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-
-              darkinoSources={darkinoSources}
-
-              mp4Sources={mp4Sources}
-
-              frembedAvailable={frembedAvailable}
-
-              customSources={customSources}
-
-              omegaSources={sortedOmega}
-
-              coflixSources={sortedCoflix}
-
-              fstreamSources={sortedFstream}
-
-              wiflixSources={sortedWiflix}
-
-              webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-              vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-              viperSources={sortedViper}
-
-
-
-              autoPlay={false}
-
-              onlyQualityMenu={true}
-
-              embedType={embedType || undefined}
-
-              embedUrl={embedUrl || undefined}
-
-              title={movieTitle}
-
-              initialTime={watchProgress}
-
-            />
+            {renderMovieSourcesOnlyMenu()}
 
           </div>
 
@@ -7195,11 +7367,13 @@ const WatchMovie: React.FC = () => {
           onNextMovie={nextMovie ? () => handleNextMovie(nextMovie.id) : undefined}
           nextMovieTitle={nextMovie?.title}
           onBack={handleBackNav}
-          onChangeSource={() => setShowEmbedQuality(true)}
+          isMenuOpen={showEmbedQuality}
+          onMenuOpenChange={setShowEmbedQuality}
+          renderSourcesPanel={renderMovieSourcesOnlyMenu}
 
           onFallbackNext={handleAutoFallbackNext}
 
-          currentSourceLabel={selectedSource || embedType || ''}
+          currentSourceLabel={String(selectedSource || embedType || '')}
 
           runtimeMinutes={movieMeta?.runtime || 0}
 
@@ -7219,7 +7393,7 @@ const WatchMovie: React.FC = () => {
 
             referrerPolicy="strict-origin-when-cross-origin"
 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
 
             sandbox={undefined}
 
@@ -7227,122 +7401,7 @@ const WatchMovie: React.FC = () => {
 
 
 
-          {/* Sources Menu Overlay */}
 
-          <AnimatePresence>
-
-            {showEmbedQuality && (
-
-              <motion.div
-
-                key="embed-quality-menu"
-
-                initial={{ opacity: 0, x: -300 }}
-
-                animate={{ opacity: 1, x: 0 }}
-
-                exit={{ opacity: 0, x: -300 }}
-
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-              >
-
-                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <HLSPlayer
-
-                      priorityCategory="moviesTv"
-
-                      src={''}
-
-                      className="hidden"
-
-                      movieId={id || undefined}
-
-                      controls={false}
-
-                      nexusHlsSources={nexusHlsSources}
-
-                      nexusFileSources={nexusFileSources}
-
-                      rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
-
-                      rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
-
-                      loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-
-                      darkinoSources={darkinoSources}
-
-                      mp4Sources={mp4Sources}
-
-                      frembedAvailable={frembedAvailable}
-
-                      customSources={customSources}
-
-                      omegaSources={sortedOmega}
-
-                      coflixSources={sortedCoflix}
-
-                      fstreamSources={sortedFstream}
-
-                      wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                      viperSources={sortedViper}
-
-
-
-                      autoPlay={false}
-
-                      onlyQualityMenu={true}
-
-                      embedType={embedType || undefined}
-
-                      embedUrl={embedUrl || undefined}
-
-                      title={movieTitle}
-
-                      initialTime={watchProgress}
-
-                    />
-
-                  </div>
-
-                </div>
-
-              </motion.div>
-
-            )}
-
-          </AnimatePresence>
 
         </EmbedPlayerChrome>
 
@@ -7441,12 +7500,16 @@ const WatchMovie: React.FC = () => {
                     } else if (frembedAvailable) {
 
                       setSelectedSource('frembed');
-
-                      setVideoSource(`https://frembed.click/api/film.php?id=${id}`);
-
-                      setEmbedUrl(`https://frembed.click/api/film.php?id=${id}`);
-
+                      const fallbackFrembed = `${FREMBED_BASE}/embed/movie/${id}`;
+                      setVideoSource(fallbackFrembed);
+                      setEmbedUrl(fallbackFrembed);
                       setEmbedType('frembed');
+                      resolveFrembedPlayerUrl(String(id), 'movie').then((resolvedUrl) => {
+                        if (currentSourceRef.current === 'frembed' && resolvedUrl) {
+                          setVideoSource(resolvedUrl);
+                          setEmbedUrl(resolvedUrl);
+                        }
+                      });
 
                     } else if (customSources.length > 0) {
 
@@ -7460,7 +7523,7 @@ const WatchMovie: React.FC = () => {
 
                       setSelectedSource('vostfr');
 
-                      setEmbedUrl(`https://player.videasy.net/movie/${id}`);
+                      setEmbedUrl(`https://player.videasy.to/movie/${id}`);
 
                       setEmbedType('vostfr');
 
@@ -7486,7 +7549,8 @@ const WatchMovie: React.FC = () => {
 
             controls={true}
 
-            onShowSources={() => setShowEmbedQuality(true)}
+            settingsOpen={showEmbedQuality}
+            onSettingsOpenChange={setShowEmbedQuality}
 
             nexusHlsSources={nexusHlsSources}
 
@@ -7515,6 +7579,7 @@ const WatchMovie: React.FC = () => {
             wiflixSources={sortedWiflix}
 
             webflixSources={sortedWebflix}
+            miawSources={sortedMiaw}
             moviezSources={sortedMoviez}
 
             vidzySources={sortedVidzy}
@@ -7531,122 +7596,7 @@ const WatchMovie: React.FC = () => {
 
           />
 
-          {/* Sources Menu Overlay */}
 
-          <AnimatePresence>
-
-            {showEmbedQuality && (
-
-              <motion.div
-
-                key="embed-quality-menu"
-
-                initial={{ opacity: 0, x: -300 }}
-
-                animate={{ opacity: 1, x: 0 }}
-
-                exit={{ opacity: 0, x: -300 }}
-
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-              >
-
-                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <HLSPlayer
-
-                      priorityCategory="moviesTv"
-
-                      src={''}
-
-                      className="hidden"
-
-                      movieId={id || undefined}
-
-                      controls={false}
-
-                      nexusHlsSources={nexusHlsSources}
-
-                      nexusFileSources={nexusFileSources}
-
-                      rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
-
-                      rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
-
-                      loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-
-                      darkinoSources={darkinoSources}
-
-                      mp4Sources={mp4Sources}
-
-                      frembedAvailable={frembedAvailable}
-
-                      customSources={customSources}
-
-                      omegaSources={sortedOmega}
-
-                      coflixSources={sortedCoflix}
-
-                      fstreamSources={sortedFstream}
-
-                      wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                      viperSources={sortedViper}
-
-
-
-                      autoPlay={false}
-
-                      onlyQualityMenu={true}
-
-                      embedType={embedType || undefined}
-
-                      embedUrl={embedUrl || undefined}
-
-                      title={movieTitle}
-
-                      initialTime={watchProgress}
-
-                    />
-
-                  </div>
-
-                </div>
-
-              </motion.div>
-
-            )}
-
-          </AnimatePresence>
 
         </div>
 
@@ -7708,7 +7658,8 @@ const WatchMovie: React.FC = () => {
 
             controls={true}
 
-            onShowSources={() => setShowEmbedQuality(true)}
+            settingsOpen={showEmbedQuality}
+            onSettingsOpenChange={setShowEmbedQuality}
 
             nexusHlsSources={nexusHlsSources}
 
@@ -7737,6 +7688,7 @@ const WatchMovie: React.FC = () => {
             wiflixSources={sortedWiflix}
 
             webflixSources={sortedWebflix}
+            miawSources={sortedMiaw}
             moviezSources={sortedMoviez}
 
             vidzySources={sortedVidzy}
@@ -7753,112 +7705,7 @@ const WatchMovie: React.FC = () => {
 
           />
 
-          {/* Sources Menu Overlay */}
 
-          <AnimatePresence>
-
-            {showEmbedQuality && (
-
-              <motion.div
-
-                key="embed-quality-menu"
-
-                initial={{ opacity: 0, x: -300 }}
-
-                animate={{ opacity: 1, x: 0 }}
-
-                exit={{ opacity: 0, x: -300 }}
-
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-              >
-
-                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <HLSPlayer
-
-                      priorityCategory="moviesTv"
-
-                      src={''}
-
-                      className="hidden"
-
-                      movieId={id || undefined}
-
-                      controls={false}
-
-                      darkinoSources={darkinoSources}
-
-                      mp4Sources={mp4Sources}
-
-                      frembedAvailable={frembedAvailable}
-
-                      customSources={customSources}
-
-                      omegaSources={sortedOmega}
-
-                      coflixSources={sortedCoflix}
-
-                      fstreamSources={sortedFstream}
-
-                      wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                      viperSources={sortedViper}
-
-
-
-                      autoPlay={false}
-
-                      onlyQualityMenu={true}
-
-                      embedType={embedType || undefined}
-
-                      embedUrl={embedUrl || undefined}
-
-                      title={movieTitle}
-
-                      initialTime={watchProgress}
-
-                    />
-
-                  </div>
-
-                </div>
-
-              </motion.div>
-
-            )}
-
-          </AnimatePresence>
 
         </div>
 
@@ -7920,7 +7767,8 @@ const WatchMovie: React.FC = () => {
 
             controls={true}
 
-            onShowSources={() => setShowEmbedQuality(true)}
+            settingsOpen={showEmbedQuality}
+            onSettingsOpenChange={setShowEmbedQuality}
 
             nexusHlsSources={nexusHlsSources}
 
@@ -7949,6 +7797,7 @@ const WatchMovie: React.FC = () => {
             wiflixSources={sortedWiflix}
 
             webflixSources={sortedWebflix}
+            miawSources={sortedMiaw}
             moviezSources={sortedMoviez}
 
             vidzySources={sortedVidzy}
@@ -7965,122 +7814,7 @@ const WatchMovie: React.FC = () => {
 
           />
 
-          {/* Sources Menu Overlay */}
 
-          <AnimatePresence>
-
-            {showEmbedQuality && (
-
-              <motion.div
-
-                key="embed-quality-menu"
-
-                initial={{ opacity: 0, x: -300 }}
-
-                animate={{ opacity: 1, x: 0 }}
-
-                exit={{ opacity: 0, x: -300 }}
-
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-              >
-
-                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <HLSPlayer
-
-                      priorityCategory="moviesTv"
-
-                      src={''}
-
-                      className="hidden"
-
-                      movieId={id || undefined}
-
-                      controls={false}
-
-                      nexusHlsSources={nexusHlsSources}
-
-                      nexusFileSources={nexusFileSources}
-
-                      rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
-
-                      rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
-
-                      loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-
-                      darkinoSources={darkinoSources}
-
-                      mp4Sources={mp4Sources}
-
-                      frembedAvailable={frembedAvailable}
-
-                      customSources={customSources}
-
-                      omegaSources={sortedOmega}
-
-                      coflixSources={sortedCoflix}
-
-                      fstreamSources={sortedFstream}
-
-                      wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                      viperSources={sortedViper}
-
-
-
-                      autoPlay={false}
-
-                      onlyQualityMenu={true}
-
-                      embedType={embedType || undefined}
-
-                      embedUrl={embedUrl || undefined}
-
-                      title={movieTitle}
-
-                      initialTime={watchProgress}
-
-                    />
-
-                  </div>
-
-                </div>
-
-              </motion.div>
-
-            )}
-
-          </AnimatePresence>
 
         </div>
 
@@ -8142,7 +7876,8 @@ const WatchMovie: React.FC = () => {
 
             controls={true}
 
-            onShowSources={() => setShowEmbedQuality(true)}
+            settingsOpen={showEmbedQuality}
+            onSettingsOpenChange={setShowEmbedQuality}
 
             nexusHlsSources={nexusHlsSources}
 
@@ -8171,6 +7906,7 @@ const WatchMovie: React.FC = () => {
             wiflixSources={sortedWiflix}
 
             webflixSources={sortedWebflix}
+            miawSources={sortedMiaw}
             moviezSources={sortedMoviez}
 
             vidzySources={sortedVidzy}
@@ -8187,122 +7923,7 @@ const WatchMovie: React.FC = () => {
 
           />
 
-          {/* Sources Menu Overlay */}
 
-          <AnimatePresence>
-
-            {showEmbedQuality && (
-
-              <motion.div
-
-                key="embed-quality-menu"
-
-                initial={{ opacity: 0, x: -300 }}
-
-                animate={{ opacity: 1, x: 0 }}
-
-                exit={{ opacity: 0, x: -300 }}
-
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-              >
-
-                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <HLSPlayer
-
-                      priorityCategory="moviesTv"
-
-                      src={''}
-
-                      className="hidden"
-
-                      movieId={id || undefined}
-
-                      controls={false}
-
-                      nexusHlsSources={nexusHlsSources}
-
-                      nexusFileSources={nexusFileSources}
-
-                      rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
-
-                      rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
-
-                      loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-
-                      darkinoSources={darkinoSources}
-
-                      mp4Sources={mp4Sources}
-
-                      frembedAvailable={frembedAvailable}
-
-                      customSources={customSources}
-
-                      omegaSources={sortedOmega}
-
-                      coflixSources={sortedCoflix}
-
-                      fstreamSources={sortedFstream}
-
-                      wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                      viperSources={sortedViper}
-
-
-
-                      autoPlay={false}
-
-                      onlyQualityMenu={true}
-
-                      embedType={embedType || undefined}
-
-                      embedUrl={embedUrl || undefined}
-
-                      title={movieTitle}
-
-                      initialTime={watchProgress}
-
-                    />
-
-                  </div>
-
-                </div>
-
-              </motion.div>
-
-            )}
-
-          </AnimatePresence>
 
         </div>
 
@@ -8394,7 +8015,8 @@ const WatchMovie: React.FC = () => {
 
                 controls={true}
 
-                onShowSources={() => setShowEmbedQuality(true)}
+                settingsOpen={showEmbedQuality}
+            onSettingsOpenChange={setShowEmbedQuality}
 
                 nexusHlsSources={nexusHlsSources}
 
@@ -8423,6 +8045,7 @@ const WatchMovie: React.FC = () => {
                 wiflixSources={sortedWiflix}
 
             webflixSources={sortedWebflix}
+            miawSources={sortedMiaw}
             moviezSources={sortedMoviez}
 
             vidzySources={sortedVidzy}
@@ -8438,117 +8061,6 @@ const WatchMovie: React.FC = () => {
                 initialTime={watchProgress}
 
               />
-
-              {/* Sources Menu Overlay */}
-
-              <AnimatePresence>
-
-                {showEmbedQuality && (
-
-                  <motion.div
-
-                    key="embed-quality-menu"
-
-                    initial={{ opacity: 0, x: -300 }}
-
-                    animate={{ opacity: 1, x: 0 }}
-
-                    exit={{ opacity: 0, x: -300 }}
-
-                    transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                    className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-                  >
-
-                    <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                      <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                        <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                        <button
-
-                          onClick={() => setShowEmbedQuality(false)}
-
-                          className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                        >
-
-                          ×
-
-                        </button>
-
-                      </div>
-
-                      <div className="p-4">
-
-                        <HLSPlayer
-
-                          priorityCategory="moviesTv"
-
-                          src={''}
-
-                          className="hidden"
-
-                          movieId={id || undefined}
-
-                          controls={false}
-
-                          nexusHlsSources={nexusHlsSources}
-
-                          nexusFileSources={nexusFileSources}
-
-                          darkinoSources={darkinoSources}
-
-                          mp4Sources={mp4Sources}
-
-                          frembedAvailable={frembedAvailable}
-
-                          customSources={customSources}
-
-                          omegaSources={sortedOmega}
-
-                          coflixSources={sortedCoflix}
-
-                          fstreamSources={sortedFstream}
-
-                          wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                          viperSources={sortedViper}
-
-
-
-                          autoPlay={false}
-
-                          onlyQualityMenu={true}
-
-                          embedType={embedType || undefined}
-
-                          embedUrl={embedUrl || undefined}
-
-                          title={movieTitle}
-
-                          initialTime={watchProgress}
-
-                        />
-
-                      </div>
-
-                    </div>
-
-                  </motion.div>
-
-                )}
-
-              </AnimatePresence>
 
             </>
 
@@ -8556,62 +8068,7 @@ const WatchMovie: React.FC = () => {
 
             <div className="flex flex-col items-center justify-center h-full bg-black">
 
-              <HLSPlayer
-
-                priorityCategory="moviesTv"
-
-                src={''}
-
-                className="hidden"
-
-                movieId={id || undefined}
-
-                controls={false}
-
-                nexusHlsSources={nexusHlsSources}
-
-                nexusFileSources={nexusFileSources}
-
-                darkinoSources={darkinoSources}
-
-                mp4Sources={mp4Sources}
-
-                frembedAvailable={frembedAvailable}
-
-                customSources={customSources}
-
-                omegaSources={sortedOmega}
-
-                coflixSources={sortedCoflix}
-
-                fstreamSources={sortedFstream}
-
-                wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                viperSources={sortedViper}
-
-
-
-                autoPlay={false}
-
-                onlyQualityMenu={true}
-
-                embedType={embedType || undefined}
-
-                embedUrl={embedUrl || undefined}
-
-                title={movieTitle}
-
-                initialTime={watchProgress}
-
-              />
+              {renderMovieSourcesOnlyMenu()}
 
             </div>
 
@@ -8685,7 +8142,8 @@ const WatchMovie: React.FC = () => {
 
             controls={true}
 
-            onShowSources={() => setShowEmbedQuality(true)}
+            settingsOpen={showEmbedQuality}
+            onSettingsOpenChange={setShowEmbedQuality}
 
             nexusHlsSources={nexusHlsSources}
 
@@ -8714,6 +8172,7 @@ const WatchMovie: React.FC = () => {
             wiflixSources={sortedWiflix}
 
             webflixSources={sortedWebflix}
+            miawSources={sortedMiaw}
             moviezSources={sortedMoviez}
 
             vidzySources={sortedVidzy}
@@ -8730,113 +8189,52 @@ const WatchMovie: React.FC = () => {
 
           />
 
-          {/* Sources Menu Overlay */}
 
-          <AnimatePresence>
 
-            {showEmbedQuality && (
+        </div>
 
-              <motion.div
+      ) : (selectedSource === 'webflix' || selectedSource === 'miaw') && videoSource && (!adPopupTriggered || shouldLoadIframe || hasClickedAd) ? (
 
-                key="embed-quality-menu"
-
-                initial={{ opacity: 0, x: -300 }}
-
-                animate={{ opacity: 1, x: 0 }}
-
-                exit={{ opacity: 0, x: -300 }}
-
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-              >
-
-                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <HLSPlayer
-
-                      priorityCategory="moviesTv"
-
-                      src={''}
-
-                      className="hidden"
-
-                      movieId={id || undefined}
-
-                      controls={false}
-
-                      darkinoSources={darkinoSources}
-
-                      mp4Sources={mp4Sources}
-
-                      frembedAvailable={frembedAvailable}
-
-                      customSources={customSources}
-
-                      omegaSources={sortedOmega}
-
-                      coflixSources={sortedCoflix}
-
-                      fstreamSources={sortedFstream}
-
-                      wiflixSources={sortedWiflix}
-
+        <div className="w-full h-full flex items-center justify-center">
+          <HLSPlayer
+            priorityCategory="moviesTv"
+            key={`${selectedSource}-${videoSource}-${id}`}
+            src={videoSource}
+            className="w-full h-full"
+            autoPlay={true}
+            controls={true}
+            onError={() => {
+              if (videoSource) failedDirectUrlsRef.current.add(videoSource);
+              handleAutoFallbackNext();
+            }}
+            nextMovie={nextMovie}
+            onNextMovie={handleNextMovie}
+            poster={posterPath ? `https://image.tmdb.org/t/p/w500${posterPath}` : undefined}
+            backdrop={backdropPath ? `https://image.tmdb.org/t/p/w1280${backdropPath}` : undefined}
+            movieId={id || undefined}
+            title={movieTitle || undefined}
             webflixSources={sortedWebflix}
+            miawSources={sortedMiaw}
             moviezSources={sortedMoviez}
-
             vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                      viperSources={sortedViper}
-
-
-
-                      autoPlay={false}
-
-                      onlyQualityMenu={true}
-
-                      embedType={embedType || undefined}
-
-                      embedUrl={embedUrl || undefined}
-
-                      title={movieTitle}
-
-                      initialTime={watchProgress}
-
-                    />
-
-                  </div>
-
-                </div>
-
-              </motion.div>
-
-            )}
-
-          </AnimatePresence>
-
+            fstreamSources={sortedFstream}
+            wiflixSources={sortedWiflix}
+            darkinoSources={darkinoSources}
+            mp4Sources={mp4Sources}
+            nexusHlsSources={nexusHlsSources}
+            nexusFileSources={nexusFileSources}
+            frembedAvailable={frembedAvailable}
+            customSources={customSources}
+            omegaSources={sortedOmega}
+            coflixSources={sortedCoflix}
+            viperSources={sortedViper}
+            j1fSources={sortedJ1f}
+            rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
+            rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
+            loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
+            settingsOpen={showEmbedQuality}
+            onSettingsOpenChange={setShowEmbedQuality}
+          />
         </div>
 
       ) : embedUrl ? (
@@ -8845,11 +8243,13 @@ const WatchMovie: React.FC = () => {
           onNextMovie={nextMovie ? () => handleNextMovie(nextMovie.id) : undefined}
           nextMovieTitle={nextMovie?.title}
           onBack={handleBackNav}
-          onChangeSource={() => setShowEmbedQuality(true)}
+          isMenuOpen={showEmbedQuality}
+          onMenuOpenChange={setShowEmbedQuality}
+          renderSourcesPanel={renderMovieSourcesOnlyMenu}
 
           onFallbackNext={handleAutoFallbackNext}
 
-          currentSourceLabel={selectedSource || embedType || ''}
+          currentSourceLabel={String(selectedSource || embedType || '')}
 
           runtimeMinutes={movieMeta?.runtime || 0}
 
@@ -8869,7 +8269,7 @@ const WatchMovie: React.FC = () => {
 
             referrerPolicy="strict-origin-when-cross-origin"
 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
 
             sandbox={(() => {
 
@@ -8913,122 +8313,7 @@ const WatchMovie: React.FC = () => {
 
 
 
-          {/* Sources Menu Overlay */}
 
-          <AnimatePresence>
-
-            {showEmbedQuality && (
-
-              <motion.div
-
-                key="embed-quality-menu"
-
-                initial={{ opacity: 0, x: -300 }}
-
-                animate={{ opacity: 1, x: 0 }}
-
-                exit={{ opacity: 0, x: -300 }}
-
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-              >
-
-                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <HLSPlayer
-
-                      priorityCategory="moviesTv"
-
-                      src={''}
-
-                      className="hidden"
-
-                      movieId={id || undefined}
-
-                      controls={false}
-
-                      nexusHlsSources={nexusHlsSources}
-
-                      nexusFileSources={nexusFileSources}
-
-                      rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
-
-                      rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
-
-                      loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-
-                      darkinoSources={darkinoSources}
-
-                      mp4Sources={mp4Sources}
-
-                      frembedAvailable={frembedAvailable}
-
-                      customSources={customSources}
-
-                      omegaSources={sortedOmega}
-
-                      coflixSources={sortedCoflix}
-
-                      fstreamSources={sortedFstream}
-
-                      wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                      viperSources={sortedViper}
-
-
-
-                      autoPlay={false}
-
-                      onlyQualityMenu={true}
-
-                      embedType={embedType || undefined}
-
-                      embedUrl={embedUrl || undefined}
-
-                      title={movieTitle}
-
-                      initialTime={watchProgress}
-
-                    />
-
-                  </div>
-
-                </div>
-
-              </motion.div>
-
-            )}
-
-          </AnimatePresence>
 
         </EmbedPlayerChrome>
 
@@ -9040,7 +8325,9 @@ const WatchMovie: React.FC = () => {
           onNextMovie={nextMovie ? () => handleNextMovie(nextMovie.id) : undefined}
           nextMovieTitle={nextMovie?.title}
           onBack={handleBackNav}
-          onChangeSource={() => setShowEmbedQuality(true)}
+          isMenuOpen={showEmbedQuality}
+          onMenuOpenChange={setShowEmbedQuality}
+          renderSourcesPanel={renderMovieSourcesOnlyMenu}
 
         >
 
@@ -9048,7 +8335,7 @@ const WatchMovie: React.FC = () => {
 
           <iframe
 
-            src={selectedSource === 'vostfr' ? `https://player.videasy.net/movie/${id}` : `https://frembed.click/api/film.php?id=${id}`}
+            src={selectedSource === 'vostfr' ? `https://player.videasy.to/movie/${id}` : `${FREMBED_BASE}/embed/movie/${id}`}
 
             className="w-full h-full border-0"
 
@@ -9056,126 +8343,9 @@ const WatchMovie: React.FC = () => {
 
             referrerPolicy="strict-origin-when-cross-origin"
 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
 
           ></iframe>
-
-
-
-          <AnimatePresence>
-
-            {showEmbedQuality && (
-
-              <motion.div
-
-                key="embed-quality-menu"
-
-                initial={{ opacity: 0, x: -300 }}
-
-                animate={{ opacity: 1, x: 0 }}
-
-                exit={{ opacity: 0, x: -300 }}
-
-                transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                className="absolute inset-0 z-[10000] bg-black/50 flex justify-start pointer-events-auto"
-
-              >
-
-                <div className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto z-[10000]">
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.changeSource')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-red-500 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
-
-                  <div className="p-4">
-
-                    <HLSPlayer
-
-                      priorityCategory="moviesTv"
-
-                      src={''}
-
-                      className="hidden"
-
-                      movieId={id || undefined}
-
-                      controls={false}
-
-                      nexusHlsSources={nexusHlsSources}
-
-                      nexusFileSources={nexusFileSources}
-
-                      rivestreamSources={isRivestreamAvailable() ? rivestreamSources : []}
-
-                      rivestreamCaptions={isRivestreamAvailable() ? rivestreamCaptions : []}
-
-                      loadingRivestream={isRivestreamAvailable() ? loadingRivestream : false}
-
-                      darkinoSources={darkinoSources}
-
-                      mp4Sources={mp4Sources}
-
-                      frembedAvailable={frembedAvailable}
-
-                      customSources={customSources}
-
-                      omegaSources={sortedOmega}
-
-                      coflixSources={sortedCoflix}
-
-                      fstreamSources={sortedFstream}
-
-                      wiflixSources={sortedWiflix}
-
-            webflixSources={sortedWebflix}
-            moviezSources={sortedMoviez}
-
-            vidzySources={sortedVidzy}
-
-              j1fSources={sortedJ1f}
-
-                      viperSources={sortedViper}
-
-
-
-                      autoPlay={false}
-
-                      onlyQualityMenu={true}
-
-                      embedType={embedType || undefined}
-
-                      embedUrl={embedUrl || undefined}
-
-                      title={movieTitle}
-
-                      initialTime={watchProgress}
-
-                    />
-
-                  </div>
-
-                </div>
-
-              </motion.div>
-
-            )}
-
-          </AnimatePresence>
 
         </EmbedPlayerChrome>
 
@@ -9251,7 +8421,7 @@ const WatchMovie: React.FC = () => {
 
           </div>
 
-          <div className="flex gap-3 justify-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
 
             {recommendations.slice(0, 4).map((rec: any) => (
 
@@ -9263,7 +8433,7 @@ const WatchMovie: React.FC = () => {
 
                 className="group relative block flex-shrink-0 rounded-[10px] overflow-hidden border border-transparent hover:border-green-400/35 hover:shadow-[0_0_16px_rgba(74,222,128,0.15)] transition-all duration-200"
 
-                style={{ aspectRatio: '2/3', minWidth: 'calc(25% - 9px)', maxWidth: 'calc(25% - 9px)' }}
+                style={{ aspectRatio: '2/3' }}
 
               >
 

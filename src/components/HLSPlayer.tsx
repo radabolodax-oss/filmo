@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, memo, useMemo } from 'react';
 import type HlsType from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock, Clock, SkipForward, ArrowLeft, Layers } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock, Clock, SkipForward, ArrowLeft } from 'lucide-react';
 import { fetchIntroTimestamps, type MediaTimestamps } from '../services/introDbService';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -23,6 +23,8 @@ const loadPako = async (): Promise<typeof pakoType> => {
   return pakoLib;
 };
 import HLSPlayerSettingsPanel from './HLSPlayerSettingsPanel';
+import { getOledFilterString, readOledPrefs, saveCustomOled, saveOledMode, type OledMode } from '../utils/playerVisualPrefs';
+import { savePlaybackPosition, getSavedPosition, flushWatchStateToNative, WATCH_STATE_HYDRATED_EVENT } from '../utils/watchStateCache';
 import { toast } from 'sonner';
 import { isDnsLikeError, notifyDnsBlocked } from '../utils/dnsErrorDetection';
 import { isLowLatencyEnabled } from '../utils/lowLatencyPref';
@@ -66,6 +68,7 @@ import type {
 // Doit rester en phase avec `SOURCE_MAIN_TO_TOP_LEVEL` dans HLSPlayerSettingsPanel.tsx.
 const SOURCE_MAIN_TO_TOP_LEVEL: Record<string, TopLevelSourceId> = {
   webflix_main: 'webflix',
+  miaw_main: 'miaw',
   moviez_main: 'moviez',
   vidzy_main: 'vidzy',
   darkino_main: 'darkino',
@@ -263,6 +266,9 @@ const isMP4Source = (url: string): boolean => {
 
   // Check for sibnet
   if (lowerUrl.includes('sibnet.ru') && lowerUrl.includes('.mp4')) {
+    return true;
+  }
+  if (lowerUrl.includes('#mp4') || lowerUrl.includes('/api/webflix/video') || lowerUrl.includes('/api/miaw/miaw-video')) {
     return true;
   }
 
@@ -561,7 +567,8 @@ interface HLSPlayerProps {
   coflixSources?: any[];
   fstreamSources?: { url: string; label: string; category: string }[];
   wiflixSources?: { url: string; label: string; category: string }[];
-  webflixSources?: { url: string; label: string; category: string }[];
+  webflixSources?: { url: string; label: string; category: string; directUrl?: string; hoster?: string; is4K?: boolean; quality?: string; size?: string }[];
+  miawSources?: { url: string; label: string; category: string; directUrl?: string; hoster?: string; is4K?: boolean; quality?: string; size?: string }[];
   moviezSources?: { url: string; label: string; category: string }[];
   vidzySources?: { url: string; label: string; category: string }[];
   j1fSources?: { url: string; label: string; category: string }[];
@@ -605,6 +612,9 @@ interface HLSPlayerProps {
   //   - { mode: 'timeBeforeEnd', value: 120 } (120 seconds = 2 minutes before end)
   nextContentThreshold?: NextContentThreshold; // Default: 95 (percentage)
   onShowSources?: () => void; // Callback to show sources menu
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
+  customSourcesContent?: React.ReactNode;
 
   /**
    * Catégorie de priorité utilisateur appliquée au tri des hosters dans le panel
@@ -831,6 +841,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   fstreamSources = [],
   wiflixSources = [],
   webflixSources = [],
+  miawSources = [],
   moviezSources = [],
   vidzySources = [],
   j1fSources = [],
@@ -858,6 +869,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   onPlayerSeeked,
   onPlayerEnded,
   onShowSources,
+  settingsOpen,
+  onSettingsOpenChange,
+  customSourcesContent,
   priorityCategory,
 }, ref) => {
   const { t, i18n } = useTranslation();
@@ -946,6 +960,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number>(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const manualFullscreenRef = useRef<boolean>(false);
   const [showControls, setShowControls] = useState(true);
   const [buffered, setBuffered] = useState<TimeRanges | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -967,7 +982,18 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [, setIsBuffering] = useState(false);
   const bufferingTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout ref for buffering indicator delay
   const sourceTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Timeout ref for automatic source switching
-  const [showSettings, setShowSettings] = useState(false);
+  const [internalShowSettings, setInternalShowSettings] = useState(false);
+  const isSettingsControlled = settingsOpen !== undefined;
+  const showSettings = isSettingsControlled ? Boolean(settingsOpen) : internalShowSettings;
+  const showSettingsRef = useRef(showSettings);
+  showSettingsRef.current = showSettings;
+  const setShowSettings: React.Dispatch<React.SetStateAction<boolean>> = useCallback((value) => {
+    const next = typeof value === 'function' ? value(showSettingsRef.current) : value;
+    if (!isSettingsControlled) {
+      setInternalShowSettings(next);
+    }
+    onSettingsOpenChange?.(next);
+  }, [isSettingsControlled, onSettingsOpenChange]);
   const [, setQualities] = useState<Quality[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number | 'auto'>('auto');
   const [sourceStreamQualities, setSourceStreamQualities] = useState<Record<string, string>>(() => getInitialSourceQualityState());
@@ -1009,6 +1035,22 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState<number>(0);
   const [settingsTab, setSettingsTab] = useState<'quality' | 'subtitles' | 'audio' | 'style' | 'format' | 'speed' | 'progression' | 'enhancer' | 'oled'>('quality'); // Add 'progression', 'enhancer', 'oled'
+  const prevShowSettingsRef = useRef(false);
+  useEffect(() => {
+    if (showSettings && !prevShowSettingsRef.current) {
+      setSettingsTab('quality');
+    }
+    prevShowSettingsRef.current = showSettings;
+  }, [showSettings]);
+  useEffect(() => {
+    if (onlyQualityMenu || !controls || isSettingsControlled || onShowSources) return;
+    const handleShowSourcesEvent = () => {
+      setSettingsTab('quality');
+      setShowSettings(true);
+    };
+    window.addEventListener('showSourcesMenu', handleShowSourcesEvent);
+    return () => window.removeEventListener('showSourcesMenu', handleShowSourcesEvent);
+  }, [onlyQualityMenu, controls, isSettingsControlled, onShowSources, setShowSettings]);
   // Nouvel état pour la largeur du menu paramètres
   const [settingsMenuWidth, setSettingsMenuWidth] = useState(0);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
@@ -1198,6 +1240,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const [showFstreamMenu, setShowFstreamMenu] = useState(false);
   const [showWiflixMenu, setShowWiflixMenu] = useState(false);
   const [showWebflixMenu, setShowWebflixMenu] = useState(false);
+  const [showMiawMenu, setShowMiawMenu] = useState(false);
   const [showMoviezMenu, setShowMoviezMenu] = useState(false);
   const [showVidzyMenu, setShowVidzyMenu] = useState(false);
   const [showJ1fMenu, setShowJ1fMenu] = useState(false);
@@ -1894,14 +1937,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           type: 'frembed',
           id: 'frembed_main',
           label: t('watch.frembedPlayer'),
-          url: `https://frembed.click/api/film.php?id=${movieId}`,
+          url: `https://frembed.uno/embed/movie/${movieId}`,
         });
       } else if (tvShowId && seasonNumber && episodeNumber) {
         embedSources.push({
           type: 'frembed',
           id: 'frembed_main',
           label: t('watch.frembedPlayer'),
-          url: `https://frembed.click/api/serie.php?id=${tvShowId}&sa=${seasonNumber}&epi=${episodeNumber}`,
+          url: `https://frembed.uno/embed/serie/${tvShowId}?sa=${seasonNumber}&epi=${episodeNumber}`,
         });
       }
     }
@@ -1968,10 +2011,21 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
     // Add Webflix sources
     if (webflixSources && webflixSources.length > 0) {
+      const has4K = webflixSources.some(s => (s as any).is4K || s.label?.includes('4K'));
       embedSources.push({
         type: 'webflix_main',
         id: 'webflix_main',
-        label: `Lecteurs Webflix (${webflixSources.length})`,
+        label: has4K ? `👑 Lecteurs Webflix 4K Ultra HD (${webflixSources.length})` : `Lecteurs Webflix (${webflixSources.length})`,
+        url: '#',
+      });
+    }
+
+        // Add Miaw sources
+    if (miawSources && miawSources.length > 0) {
+      embedSources.push({
+        type: 'miaw_main',
+        id: 'miaw_main',
+        label: `Lecteurs Miaw (${miawSources.length})`,
         url: '#',
       });
     }
@@ -2079,16 +2133,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       embedSources.push({
         type: 'vostfr',
         id: 'wavewatch',
-        label: 'Wavewatch',
-        url: `https://wwembed.wavewatch.top/api/v1/streaming/ww-tv-${tvShowId}-s${seasonNumber}-e${episodeNumber}`,
+        label: 'Wavewatch (Multi)',
+        url: `https://wwembed.wavewatch.icu/api/v1/streaming/ww-tv-${tvShowId}-s${seasonNumber}-e${episodeNumber}`,
         isActive: false,
       });
     } else if (movieId) {
       embedSources.push({
         type: 'vostfr',
         id: 'wavewatch',
-        label: 'Wavewatch',
-        url: `https://wwembed.wavewatch.top/api/v1/streaming/ww-movie-${movieId}`,
+        label: 'Wavewatch (Multi)',
+        url: `https://wwembed.wavewatch.icu/api/v1/streaming/ww-movie-${movieId}`,
         isActive: false,
       });
     }
@@ -2103,14 +2157,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
     // NOTE: FStream submenu is handled directly in the UI section, not here to avoid duplication
 
-    // Définir les lecteurs VO/VOSTFR à conserver (enlever 6, 4 et 2)
-    if (showVostfrMenu) {
+    // Définir les lecteurs VO/VOSTFR à conserver (toujours poussés dans embedSources pour que le sous-menu s'ouvre immédiatement)
+    {
       const vostfrSources = [
-        { id: 'peachify', label: 'Peachify', url: '' }, // Peachify (priorité, FR subs + accent Movix)
-        { id: 'vostfr', label: 'Videasy', url: '' }, // Videasy
-        { id: 'vidlink', label: 'Vidlink', url: '' }, // vidlink
+        { id: 'vidlink', label: 'Vidlink', url: '' }, // Vidlink (priorité n°1, testé 200 OK)
+        { id: 'vostfr', label: 'Videasy', url: '' }, // Videasy (.to)
+        { id: 'vidsrcwtf1', label: 'Viduki (Vidsrc 1)', url: '' }, // Viduki / vidsrc.wtf v1
         { id: 'vidsrccc', label: 'Vidsrc.io', url: '' }, // vidsrc.io
-        { id: 'vidsrcwtf1', label: 'Vidsrc.wtf 1', url: '' } // vidsrc.wtf (v1)
+        { id: 'peachify', label: 'Peachify', url: '' } // Peachify (fallback)
       ];
 
       vostfrSources.forEach(source => {
@@ -2125,15 +2179,15 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           if (source.id === 'peachify') finalUrl = `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626`;
           else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`; // vidlink.pro
           else if (source.id === 'vidsrccc') finalUrl = `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}`;
-          else if (source.id === 'vostfr') finalUrl = `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`; // Videasy
-          else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`; // Assumed pattern
+          else if (source.id === 'vostfr') finalUrl = `https://player.videasy.to/tv/${tvShowId}/${seasonNumber}/${episodeNumber}`; // Videasy
+          else if (source.id === 'vidsrcwtf1') finalUrl = `https://viduki.net/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}`; // Assumed pattern
         } else if (movieId) {
           // Movie URLs (existing logic)
           if (source.id === 'peachify') finalUrl = `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626`;
           else if (source.id === 'vidlink') finalUrl = `https://vidlink.pro/movie/${movieId}`; // vidlink.pro
           else if (source.id === 'vidsrccc') finalUrl = `https://vidsrc.io/embed/movie?tmdb=${movieId}`;
-          else if (source.id === 'vostfr') finalUrl = `https://player.videasy.net/movie/${movieId}`;
-          else if (source.id === 'vidsrcwtf1') finalUrl = `https://vidsrc.wtf/api/1/movie/?id=${movieId}`;
+          else if (source.id === 'vostfr') finalUrl = `https://player.videasy.to/movie/${movieId}`;
+          else if (source.id === 'vidsrcwtf1') finalUrl = `https://viduki.net/api/1/movie/?id=${movieId}`;
         }
 
         embedSources.push({
@@ -2155,6 +2209,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         let topId: string = src.type;
         if (src.id === 'wavewatch') topId = 'wavewatch';
         else if (src.type === 'webflix_main') topId = 'webflix';
+        else if (src.type === 'miaw_main') topId = 'miaw';
         else if (src.type === 'moviez_main') topId = 'moviez';
         else if (src.type === 'vidzy_main') topId = 'vidzy';
         else if (src.type === 'darkino_main') topId = 'darkino';
@@ -2176,17 +2231,19 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       embedSources.sort((a, b) => getOrderRank(a) - getOrderRank(b));
     } catch (_) {}
 
-    // Organiser en groupes avec Webflix tout en haut des sources
+    // Organiser en groupes avec Miaw et Webflix tout en haut des sources
     const groups: SourceGroup[] = [];
 
+    const miawSource = embedSources.find(s => s.type === 'miaw_main');
     const webflixSource = embedSources.find(s => s.type === 'webflix_main');
-    const remainingEmbedSources = embedSources.filter(s => s.type !== 'webflix_main');
+    const remainingEmbedSources = embedSources.filter(s => s.type !== 'miaw_main' && s.type !== 'webflix_main');
 
-    if (webflixSource) {
+    const recommendedSources = [webflixSource, miawSource].filter(Boolean) as SourceOption[];
+    if (recommendedSources.length > 0) {
       groups.push({
         type: 'embed',
-        title: 'Lecteurs Webflix (Recommandé)',
-        sources: [webflixSource]
+        title: 'Lecteurs Webflix 4K & Miaw (Priorité #1)',
+        sources: recommendedSources
       });
     }
 
@@ -2222,6 +2279,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     fstreamSources?.length,
     wiflixSources?.length,
     webflixSources?.length,
+    miawSources?.length,
     moviezSources?.length,
     vidzySources?.length,
     j1fSources?.length,
@@ -2235,6 +2293,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     showFstreamMenu,
     showWiflixMenu,
     showWebflixMenu,
+    showMiawMenu,
     showMoviezMenu,
     showVidzyMenu,
     showJ1fMenu,
@@ -2278,7 +2337,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   // Fonction pour gérer le changement de source
   const handleSourceChange = (sourceType: string, sourceId: string, sourceUrl: string) => {
     // --- Dropdown Toggle Handling (Doesn't close settings) ---
-    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'webflix_main' || sourceType === 'moviez_main' || sourceType === 'vidzy_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main') {
+    if (sourceType === 'darkino_main' || sourceType === 'omega_main' || sourceType === 'multi_main' || sourceType === 'vostfr_main' || sourceType === 'nexus_main' || sourceType === 'fstream_main' || sourceType === 'wiflix_main' || sourceType === 'webflix_main' || sourceType === 'miaw_main' || sourceType === 'moviez_main' || sourceType === 'vidzy_main' || sourceType === 'j1f_main' || sourceType === 'viper_main' || sourceType === 'vox_main' || sourceType === 'rivestream_main') {
       setShowDarkinoMenu(sourceType === 'darkino_main' ? !showDarkinoMenu : false);
       setShowOmegaMenu(sourceType === 'omega_main' ? !showOmegaMenu : false);
       setShowCoflixMenu(sourceType === 'multi_main' ? !showCoflixMenu : false);
@@ -2287,6 +2346,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       setShowFstreamMenu(sourceType === 'fstream_main' ? !showFstreamMenu : false);
       setShowWiflixMenu(sourceType === 'wiflix_main' ? !showWiflixMenu : false);
       setShowWebflixMenu(sourceType === 'webflix_main' ? !showWebflixMenu : false);
+      setShowMiawMenu(sourceType === 'miaw_main' ? !showMiawMenu : false);
       setShowMoviezMenu(sourceType === 'moviez_main' ? !showMoviezMenu : false);
       setShowVidzyMenu(sourceType === 'vidzy_main' ? !showVidzyMenu : false);
       setShowJ1fMenu(sourceType === 'j1f_main' ? !showJ1fMenu : false);
@@ -2341,6 +2401,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         targetUrl = webflixSources[index].url || sourceUrl || '';
       } else {
         targetUrl = sourceUrl || '';
+      }
+    } else if (sourceType === 'miaw') {
+      const index = parseInt(sourceId.split('_')[1], 10);
+      if (miawSources && miawSources[index]) {
+        targetUrl = miawSources[index].url || '';
       }
     } else if (sourceType === 'moviez') {
       const index = parseInt(sourceId.split('_')[1], 10);
@@ -2401,10 +2466,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       recalculateMenuWidth();
     }, 500);
 
-    // Close settings panel for embed sources (keep open for HLS sources to allow quality selection)
-    const embedTypes = ['webflix', 'frembed', 'custom', 'omega', 'coflix', 'vostfr', 'adfree', 'fstream', 'wiflix', 'moviez', 'vidzy', 'j1f', 'viper', 'vox'];
-    if (embedTypes.includes(sourceType)) {
-      // For embed sources, always close settings
+    // Close unified settings/sources panel after selecting a playable source
+    // (keep open only when triggering Rivestream load before mirrors arrive)
+    const isRivestreamTrigger =
+      sourceType === 'rivestream_hls' && (!rivestreamSources || rivestreamSources.length === 0);
+    if (!isRivestreamTrigger) {
       setShowSettings(false);
     }
   };
@@ -3287,8 +3353,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       try {
         setAutoSkipIntro(localStorage.getItem('dawger_auto_skip_intro') !== 'false');
         setSessionEndPref(localStorage.getItem('dawger_session_end_time') !== 'false');
-        const oled = localStorage.getItem('playerVideoOled') as any;
-        if (oled) setVideoOledMode(oled);
+        const { mode: oled, custom: syncedCustomOled } = readOledPrefs();
+        setVideoOledMode(oled);
+        setCustomOled(syncedCustomOled);
         const spd = parseFloat(localStorage.getItem('playerPlaybackSpeed') || '1');
         if (!isNaN(spd) && spd > 0) setPlaybackSpeed(spd);
         setAutoNextEpisodeEnabled(localStorage.getItem('playerAutoNextEpisodePref') !== 'false');
@@ -4486,35 +4553,23 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   }, [audioEnhancerMode, applyAudioEnhancerPreset]);
 
   // Handle video OLED mode change
-  const handleVideoOledChange = useCallback((mode: 'off' | 'natural' | 'cinema' | 'vivid' | 'custom') => {
+  const handleVideoOledChange = useCallback((mode: OledMode) => {
     setVideoOledMode(mode);
-    localStorage.setItem('playerVideoOled', mode);
+    saveOledMode(mode);
   }, []);
 
   // Handle custom OLED parameter change
   const handleCustomOledChange = useCallback((key: string, value: number) => {
     setCustomOled((prev: typeof customOled) => {
       const updated = { ...prev, [key]: value };
-      localStorage.setItem('playerCustomOled', JSON.stringify(updated));
+      saveCustomOled(updated);
       return updated;
     });
   }, []);
 
   // Get CSS filter for OLED mode
   const getVideoOledFilter = useCallback(() => {
-    switch (videoOledMode) {
-      case 'natural':
-        return 'contrast(1.08) saturate(1.15) brightness(1.02)';
-      case 'cinema':
-        return 'contrast(1.15) saturate(1.1) brightness(0.97) sepia(0.08)';
-      case 'vivid':
-        return 'contrast(1.22) saturate(1.35) brightness(1.03)';
-      case 'custom':
-        return `contrast(${customOled.contrast}) saturate(${customOled.saturate}) brightness(${customOled.brightness}) sepia(${customOled.sepia})`;
-      case 'off':
-      default:
-        return 'none';
-    }
+    return getOledFilterString(videoOledMode, customOled);
   }, [videoOledMode, customOled]);
 
   // Handle volume boost change
@@ -4646,12 +4701,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     };
 
     const isFullscreenNow = Boolean(
+      isFullscreen ||
       doc.fullscreenElement ||
       doc.webkitFullscreenElement ||
       videoElement.webkitDisplayingFullscreen === true,
     );
 
     if (!isFullscreenNow) {
+      manualFullscreenRef.current = true;
+      setIsFullscreen(true);
+
       const tryRequestFullscreen = async (element: HTMLElement | HTMLVideoElementWithWebkit) => {
         const extendedElement = element as typeof element & {
           webkitRequestFullscreen?: () => Promise<void> | void;
@@ -4677,32 +4736,18 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         }
       };
 
-      let hasEnteredFullscreen = false;
-
-      for (const target of [playerElement, videoElement]) {
-        if (!target) continue;
-
-        if (await tryRequestFullscreen(target)) {
-          hasEnteredFullscreen = true;
-          break;
-        }
-      }
-
-      if (!hasEnteredFullscreen && typeof videoElement.webkitEnterFullscreen === 'function') {
-        try {
-          videoElement.webkitEnterFullscreen();
-          hasEnteredFullscreen = true;
-        } catch (err) {
-          const error = err as Error;
-          console.error(`Error attempting to enable iOS full-screen mode: ${error.message} (${error.name})`);
-        }
-      }
-
-      if (!hasEnteredFullscreen) {
-        console.warn('Fullscreen API not available on this device.');
-      }
+      await tryRequestFullscreen(playerElement);
+      try {
+        await (window.screen?.orientation as any)?.lock?.('landscape');
+      } catch {}
     } else {
-      if (typeof doc.exitFullscreen === 'function') {
+      manualFullscreenRef.current = false;
+      setIsFullscreen(false);
+      try {
+        (window.screen?.orientation as any)?.unlock?.();
+      } catch {}
+
+      if (typeof doc.exitFullscreen === 'function' && doc.fullscreenElement) {
         try {
           await doc.exitFullscreen();
         } catch (err) {
@@ -4711,7 +4756,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         }
       }
 
-      if (typeof doc.webkitExitFullscreen === 'function') {
+      if (typeof doc.webkitExitFullscreen === 'function' && doc.webkitFullscreenElement) {
         try {
           await Promise.resolve(doc.webkitExitFullscreen());
         } catch (err) {
@@ -4720,7 +4765,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         }
       }
 
-      if (typeof videoElement.webkitExitFullscreen === 'function') {
+      if (typeof videoElement.webkitExitFullscreen === 'function' && videoElement.webkitDisplayingFullscreen) {
         try {
           videoElement.webkitExitFullscreen();
         } catch (err) {
@@ -4735,9 +4780,19 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     const handleFullscreenChange = () => {
       const video = videoRef.current as HTMLVideoElementWithWebkit | null;
       const doc = document as Document & { webkitFullscreenElement?: Element | null };
-      setIsFullscreen(
-        Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || (video && video.webkitDisplayingFullscreen)),
+      const active = Boolean(
+        doc.fullscreenElement ||
+        doc.webkitFullscreenElement ||
+        (video && video.webkitDisplayingFullscreen)
       );
+      if (active) {
+        setIsFullscreen(true);
+      } else if (!manualFullscreenRef.current) {
+        setIsFullscreen(false);
+        try {
+          (window.screen?.orientation as any)?.unlock?.();
+        } catch {}
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -5884,32 +5939,57 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     localStorage.setItem('playerNextContentThresholdValue', nextContentThresholdValue.toString());
   }, [nextContentThresholdMode, nextContentThresholdValue]);
 
-  // Update saveProgress function
-  const saveProgress = useCallback(() => {
+  const lastProgressSaveAtRef = useRef<number>(0);
+
+  // Update saveProgress function (seuil >= 5s + cache natif unifié)
+  const saveProgress = useCallback((forceFlush = false) => {
     // Check if saving is enabled
     if (!saveProgressEnabled) {
-      // console.log("[saveProgress] Aborted: Saving disabled by user preference.");
       return;
     }
 
     const video = videoRef.current;
     const key = getProgressKey();
 
-    if (!video) return;
+    if (!video || !key) return;
 
-    // Ne pas sauvegarder si on est tout au début ou à la fin
-    if (video.currentTime < 30 || video.currentTime > video.duration - 30) return;
+    const currentTime = video.currentTime;
+    const duration = video.duration;
+    if (!Number.isFinite(currentTime) || !Number.isFinite(duration) || duration <= 0) return;
 
-    // Continue watching functionality removed
+    // Ne pas sauvegarder avant 5 secondes ni tout à la fin (< 15s)
+    if (currentTime < 5 || currentTime > duration - 15) return;
 
-    if (!key) return;
+    const now = Date.now();
+    if (!forceFlush && now - lastProgressSaveAtRef.current < 2000) {
+      return;
+    }
+    lastProgressSaveAtRef.current = now;
+
     const progress: WatchProgress = {
-      position: video.currentTime,
+      position: currentTime,
       timestamp: new Date().toISOString(),
-      duration: video.duration
+      duration
     };
-    localStorage.setItem(key, JSON.stringify(progress));
-  }, [getProgressKey, tvShowId, seasonNumber, episodeNumber, tvShow, saveProgressEnabled]);
+    try {
+      localStorage.setItem(key, JSON.stringify(progress));
+    } catch {}
+
+    const mediaType: 'movie' | 'tv' | 'anime' = movieId ? 'movie' : (isAnime ? 'anime' : 'tv');
+    const mediaId = movieId || tvShowId;
+    if (mediaId) {
+      savePlaybackPosition({
+        mediaType,
+        id: mediaId,
+        season: movieId ? undefined : seasonNumber,
+        episode: movieId ? undefined : episodeNumber,
+        positionSec: currentTime,
+        durationSec: duration,
+        completed: false,
+        exactFlush: forceFlush,
+      });
+    }
+  }, [getProgressKey, movieId, tvShowId, seasonNumber, episodeNumber, isAnime, tvShow, saveProgressEnabled]);
 
   const loadProgress = useCallback(() => {
     const video = videoRef.current;
@@ -5918,97 +5998,152 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
     if (!video || !key) {
       console.log("[loadProgress] Aborted: No video or key.");
-      setHasLoadedProgress(true); // Ensure this is set even if aborting early
+      setHasLoadedProgress(true);
       return;
     }
 
     const setVideoTime = () => {
       console.log(`[loadProgress] setVideoTime called. Current video time: ${video.currentTime}, Duration: ${video.duration}`);
-      // Check if duration is valid before seeking
       if (video.duration && isFinite(video.duration) && video.duration > 0) {
-        // Use initialTime prop if provided and valid
-        if (initialTime && initialTime > 0 && initialTime < video.duration - 30) {
+        if (initialTime && initialTime >= 5 && initialTime < video.duration - 15) {
           console.log(`[loadProgress] Seeking to initialTime prop: ${initialTime}`);
           video.currentTime = initialTime;
         } else {
-          // Otherwise, use localStorage progress
+          const mediaType: 'movie' | 'tv' | 'anime' = movieId ? 'movie' : (isAnime ? 'anime' : 'tv');
+          const mediaId = movieId || tvShowId;
+          const cached = mediaId
+            ? getSavedPosition(mediaType, mediaId, movieId ? undefined : seasonNumber, movieId ? undefined : episodeNumber)
+            : null;
+          let targetPos: number | null = null;
+          if (cached && !cached.completed && cached.positionSec >= 5 && cached.positionSec < video.duration - 15) {
+            targetPos = cached.positionSec;
+          }
           const savedProgress = localStorage.getItem(key);
           if (savedProgress) {
             try {
               const progress: WatchProgress = JSON.parse(savedProgress);
-              if (progress.position < video.duration - 30) {
-                console.log(`[loadProgress] Seeking to saved localStorage position: ${progress.position}`);
-                video.currentTime = progress.position;
-              } else {
-                console.log(`[loadProgress] Not seeking: localStorage progress is too close to end.`);
+              if (progress.position >= 5 && progress.position < video.duration - 15) {
+                if (targetPos === null || progress.position > targetPos) {
+                  targetPos = progress.position;
+                }
               }
             } catch (error) {
               console.error('[loadProgress] Error parsing saved progress:', error);
             }
+          }
+          if (targetPos !== null) {
+            console.log(`[loadProgress] Seeking to saved position: ${targetPos}`);
+            video.currentTime = targetPos;
           } else {
-            console.log(`[loadProgress] No localStorage progress found for key: ${key}`);
+            console.log(`[loadProgress] No resumable progress found for key: ${key}`);
           }
         }
       } else {
         console.log(`[loadProgress] Not seeking: Duration invalid/zero (${video.duration || 'N/A'}).`);
       }
-      // Ensure we don't add multiple listeners if readyState changes quickly
       video.removeEventListener('canplay', setVideoTime);
     };
 
-    // Check if the video is already ready
-    if (video.readyState >= 3) { // HAVE_FUTURE_DATA or higher (more robust than HAVE_METADATA)
+    if (video.readyState >= 3) {
       console.log("[loadProgress] Video already playable. Calling setVideoTime directly.");
       setVideoTime();
     } else {
       console.log("[loadProgress] Video not playable yet. Adding 'canplay' listener.");
-      // Make sure listener isn't added multiple times
       video.removeEventListener('canplay', setVideoTime);
       video.addEventListener('canplay', setVideoTime, { once: true });
     }
-    setHasLoadedProgress(true); // Mark progress load attempt as done
-  }, [getProgressKey, initialTime]);
-  // Initialiser la sauvegarde périodique
+    setHasLoadedProgress(true);
+  }, [getProgressKey, initialTime, movieId, tvShowId, seasonNumber, episodeNumber, isAnime]);
+
+  // Initialiser la sauvegarde périodique + flush exact sur pause/seeked/ended/background/unmount
   useEffect(() => {
     console.log("[Effect saveProgress Interval] Setting up interval.");
     if (!progressSaveInterval.current) {
       progressSaveInterval.current = setInterval(() => {
-        // console.log("[Effect saveProgress Interval] Interval fired."); // Keep this commented unless needed, can be noisy
-        saveProgress();
-      }, 10000); // Toutes les 10 secondes
+        saveProgress(false);
+      }, 5000);
     }
+
+    const video = videoRef.current;
+    const handleFlushPause = () => saveProgress(true);
+    const handleFlushSeeked = () => saveProgress(true);
+    const handleFlushEnded = () => {
+      const mediaType: 'movie' | 'tv' | 'anime' = movieId ? 'movie' : (isAnime ? 'anime' : 'tv');
+      const mediaId = movieId || tvShowId;
+      const vid = videoRef.current;
+      if (mediaId && vid && Number.isFinite(vid.duration) && vid.duration > 0) {
+        savePlaybackPosition({
+          mediaType,
+          id: mediaId,
+          season: movieId ? undefined : seasonNumber,
+          episode: movieId ? undefined : episodeNumber,
+          positionSec: vid.duration,
+          durationSec: vid.duration,
+          completed: true,
+          exactFlush: true,
+        });
+      } else {
+        void flushWatchStateToNative();
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        saveProgress(true);
+      }
+    };
+
+    if (video) {
+      video.addEventListener('pause', handleFlushPause);
+      video.addEventListener('seeked', handleFlushSeeked);
+      video.addEventListener('ended', handleFlushEnded);
+    }
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       console.log("[Effect saveProgress Interval] Cleaning up interval.");
+      if (video) {
+        video.removeEventListener('pause', handleFlushPause);
+        video.removeEventListener('seeked', handleFlushSeeked);
+        video.removeEventListener('ended', handleFlushEnded);
+      }
+      document.removeEventListener('visibilitychange', handleVisibility);
       if (progressSaveInterval.current) {
         clearInterval(progressSaveInterval.current);
-        progressSaveInterval.current = undefined; // Clear the ref
-        console.log("[Effect saveProgress Interval] Final save before cleanup.");
-        saveProgress(); // Sauvegarde finale avant de quitter
+        progressSaveInterval.current = undefined;
       }
+      saveProgress(true);
     };
-  }, [saveProgress]);
+  }, [saveProgress, movieId, tvShowId, seasonNumber, episodeNumber, isAnime]);
 
-  // Charger la progression au montage
+  // Charger la progression au montage et après hydratation native
   useEffect(() => {
     console.log(`[Effect loadProgress] Running. hasLoadedProgress: ${hasLoadedProgress}`);
     if (!hasLoadedProgress) {
       loadProgress();
     }
-    // Cleanup function is not needed here as loadProgress sets hasLoadedProgress
   }, [hasLoadedProgress, loadProgress]);
 
-  // Sauvegarder avant de quitter la page
+  // Sauvegarder avant de quitter la page + écouter hydratation native au démarrage à froid
   useEffect(() => {
     const handleBeforeUnload = () => {
-      saveProgress();
+      saveProgress(true);
+    };
+    const handleHydrated = () => {
+      const vid = videoRef.current;
+      if (vid && vid.currentTime < 5) {
+        loadProgress();
+      }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    window.addEventListener(WATCH_STATE_HYDRATED_EVENT, handleHydrated);
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+      window.removeEventListener(WATCH_STATE_HYDRATED_EVENT, handleHydrated);
     };
-  }, [saveProgress]);
+  }, [saveProgress, loadProgress]);
 
   // Écouter les événements de changement de source forcé
   useEffect(() => {
@@ -6048,10 +6183,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     const remaining = player.duration - player.currentTime;
     setTimeRemaining(remaining);
 
-    // Sauvegarder la progression si on est au-delà de 30 secondes
-    // et à plus de 30 secondes de la fin
-    if (player.currentTime > 30 && remaining > 30) {
-      saveProgress();
+    // Sauvegarder la progression dès 5 secondes et à plus de 15 secondes de la fin
+    if (player.currentTime >= 5 && remaining > 15) {
+      saveProgress(false);
     }
 
     // Afficher le film suivant ou l'épisode suivant selon le seuil configuré
@@ -7796,7 +7930,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                       } else if (source.type === 'm3u8') { // Added check for AdFree M3U8
                         isActive = src === source.url;
                       } else if (source.type === 'webflix_main') {
-                        isActive = !!(webflixSources && webflixSources.some(ws => ws.url === embedUrl));
+                        isActive = !!(webflixSources && webflixSources.some(ws => ws.url === embedUrl || (Boolean(src) && ws.directUrl === src)));
+                      } else if (source.type === 'miaw_main') {
+                        isActive = !!(miawSources && miawSources.some(ms => ms.url === embedUrl || (Boolean(src) && ms.directUrl === src)));
                       } else if (source.type === 'moviez_main') {
                         isActive = !!(moviezSources && moviezSources.some(ms => ms.url === embedUrl));
                       } else if (source.type === 'vidzy_main') {
@@ -7832,20 +7968,22 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                 {group.type === 'hls' && (source.type === 'mp4' || source.type === 'm3u8') && renderSourceQualityMeta(source.url, isActive, source.quality, source.label)}
                               </div>
                               <div className="ml-3 flex items-center gap-2">
-                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'webflix_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
+                                {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'webflix_main' || source.type === 'miaw_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main' || source.type === 'vostfr_main') && (
                                   <ChevronRight className={`w-4 h-4 transition-transform ${(source.type === 'darkino_main' && showDarkinoMenu) ||
                                     (source.type === 'omega_main' && showOmegaMenu) ||
                                     (source.type === 'multi_main' && showCoflixMenu) ||
                                     (source.type === 'fstream_main' && showFstreamMenu) ||
                                     (source.type === 'wiflix_main' && showWiflixMenu) ||
                                     (source.type === 'webflix_main' && showWebflixMenu) ||
+                                    (source.type === 'miaw_main' && showMiawMenu) ||
                                     (source.type === 'moviez_main' && showMoviezMenu) ||
                                     (source.type === 'vidzy_main' && showVidzyMenu) ||
                                     (source.type === 'j1f_main' && showJ1fMenu) ||
                                     (source.type === 'nexus_main' && showNexusMenu) ||
                                     (source.type === 'rivestream_main' && showRivestreamMenu) ||
                                     (source.type === 'viper_main' && showViperMenu) ||
-                                    (source.type === 'vox_main' && showVoxMenu)
+                                    (source.type === 'vox_main' && showVoxMenu) ||
+                                    (source.type === 'vostfr_main' && showVostfrMenu)
                                     ? 'rotate-90' : ''}`}
                                   />
                                 )}
@@ -8099,11 +8237,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                   className="ml-4 pl-2 border-l-2 border-gray-700 mb-2"
                                 >
                                   {[
-                                    { id: 'peachify', label: 'Peachify' },
-                                    { id: 'vostfr', label: 'Videasy' },
-                                    { id: 'vidlink', label: 'Vidlink' },
-                                    { id: 'vidsrccc', label: 'Vidsrc.io' },
-                                    { id: 'vidsrcwtf1', label: 'Vidsrc.wtf 1' }
+                                    { id: 'vidlink', label: 'Vidlink (VOSTFR)' },
+                                    { id: 'vostfr', label: 'Videasy (VOSTFR)' },
+                                    { id: 'vidsrcwtf1', label: 'Viduki (VOSTFR)' },
+                                    { id: 'vidsrccc', label: 'Vidsrc.io (VOSTFR)' },
+                                    { id: 'peachify', label: 'Peachify (VOSTFR - Secours)' }
                                   ].map((vostfrSource, index) => {
                                     // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
                                     // (épisode spécial / Spéciaux TMDB) tombe dans le fallback '#' qui fait
@@ -8112,14 +8250,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                       vostfrSource.id === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
                                         vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
                                           vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/movie?tmdb=${movieId}` :
-                                            vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                                                `https://vidsrc.wtf/api/1/movie/?id=${movieId}` :
+                                            vostfrSource.id === 'vostfr' ? `https://player.videasy.to/movie/${movieId}` :
+                                                `https://viduki.net/api/1/movie/?id=${movieId}` :
                                       (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
                                         vostfrSource.id === 'peachify' ? `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626` :
                                           vostfrSource.id === 'vidlink' ? `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                             vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}` :
-                                              vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                                  `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
+                                              vostfrSource.id === 'vostfr' ? `https://player.videasy.to/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                                  `https://viduki.net/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
                                         '#'; // Fallback if neither movie nor TV info is present
 
                                     // Active state check for VOSTFR sources in main menu
@@ -8337,7 +8475,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                                           </div>
                                           {catSources.map((mSource, index) => {
                                             const globalIndex = webflixSources.findIndex(s => s.url === mSource.url);
-                                            const isMActive = onlyQualityMenu && embedType === 'webflix' && embedUrl === mSource.url;
+                                            const isMActive = onlyQualityMenu && ((embedType === 'webflix' && embedUrl === mSource.url) || (Boolean(src) && mSource.directUrl === src));
                                             return (
                                               <div key={`webflix_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
                                                 <motion.button
@@ -8371,6 +8509,71 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                             </AnimatePresence>
                           )}
                           {/* Menu déroulant Moviez */}
+                          {/* Menu déroulant Miaw */}
+                          {source.type === 'miaw_main' && (
+                            <AnimatePresence>
+                              {showMiawMenu && (
+                                <motion.div
+                                  initial={{ opacity: 0, scale: 0.95, transformOrigin: "top" }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.95 }}
+                                  transition={{ duration: 0.2, ease: "easeOut" }}
+                                  className="ml-4 pl-2 border-l-2 border-indigo-500 mb-2"
+                                >
+                                  {miawSources && miawSources.length > 0 && (() => {
+                                    const sourcesByCategory = miawSources.reduce((acc, s) => {
+                                      const cat = s.category || 'VF';
+                                      if (!acc[cat]) acc[cat] = [];
+                                      acc[cat].push(s);
+                                      return acc;
+                                    }, {} as Record<string, typeof miawSources>);
+
+                                    const categoryOrder = [
+                                      { key: 'VF', label: t('watch.french'), flagCode: 'FR' },
+                                      { key: 'VOSTFR', label: t('watch.voSubtitledFr'), flagCode: 'GB' }
+                                    ];
+
+                                    return categoryOrder.map((cat) => {
+                                      const catSources = sourcesByCategory[cat.key];
+                                      if (!catSources || catSources.length === 0) return null;
+                                      return (
+                                        <div key={`miaw_cat_${cat.key}`} className="mb-3">
+                                          <div className="flex items-center gap-2 mb-2 px-2">
+                                            <span className="text-lg"><ReactCountryFlag countryCode={cat.flagCode} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }} /></span>
+                                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                              {cat.label} ({catSources.length})
+                                            </span>
+                                          </div>
+                                          {catSources.map((mSource, index) => {
+                                            const globalIndex = miawSources.findIndex(s => s.url === mSource.url);
+                                            const isMActive = onlyQualityMenu && ((embedType === 'miaw' && embedUrl === mSource.url) || (Boolean(src) && mSource.directUrl === src));
+                                            return (
+                                              <div key={`miaw_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
+                                                <motion.button
+                                                  initial={{ opacity: 0, x: -20 }}
+                                                  animate={{ opacity: 1, x: 0 }}
+                                                  transition={{ duration: 0.2, delay: index * 0.03 }}
+                                                  onClick={() => handleSourceChange('miaw', `miaw_${globalIndex}`, mSource.url)}
+                                                  className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isMActive ? 'ring-2 ring-indigo-500 bg-gray-800/80' : ''}`}
+                                                >
+                                                  <span>{mSource.label}</span>
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-gray-500">{mSource.category}</span>
+                                                    {isMActive && <span className="text-xs px-2 py-1 bg-indigo-600 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                  </div>
+                                                </motion.button>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          )}
+
                           {source.type === 'moviez_main' && (
                             <AnimatePresence>
                               {showMoviezMenu && (
@@ -9281,7 +9484,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   return (
     <div
       ref={containerRef}
-      className={`relative group w-full h-full bg-black rounded-xl overflow-hidden ${isLoading ? 'aspect-[16/9]' : ''} video-container ${className} ${isFullscreenAnimating ? 'fullscreen-animating' : ''} select-none ${shouldHideCursor || isLocked ? 'cursor-none' : ''}`}
+      className={`relative group w-full h-full bg-black overflow-hidden ${isFullscreen ? '!fixed !inset-0 !z-[19999] !w-screen !h-[100dvh] !max-w-none !max-h-none !m-0 !p-0 !rounded-none' : 'rounded-xl'} ${isLoading && !isFullscreen ? 'aspect-[16/9]' : ''} video-container ${className} ${isFullscreenAnimating ? 'fullscreen-animating' : ''} select-none ${shouldHideCursor || isLocked ? 'cursor-none' : ''}`}
       onMouseMove={!isTouchDevice ? handleMouseMove : undefined}
       onMouseLeave={() => isPlaying && !showCastMenu && setShowControls(false)}
       onClick={handleVideoClick}
@@ -9905,8 +10108,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 if (onShowSources) {
                   onShowSources();
                 } else {
-                  // Fallback: dispatch event to show sources
-                  window.dispatchEvent(new CustomEvent('showSourcesMenu'));
+                  setSettingsTab('quality');
+                  setShowSettings(true);
                 }
               }}
               className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg flex items-center justify-center mx-auto gap-2"
@@ -10042,7 +10245,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               duration: 0.2,
               ease: "easeOut"
             }}
-            className="absolute inset-0 flex items-center justify-center gap-8 z-50 pointer-events-none"
+            className="absolute inset-0 flex items-center justify-center gap-4 sm:gap-8 z-50 pointer-events-none"
           >
             <motion.button
               onClick={(e) => {
@@ -10060,9 +10263,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 rotate: -10
               }}
               transition={{ duration: 0.1 }}
-              className="bg-black/70 rounded-full p-7 text-white transition-colors shadow-lg pointer-events-auto"
+              className="bg-black/70 rounded-full p-3 sm:p-5 md:p-7 text-white transition-colors shadow-lg pointer-events-auto"
             >
-              <Rewind size={56} />
+              <Rewind size={isMobile && !isFullscreen ? 26 : isMobile ? 36 : 56} />
             </motion.button>
             <motion.button
               onClick={(e) => {
@@ -10085,9 +10288,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 rotate: 5
               }}
               transition={{ duration: 0.1 }}
-              className="bg-black/70 rounded-full p-8 text-white transition-colors shadow-xl pointer-events-auto"
+              className="bg-black/70 rounded-full p-3.5 sm:p-6 md:p-8 text-white transition-colors shadow-xl pointer-events-auto"
             >
-              {isPlaying ? <Pause size={64} /> : <Play size={64} />}
+              {isPlaying ? <Pause size={isMobile && !isFullscreen ? 32 : isMobile ? 42 : 64} /> : <Play size={isMobile && !isFullscreen ? 32 : isMobile ? 42 : 64} />}
             </motion.button>
             <motion.button
               onClick={(e) => {
@@ -10105,9 +10308,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 rotate: 10
               }}
               transition={{ duration: 0.1 }}
-              className="bg-black/70 rounded-full p-7 text-white transition-colors shadow-lg pointer-events-auto"
+              className="bg-black/70 rounded-full p-3 sm:p-5 md:p-7 text-white transition-colors shadow-lg pointer-events-auto"
             >
-              <FastForward size={56} />
+              <FastForward size={isMobile && !isFullscreen ? 26 : isMobile ? 36 : 56} />
             </motion.button>
           </motion.div>
         )}
@@ -10160,16 +10363,15 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
 
 
-      {/* Unified Left Vertical Controls Column: Back, Sources, Fullscreen */}
+      {/* Unified Left Vertical Controls Column: Back, Unified Sources & Settings, Next, Fullscreen */}
       <div
-        className={`absolute left-2.5 top-2.5 sm:left-3 sm:top-3 z-50 transition-all duration-300 pointer-events-auto flex flex-col gap-1.5 ${
+        className={`absolute left-[max(0.5rem,env(safe-area-inset-left))] top-[max(0.5rem,env(safe-area-inset-top))] sm:left-3 sm:top-3 z-50 transition-all duration-300 pointer-events-auto flex ${isFullscreen ? 'flex-col' : 'flex-row sm:flex-col'} gap-1.5 ${
           showControls ? 'opacity-100 translate-x-0' : 'opacity-35 hover:opacity-100 translate-x-0'
         }`}
       >
         {/* 1. Bouton Retour */}
         <button
           onClick={handleBackToInfo}
-          style={{ pointerEvents: showControls ? 'auto' : 'none' }}
           className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 hover:border-emerald-500/60 hover:text-emerald-400 active:scale-95 text-white border border-white/15 backdrop-blur-md shadow-xl transition-all group"
           title={isFullscreen ? t('watch.exitFullscreen') : t('watch.back')}
           aria-label={isFullscreen ? t('watch.exitFullscreen') : t('watch.back')}
@@ -10177,27 +10379,32 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
           <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
         </button>
 
-        {/* 2. Bouton Sources (vert émeraude Dawger) */}
+        {/* 2. Bouton unifié Sources & Paramètres (engrenage émeraude Dawger) */}
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             if (onShowSources) {
               onShowSources();
             } else {
-              setSettingsTab('quality');
-              setShowSettings(true);
+              if (!showSettings) {
+                setSettingsTab('quality');
+              }
+              setShowSettings(!showSettings);
             }
           }}
-          style={{ pointerEvents: showControls ? 'auto' : 'none' }}
-          className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border border-emerald-500/40 hover:border-emerald-400 active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group"
-          title={t('watch.sources')}
-          aria-label={t('watch.sources')}
+          className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group ${
+            showSettings
+              ? 'border-emerald-400 text-emerald-400 shadow-emerald-500/20'
+              : 'border-emerald-500/40 hover:border-emerald-400'
+          }`}
+          title={`${t('watch.sources')} & ${t('watch.settingsTitle') || 'Paramètres'}`}
+          aria-label={`${t('watch.sources')} & ${t('watch.settingsTitle') || 'Paramètres'}`}
         >
-          <Layers className="w-3.5 h-3.5 text-emerald-400 transition-transform group-hover:scale-110" />
+          <Settings className={`w-3.5 h-3.5 text-emerald-400 transition-transform ${showSettings ? 'rotate-45' : 'group-hover:rotate-45'}`} />
         </button>
 
-        
-        {/* Bouton Épisode suivant (si onNextEpisode dispo) */}
+        {/* 3. Bouton Épisode suivant (si onNextEpisode dispo) */}
         {onNextEpisode && (
           <button
             type="button"
@@ -10211,7 +10418,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 onNextEpisode(1, 2);
               }
             }}
-            style={{ pointerEvents: showControls ? 'auto' : 'none' }}
             className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border border-emerald-500/40 hover:border-emerald-400 hover:text-emerald-400 active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group"
             title={nextEpisode?.title ? `Épisode suivant : ${nextEpisode.title}` : (t('watch.nextEpisode') || 'Épisode suivant')}
             aria-label={t('watch.nextEpisode') || 'Épisode suivant'}
@@ -10228,7 +10434,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               e.stopPropagation();
               onNextMovie(nextMovie.id);
             }}
-            style={{ pointerEvents: showControls ? 'auto' : 'none' }}
             className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border border-emerald-500/40 hover:border-emerald-400 hover:text-emerald-400 active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group"
             title={nextMovie?.title ? `Film suivant : ${nextMovie.title}` : 'Film suivant'}
             aria-label="Film suivant"
@@ -10236,21 +10441,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             <SkipForward className="w-3.5 h-3.5 text-emerald-400 transition-transform group-hover:scale-110" />
           </button>
         )}
-{/* 3. Bouton Paramètres (colonne de gauche) */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowSettings(!showSettings);
-          }}
-          style={{ pointerEvents: showControls ? 'auto' : 'none' }}
-          className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 active:scale-95 text-white border backdrop-blur-md shadow-xl transition-all group ${
-            showSettings ? 'border-emerald-500 text-emerald-400' : 'border-white/15 hover:border-emerald-500/60 hover:text-emerald-400'
-          }`}
-          title={t('watch.settingsTitle') || 'Paramètres'}
-          aria-label={t('watch.settingsTitle') || 'Paramètres'}
-        >
-          <Settings className={`w-3.5 h-3.5 transition-transform ${showSettings ? 'rotate-45' : 'group-hover:rotate-45'}`} />
-        </button>
 
         {/* 4. Bouton Plein écran */}
         <button
@@ -10258,7 +10448,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             e.stopPropagation();
             toggleFullscreen();
           }}
-          style={{ pointerEvents: showControls ? 'auto' : 'none' }}
           className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 hover:border-emerald-500/60 hover:text-emerald-400 active:scale-95 text-white border border-white/15 backdrop-blur-md shadow-xl transition-all group"
           title={isFullscreen ? t('watch.exitFullscreen') : t('watch.fullscreen')}
           aria-label={isFullscreen ? t('watch.exitFullscreen') : t('watch.fullscreen')}
@@ -10273,7 +10462,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
       {/* Informations sur le contenu en haut à gauche (décalé à droite de la colonne de boutons) */}
       <motion.div
-        className="absolute top-2.5 left-11 sm:left-13 p-2 flex items-center gap-3 z-40"
+        className="hidden sm:flex absolute top-2.5 left-11 sm:left-13 p-2 items-center gap-3 z-40"
         initial={{ opacity: 0, y: -20 }}
         animate={{
           opacity: showControls ? 1 : 0,
@@ -10310,7 +10499,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       </motion.div>
       {controls && !isCasting && (
         <motion.div
-          className="absolute bottom-0 left-0 right-0 p-4 control-bar"
+          className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] control-bar"
           initial={{ opacity: 0, y: 20 }}
           animate={{
             opacity: showControls ? 1 : 0,
@@ -10346,7 +10535,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             />
           </div>
 
-          <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center justify-between flex-nowrap gap-1.5 sm:gap-2">
             <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
               <div className="flex items-center gap-1 md:gap-2">
                 <button
@@ -10410,7 +10599,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                     <SkipForward size={isMobile ? 20 : 24} />
                   </button>
                 )}
-                <div className="relative group flex items-center h-[24px] mr-4">
+                <div className="relative group flex items-center h-[24px] mr-1 sm:mr-4">
                   <div className="flex items-center group/volume h-full">
                     <button
                       onClick={handleMuteToggle} // Use the updated handler
@@ -10449,13 +10638,13 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                   </div>
                 </div>
               </div>
-              <div className="text-white text-xs md:text-sm whitespace-nowrap min-w-[85px] flex items-center gap-2">
+              <div className="text-white text-[11px] sm:text-xs md:text-sm whitespace-nowrap min-w-0 sm:min-w-[85px] flex items-center gap-1 sm:gap-2">
                 <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
 
               </div>
             </div>
 
-            <div className="flex items-center gap-2 md:gap-4">
+            <div className="flex items-center gap-1.5 sm:gap-2 md:gap-4">
               <div className="relative flex items-center h-[24px]">
                 <button
                   onClick={toggleWatchParty}
@@ -10933,6 +11122,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             showFstreamMenu,
             showWiflixMenu,
             showWebflixMenu,
+            showMiawMenu,
             showMoviezMenu,
             showVidzyMenu,
             showJ1fMenu,
@@ -10946,6 +11136,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             fstreamSources,
             wiflixSources,
             webflixSources,
+            miawSources,
             moviezSources,
             vidzySources,
             j1fSources,
@@ -11022,6 +11213,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             zoomState,
             resetZoom,
             priorityCategory,
+            customSourcesContent,
           }}
         />
         )}
@@ -11035,7 +11227,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.18 }}
-            className="absolute top-16 right-4 left-4 md:left-auto z-[12000] bg-neutral-950/95 backdrop-blur-xl border border-white/15 rounded-2xl shadow-2xl md:w-96 w-auto max-h-[75vh] flex flex-col overflow-hidden"
+            className="fixed inset-x-0 bottom-0 max-h-[78dvh] rounded-t-2xl sm:rounded-2xl sm:absolute sm:top-16 sm:bottom-auto sm:right-4 sm:left-4 md:left-auto z-[20005] bg-neutral-950/95 backdrop-blur-xl border border-white/15 shadow-2xl md:w-96 w-auto sm:max-h-[75vh] pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col overflow-hidden"
             data-lenis-prevent
           >
             <div className="p-3 border-b border-white/10 flex justify-between items-center">

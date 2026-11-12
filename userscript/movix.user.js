@@ -1,9 +1,11 @@
 // ==UserScript==
 // @name         Movix Proxy Extension (Tampermonkey)
 // @namespace    https://movix.cash
-// @version      1.4.0
+// @version      1.7.7
 // @description  Extension proxy pour Live TV Movix - Contourne CORS, injecte les headers et extrait les sources Nexus - version userscript Tampermonkey
 // @author       Movix
+// @updateURL    https://github.com/movixstream/MovixOpenSource/raw/refs/heads/main/userscript/movix.user.js
+// @downloadURL  https://github.com/movixstream/MovixOpenSource/raw/refs/heads/main/userscript/movix.user.js
 // @match        http://localhost/*
 // @match        http://127.0.0.1/*
 // @match        https://localhost/*
@@ -12,8 +14,30 @@
 // @match        https://*.movix.cash/*
 // @match        https://movix.club/*
 // @match        https://*.movix.club/*
+// @match        https://movix.cloud/*
+// @match        https://*.movix.cloud/*
 // @match        https://movix.tax/*
 // @match        https://*.movix.tax/*
+// @match        https://movix.golf/*
+// @match        https://movix.chat/*
+// @match        https://*.movix.chat/*
+// @match        https://*.movix.golf/*
+// @match        https://movix.date/*
+// @match        https://*.movix.date/*
+// @match        https://movix.fun/*
+// @match        https://*.movix.fun/*
+// @match        https://movix.show/*
+// @match        https://*.movix.show/*
+// @match        https://movix.men/*
+// @match        https://*.movix.men/*
+// @match        https://movix.college/*
+// @match        https://*.movix.college/*
+// @match        https://movix.luxe/*
+// @match        https://*.movix.luxe/*
+// @match        https://movix.dog/*
+// @match        https://*.movix.dog/*
+// @match        https://movix.miami/*
+// @match        https://*.movix.miami/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -29,9 +53,383 @@
 (() => {
   "use strict";
 
+  // BEGIN KISSKH FALLBACK
+  const KISSKH_REQUEST_TIMEOUT_MS = 10000;
+  const KISSKH_MAX_REDIRECTS = 5;
+  const KISSKH_MAX_MEDIA_URL_LENGTH = 8192;
+  const KISSKH_MAX_HEADER_VALUE_LENGTH = 2048;
+  const KISSKH_MAX_SUBTITLE_BYTES = 2097152;
+  const KISSKH_MAX_EXCHANGE_BYTES = 32768;
+  const KISSKH_MAX_EXCHANGE_LIFETIME_MS = 120000;
+  const KISSKH_ALLOWED_HEADER_HOST = /^(?:[a-z0-9-]+\.)*kisskh\.[a-z]{2,63}$/;
+
+  function kisskhFailure(code) {
+    return { success: false, code };
+  }
+
+  function kisskhHasExactKeys(value, keys) {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      JSON.stringify(Object.keys(value).sort()) ===
+        JSON.stringify([...keys].sort())
+    );
+  }
+
+  function kisskhValidateSubtitleUrl(value) {
+    if (
+      typeof value !== "string" ||
+      value.length === 0 ||
+      value.length > KISSKH_MAX_MEDIA_URL_LENGTH ||
+      /[\r\n\0]/.test(value)
+    ) {
+      return null;
+    }
+    try {
+      const parsed = new URL(value);
+      if (
+        !["http:", "https:"].includes(parsed.protocol) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.hash
+      ) {
+        return null;
+      }
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  function kisskhValidateMediaUrl(value) {
+    if (
+      typeof value !== "string" ||
+      value.length === 0 ||
+      value.length > KISSKH_MAX_MEDIA_URL_LENGTH ||
+      /[\r\n\0]/.test(value)
+    ) {
+      return null;
+    }
+    try {
+      const parsed = new URL(value);
+      if (
+        !["http:", "https:"].includes(parsed.protocol) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.hash
+      ) {
+        return null;
+      }
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  function kisskhValidateLocalProxyUrl(value) {
+    const url = kisskhValidateMediaUrl(value);
+    if (!url) return null;
+    try {
+      const parsed = new URL(url);
+      if (
+        parsed.protocol !== "http:" ||
+        !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname)
+      ) {
+        return null;
+      }
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  function kisskhValidateHeaderValue(name, value) {
+    if (
+      typeof value !== "string" ||
+      value.length === 0 ||
+      value.length > KISSKH_MAX_HEADER_VALUE_LENGTH ||
+      /[\r\n\0]/.test(value)
+    ) {
+      return null;
+    }
+    try {
+      const parsed = new URL(value);
+      if (
+        parsed.protocol !== "https:" ||
+        parsed.username ||
+        parsed.password ||
+        (parsed.port && parsed.port !== "443") ||
+        parsed.hash ||
+        !KISSKH_ALLOWED_HEADER_HOST.test(parsed.hostname) ||
+        (name === "Origin" && (parsed.pathname !== "/" || parsed.search))
+      ) {
+        return null;
+      }
+      return name === "Origin" ? parsed.origin : parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  function kisskhValidateExchange(value) {
+    if (
+      !kisskhHasExactKeys(value, ["url", "expiresAt", "requiredHeaders"])
+    ) {
+      return null;
+    }
+    const url = kisskhValidateMediaUrl(value.url);
+    if (
+      !url ||
+      !Number.isSafeInteger(value.expiresAt) ||
+      value.expiresAt <= Date.now() ||
+      value.expiresAt > Date.now() + KISSKH_MAX_EXCHANGE_LIFETIME_MS ||
+      value.requiredHeaders === null ||
+      typeof value.requiredHeaders !== "object" ||
+      Array.isArray(value.requiredHeaders)
+    ) {
+      return null;
+    }
+    const requiredHeaders = {};
+    for (const [name, rawValue] of Object.entries(value.requiredHeaders)) {
+      if (name !== "Referer" && name !== "Origin") return null;
+      const headerValue = kisskhValidateHeaderValue(name, rawValue);
+      if (!headerValue) return null;
+      requiredHeaders[name] = headerValue;
+    }
+    return { url, expiresAt: value.expiresAt, requiredHeaders };
+  }
+
+  function kisskhGmRequest(url, { method, headers, maxBytes }) {
+    return new Promise((resolve) => {
+      let settled = false;
+      let requestHandle;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      try {
+        requestHandle = getGMRequest()({
+          method,
+          url,
+          headers,
+          responseType: "arraybuffer",
+          redirect: "manual",
+          anonymous: true,
+          timeout: KISSKH_REQUEST_TIMEOUT_MS,
+          onprogress: (progress) => {
+            if (Number(progress?.loaded) > maxBytes) {
+              try {
+                requestHandle?.abort?.();
+              } catch {}
+              finish({ error: "response_too_large" });
+            }
+          },
+          onload: (response) => {
+            if (response.finalUrl && response.finalUrl !== url) {
+              finish({ error: "invalid_request" });
+              return;
+            }
+            const responseHeaders = parseRawHeaders(response.responseHeaders);
+            const declared = responseHeaders["content-length"];
+            if (declared !== undefined) {
+              const length = Number(declared);
+              if (
+                !Number.isSafeInteger(length) ||
+                length < 0 ||
+                length > maxBytes
+              ) {
+                finish({ error: "response_too_large" });
+                return;
+              }
+            }
+            const bytes =
+              response.response instanceof ArrayBuffer
+                ? new Uint8Array(response.response)
+                : new TextEncoder().encode(String(response.response || ""));
+            if (bytes.byteLength > maxBytes) {
+              finish({ error: "response_too_large" });
+              return;
+            }
+            finish({
+              status: Number(response.status || 0),
+              headers: responseHeaders,
+              bytes,
+            });
+          },
+          onerror: () => finish({ error: "upstream_unavailable" }),
+          ontimeout: () => finish({ error: "timeout" }),
+          onabort: () => finish({ error: "upstream_unavailable" }),
+        });
+      } catch {
+        finish({ error: "unsupported_transport" });
+      }
+    });
+  }
+
+  function kisskhBytesToBase64(bytes) {
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 32768) {
+      binary += String.fromCharCode(
+        ...bytes.subarray(offset, offset + 32768),
+      );
+    }
+    return btoa(binary);
+  }
+
+  async function kisskhFetchSubtitle(sourceUrl) {
+    let currentUrl = sourceUrl;
+    for (
+      let redirects = 0;
+      redirects <= KISSKH_MAX_REDIRECTS;
+      redirects += 1
+    ) {
+      const response = await kisskhGmRequest(currentUrl, {
+        method: "GET",
+        headers: { Accept: "text/*", "Cache-Control": "no-store" },
+        maxBytes: KISSKH_MAX_SUBTITLE_BYTES,
+      });
+      if (response.error) return kisskhFailure(response.error);
+      if (response.status >= 300 && response.status < 400) {
+        if (redirects === KISSKH_MAX_REDIRECTS) {
+          return kisskhFailure("upstream_unavailable");
+        }
+        const location = response.headers.location;
+        let redirected = null;
+        try {
+          redirected = location
+            ? kisskhValidateSubtitleUrl(new URL(location, currentUrl).toString())
+            : null;
+        } catch {}
+        if (!redirected) return kisskhFailure("invalid_request");
+        currentUrl = redirected;
+        continue;
+      }
+      if (response.status === 429) {
+        return kisskhFailure("provider_rate_limited");
+      }
+      if (response.status < 200 || response.status >= 300) {
+        return kisskhFailure("upstream_unavailable");
+      }
+      const contentType = response.headers["content-type"] || "";
+      if (!/^text\/[a-z0-9!#$&^_.+-]+(?:\s*;|$)/i.test(contentType)) {
+        return kisskhFailure("invalid_content_type");
+      }
+      return {
+        success: true,
+        kind: "subtitle",
+        status: response.status,
+        contentType,
+        bodyBase64: kisskhBytesToBase64(response.bytes),
+      };
+    }
+    return kisskhFailure("upstream_unavailable");
+  }
+
+  async function kisskhExchangeMedia(fallbackToken) {
+    const response = await kisskhGmRequest(
+      `https://api.movix.fun/api/kisskh/fallback/${fallbackToken}`,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Cache-Control": "no-store",
+        },
+        maxBytes: KISSKH_MAX_EXCHANGE_BYTES,
+      },
+    );
+    if (response.error) return kisskhFailure(response.error);
+    if (response.status === 429) return kisskhFailure("provider_rate_limited");
+    if (response.status < 200 || response.status >= 300) {
+      return kisskhFailure("upstream_unavailable");
+    }
+    if (
+      !/(?:^|,)\s*no-store\s*(?:,|$)/i.test(
+        response.headers["cache-control"] || "",
+      ) ||
+      !/^application\/json(?:\s*;|$)/i.test(
+        response.headers["content-type"] || "",
+      )
+    ) {
+      return kisskhFailure("provider_changed");
+    }
+    let rawExchange;
+    try {
+      rawExchange = JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(response.bytes),
+      );
+    } catch {
+      return kisskhFailure("provider_changed");
+    }
+    const exchange = kisskhValidateExchange(rawExchange);
+    if (!exchange) return kisskhFailure("provider_changed");
+    if (Object.keys(exchange.requiredHeaders).length > 0) {
+      if (typeof globalThis.GM_openMediaProxy !== "function") {
+        return kisskhFailure("unsupported_transport");
+      }
+      try {
+        const localUrl = kisskhValidateLocalProxyUrl(
+          await globalThis.GM_openMediaProxy({
+            url: exchange.url,
+            method: "GET",
+            headers: exchange.requiredHeaders,
+          }),
+        );
+        if (!localUrl) return kisskhFailure("unsupported_transport");
+        return {
+          success: true,
+          kind: "media",
+          url: localUrl,
+          expiresAt: exchange.expiresAt,
+          headersApplied: true,
+        };
+      } catch {
+        return kisskhFailure("unsupported_transport");
+      }
+    }
+    return {
+      success: true,
+      kind: "media",
+      url: exchange.url,
+      expiresAt: exchange.expiresAt,
+      headersApplied: false,
+    };
+  }
+
+  async function handleKisskhFallback(payload) {
+    if (
+      !kisskhHasExactKeys(
+        payload,
+        payload?.kind === "subtitle"
+          ? ["kind", "sourceUrl"]
+          : ["kind", "fallbackToken"],
+      )
+    ) {
+      return kisskhFailure("invalid_request");
+    }
+    if (payload.kind === "subtitle") {
+      const sourceUrl = kisskhValidateSubtitleUrl(payload.sourceUrl);
+      return sourceUrl
+        ? kisskhFetchSubtitle(sourceUrl)
+        : kisskhFailure("invalid_request");
+    }
+    if (
+      payload.kind !== "media" ||
+      typeof payload.fallbackToken !== "string" ||
+      payload.fallbackToken.length < 16 ||
+      payload.fallbackToken.length > 2048 ||
+      !/^[A-Za-z0-9_-]+$/.test(payload.fallbackToken)
+    ) {
+      return kisskhFailure("invalid_request");
+    }
+    return kisskhExchangeMedia(payload.fallbackToken);
+  }
+  // END KISSKH FALLBACK
+
   const USERSCRIPT_MANIFEST = {
     name: "Movix Proxy Extension",
-    version: "1.4.0",
+    version: "1.7.7",
     description:
       "Extension proxy pour Live TV Movix - Contourne CORS, injecte les headers et extrait les sources Nexus",
   };
@@ -55,18 +453,39 @@
       : null;
   const proxiedMediaObjectUrls = new WeakMap();
 
-  function getGMRequest() {
-    if (typeof GM_xmlhttpRequest === "function") {
-      return GM_xmlhttpRequest;
+  // Tampermonkey 5 et Violentmonkey renvoient, en plus du handle `abort()`, un
+  // objet « thenable » qui REJETTE avec la réponse brute quand la requête
+  // échoue (réseau, délai dépassé, ou statut HTTP en erreur selon le moteur).
+  // Nos appelants n'écoutent que les callbacks onload/onerror : sans `.catch`,
+  // ce rejet devient un « unhandledrejection » dans la page — et comme le
+  // script tourne dans le contexte de la page, il finit chez le suivi
+  // d'erreurs de Movix (« Object captured as promise rejection with keys:
+  // context, finalUrl, readyState… »). On l'avale ici, une fois pour toutes ;
+  // le handle est rendu tel quel, `abort()` compris.
+  function silenceGMRequestHandle(handle) {
+    if (handle && typeof handle.then === "function") {
+      try {
+        handle.then(undefined, () => {});
+      } catch {}
     }
-    if (
+    return handle;
+  }
+
+  function getGMRequest() {
+    let request = null;
+    if (typeof GM_xmlhttpRequest === "function") {
+      request = GM_xmlhttpRequest;
+    } else if (
       typeof GM !== "undefined" &&
       GM &&
       typeof GM.xmlHttpRequest === "function"
     ) {
-      return GM.xmlHttpRequest.bind(GM);
+      request = GM.xmlHttpRequest.bind(GM);
     }
-    throw new Error("GM_xmlhttpRequest est indisponible.");
+    if (!request) {
+      throw new Error("GM_xmlhttpRequest est indisponible.");
+    }
+    return (details) => silenceGMRequestHandle(request(details));
   }
 
   async function gmGetValueCompat(key, fallbackValue) {
@@ -137,13 +556,15 @@
   }
 
   function wildcardToRegExp(pattern) {
+    // DNR urlFilter semantics: `*` is a wildcard, everything else is a
+    // SUBSTRING match (not anchored). A bare filter like "/cfall/s" must match
+    // anywhere in the URL, so it must NOT be wrapped in ^...$ — otherwise the
+    // FCTV Referer rule never fires and the CDN 403s ("deny by referer").
     return new RegExp(
-      "^" +
-        String(pattern || "*")
-          .split("*")
-          .map((part) => escapeRegExp(part))
-          .join(".*") +
-        "$",
+      String(pattern || "*")
+        .split("*")
+        .map((part) => escapeRegExp(part))
+        .join(".*"),
       "i",
     );
   }
@@ -221,6 +642,103 @@
 
     return merged;
   }
+
+  // Must remain aligned with MediaProxyPolicy.allowedRequestHeaders. The Cast
+  // relay is the only later consumer of this descriptor, so never expose
+  // arbitrary page-provided headers through this boundary.
+  const CAST_MEDIA_HEADER_NAMES = {
+    accept: "Accept",
+    "accept-language": "Accept-Language",
+    "content-type": "Content-Type",
+    "if-modified-since": "If-Modified-Since",
+    "if-none-match": "If-None-Match",
+    origin: "Origin",
+    range: "Range",
+    referer: "Referer",
+    "sec-ch-ua": "Sec-Ch-Ua",
+    "user-agent": "User-Agent",
+  };
+  const CAST_SOURCE_MAX_URL_LENGTH = 16384;
+  const CAST_SOURCE_MAX_HEADER_VALUE_LENGTH = 8192;
+
+  function prepareCastSource(request) {
+    if (request?.type !== "CAST_PREPARE_SOURCE") return null;
+
+    const url = String(request.url || "").trim();
+    if (!url || url.length > CAST_SOURCE_MAX_URL_LENGTH) return null;
+
+    let normalizedUrl;
+    let loopbackHandoff = false;
+    try {
+      const parsedUrl = new URL(url);
+      loopbackHandoff =
+        parsedUrl.protocol === "http:" &&
+        parsedUrl.hostname === "127.0.0.1" &&
+        !parsedUrl.username &&
+        !parsedUrl.password &&
+        /^\d{1,5}$/.test(parsedUrl.port) &&
+        /^\/p\/[A-Za-z0-9_-]{8,128}\/[A-Za-z0-9_-]{8,128}\/[A-Za-z0-9_-]{8,128}$/.test(
+          parsedUrl.pathname,
+        ) &&
+        !parsedUrl.search &&
+        !parsedUrl.hash;
+      if (!loopbackHandoff && (
+        parsedUrl.protocol !== "https:" ||
+        parsedUrl.username ||
+        parsedUrl.password ||
+        (parsedUrl.port && parsedUrl.port !== "443")
+      )) {
+        return null;
+      }
+      normalizedUrl = parsedUrl.toString();
+    } catch {
+      return null;
+    }
+
+    const resolvedHeaders = loopbackHandoff
+      ? {}
+      : applyDynamicRequestHeaders(normalizedUrl, {}, "xmlhttprequest");
+    const headers = {};
+    for (const [rawName, rawValue] of Object.entries(resolvedHeaders)) {
+      const canonicalName = CAST_MEDIA_HEADER_NAMES[
+        String(rawName).trim().toLowerCase()
+      ];
+      const value = String(rawValue || "").trim();
+      if (
+        !canonicalName ||
+        !value ||
+        value.length > CAST_SOURCE_MAX_HEADER_VALUE_LENGTH ||
+        /[\r\n]/.test(value)
+      ) {
+        continue;
+      }
+      headers[canonicalName] = value;
+    }
+
+    const result = {
+      url: normalizedUrl,
+      headers,
+      protocolVersion: 1,
+    };
+    if (typeof request.contentType === "string") {
+      const contentType = request.contentType.trim();
+      if (
+        contentType &&
+        contentType.length <= CAST_SOURCE_MAX_HEADER_VALUE_LENGTH &&
+        !/[\r\n]/.test(contentType)
+      ) {
+        result.contentType = contentType;
+      }
+    }
+    return result;
+  }
+
+  Object.defineProperty(pageWindow, "__MOVIX_PREPARE_CAST_SOURCE__", {
+    configurable: false,
+    enumerable: false,
+    value: prepareCastSource,
+    writable: false,
+  });
 
   function toArrayBuffer(value) {
     if (value instanceof ArrayBuffer) {
@@ -313,6 +831,13 @@
     );
     const body = serializeBody(init.body);
     const request = getGMRequest();
+    // Un gestionnaire peut taire l'en-tête Cookie posé à la main ; Tampermonkey
+    // et Violentmonkey prennent aussi l'option `cookie`, qu'ils ajoutent aux
+    // cookies envoyés (cookie de session Fsvid/Vidzy, voir
+    // fsvidVidzySessionCookie).
+    const cookieHeader = Object.keys(headers).find(
+      (name) => name.toLowerCase() === "cookie",
+    );
 
     return new Promise((resolve, reject) => {
       let finished = false;
@@ -344,6 +869,7 @@
           method,
           url: requestUrl,
           headers,
+          ...(cookieHeader ? { cookie: headers[cookieHeader] } : {}),
           data: body,
           responseType: "arraybuffer",
           timeout: init.timeout ?? 30000,
@@ -1027,7 +1553,7 @@
    */
 
   // ===== Configuration =====
-  const PROXY_BASE = "https://proxiesembed.movix.cash";
+  const PROXY_BASE = "https://proxiesembed.movix.fun";
 
   // AES constants for SeekStreaming (embed4me)
   const SEEKSTREAMING_AES_KEY_HEX =
@@ -1072,13 +1598,76 @@
     sibnet: new TTLCache(500, 7200000),
     uqload: new TTLCache(500, 7200000),
     doodstream: new TTLCache(500, 3600000),
-    seekstreaming: new TTLCache(500, 7200000),
+    lulustream: new TTLCache(500, 3600000),
+    veev: new TTLCache(500, 3600000),
+    // Vidara's token is IP-bound and short-lived: cache briefly or we hand back
+    // a URL that is already dead.
+    vidara: new TTLCache(500, 900000),
+    seekstreaming: new TTLCache(500, 300000),
   };
 
   // ===== Utility Functions =====
 
   // Dean Edwards packer signature — split to avoid Chrome Web Store code scanner false positives
   const PACKER_MARKER = "ev" + "al(func" + "tion(p,a,c,k,e,";
+  const PACKER_SIGNATURE_PATTERN = new RegExp(
+    "ev" +
+      "al\\s*\\(\\s*function\\s*\\(\\s*p\\s*,\\s*a\\s*,\\s*c\\s*,\\s*k\\s*,\\s*e\\s*,\\s*d\\s*\\)",
+  );
+
+  // Uqload change régulièrement de TLD (.is, .bz, .cx, .vc, …) et les miroirs
+  // redirigent vers le domaine actif. Une liste figée casse l'extraction à
+  // chaque rotation, donc on valide le domaine enregistrable `uqload.<tld>`
+  // plutôt qu'une énumération. La garde SSRF reste équivalente : seul un hôte
+  // dont le domaine enregistrable est `uqload.<tld>` est accepté.
+  const UQLOAD_ROOT_PATTERN = /^uqload\.[a-z]{2,24}$/;
+
+  function getUqloadRootDomain(hostname) {
+    const host = String(hostname || "")
+      .toLowerCase()
+      .replace(/\.$/, "");
+    const labels = host.split(".");
+    if (labels.length < 2) return null;
+    const root = labels.slice(-2).join(".");
+    return UQLOAD_ROOT_PATTERN.test(root) ? root : null;
+  }
+
+  function parseAllowedUqloadUrl(rawUrl) {
+    let parsed;
+    try {
+      parsed = new URL(String(rawUrl || "").trim());
+    } catch {
+      throw new Error("Invalid Uqload URL");
+    }
+
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username ||
+      parsed.password ||
+      (parsed.port && parsed.port !== "443") ||
+      !getUqloadRootDomain(parsed.hostname)
+    ) {
+      throw new Error("Invalid Uqload URL");
+    }
+    return parsed;
+  }
+
+  function normalizeUqloadEmbedUrl(rawUrl) {
+    const parsed = parseAllowedUqloadUrl(rawUrl);
+    const lastPart = parsed.pathname.split("/").filter(Boolean).pop() || "";
+    const videoId = lastPart
+      .replace(/^embed-/i, "")
+      .replace(/\.html$/i, "");
+    if (!/^[a-z0-9_-]+$/i.test(videoId)) {
+      throw new Error("Invalid Uqload URL");
+    }
+    return `${parsed.origin}/embed-${videoId}.html`;
+  }
+
+  function getUqloadSiteOrigin(rawUrl) {
+    const parsed = parseAllowedUqloadUrl(rawUrl);
+    return `https://${getUqloadRootDomain(parsed.hostname)}`;
+  }
 
   function md5Hash(str) {
     // Simple hash for cache keys (not cryptographic, just for dedup)
@@ -1242,10 +1831,10 @@
    *                        packed block was found
    */
   function decodePackedScriptFromHtml(html) {
-    // Step 1: Locate the packed script marker in the HTML
-    const packerMarker = PACKER_MARKER;
-    const markerIndex = html.indexOf(packerMarker);
-    if (markerIndex === -1) return null;
+    // Step 1: Locate the packed script marker while tolerating formatter whitespace.
+    const markerMatch = PACKER_SIGNATURE_PATTERN.exec(html);
+    if (!markerMatch) return null;
+    const markerIndex = markerMatch.index;
 
     // Step 2: Find the .split('|') call that marks the end of the keyword
     // list — this tells us where the packed block ends
@@ -1275,6 +1864,15 @@
     const radix = parseInt(match[2]);
     const keywordCount = parseInt(match[3]);
     const keywords = match[4].split("|");
+    if (
+      radix < 2 ||
+      radix > 62 ||
+      keywordCount < 0 ||
+      keywordCount > 10000 ||
+      keywordCount > keywords.length
+    ) {
+      return null;
+    }
 
     // Step 6: Decode and return the original script
     return decodeDeanEdwardsPacker(
@@ -1283,6 +1881,1708 @@
       keywordCount,
       keywords,
     );
+  }
+
+  function extractM3u8UrlFromDecodedScript(script, embedUrl) {
+    const MAX_MEDIA_URL_LENGTH = 16384;
+    const MAX_XOR_PAYLOAD_LENGTH = 32768;
+
+    const normalizeCandidate = (rawCandidate) => {
+      const candidate = String(rawCandidate || "")
+        .replace(/\\\//g, "/")
+        .replace(/&amp;/gi, "&")
+        .trim()
+        .replace(/\\+$/, "");
+      if (
+        !candidate ||
+        candidate.length > MAX_MEDIA_URL_LENGTH ||
+        !candidate.toLowerCase().includes(".m3u8") ||
+        candidate.toLowerCase().includes("troll")
+      ) {
+        return null;
+      }
+
+      let parsed;
+      try {
+        if (/^https:\/\//i.test(candidate)) {
+          parsed = new URL(candidate);
+        } else if (
+          (candidate.startsWith("/") && !candidate.startsWith("//")) ||
+          candidate.startsWith("./") ||
+          candidate.startsWith("../")
+        ) {
+          parsed = new URL(candidate, embedUrl);
+        } else {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+
+      if (
+        parsed.protocol !== "https:" ||
+        !parsed.hostname ||
+        parsed.username ||
+        parsed.password ||
+        (parsed.port && parsed.port !== "443") ||
+        !parsed.pathname.toLowerCase().includes(".m3u8") ||
+        parsed.href.length > MAX_MEDIA_URL_LENGTH
+      ) {
+        return null;
+      }
+      return parsed.href;
+    };
+
+    // Fsvid/Vidzy currently derive a different XOR key for every byte, then
+    // optionally reverse the decoded byte sequence. Read every parameter from
+    // the player function instead of hard-coding the provider's current values.
+    const parseRollingParameters = (expression, indexName, mask) => {
+      let expr = String(expression || "").replace(/\s+/g, "");
+      if (!expr.startsWith("+") && !expr.startsWith("-")) {
+        expr = "+" + expr;
+      }
+      const terms = expr.match(/[-+][^+-]+/g) || [];
+      let seed = 0;
+      let step = 0;
+
+      let hostnameSum = 0;
+      if (/location(?:\.hostname|\[['"]hostname['"]\])?/.test(script) || script.includes("charCodeAt")) {
+        try {
+          const parsed = new URL(embedUrl);
+          const hostname = parsed.hostname || "";
+          for (let i = 0; i < hostname.length; i++) {
+            hostnameSum = (hostnameSum + hostname.charCodeAt(i)) & mask;
+          }
+        } catch {
+          hostnameSum = 0;
+        }
+      }
+
+      const indexToken = indexName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const indexReg = new RegExp(`\\b${indexToken}\\b`);
+
+      for (const term of terms) {
+        const sign = term.startsWith("-") ? -1 : 1;
+        const t = term.slice(1).replace(/^[()]+|[()]+$/g, "");
+        if (indexReg.test(t)) {
+          const parts = t.split("*");
+          if (parts.length === 1) {
+            step += sign * 1;
+          } else if (parts.length === 2) {
+            const numPart = parts[0] === indexName ? parts[1] : parts[0];
+            step += sign * parseInt(numPart, 10);
+          }
+        } else if (/^(?:0[xX][0-9a-fA-F]+|\d+)$/.test(t)) {
+          seed += sign * Number(t);
+        } else if (/^[A-Za-z_$][\w$]*$/.test(t)) {
+          seed += sign * resolveRollingIdentifier(t, hostnameSum);
+        }
+      }
+
+      return { seed, step };
+    };
+
+    // Le lecteur ajoute à la clé la largeur d'un div caché
+    // (`width:calc(1in + 43px)` → offsetWidth = 139 px en CSS). On relit la
+    // valeur depuis la page pour suivre une éventuelle rotation (cm, mm, calc…).
+    const CSS_PX_PER_UNIT = { px: 1, in: 96, cm: 96 / 2.54, mm: 96 / 25.4, pt: 96 / 72, pc: 16, q: 96 / 101.6 };
+    const cssLengthToPx = (value) => {
+      let total = 0;
+      let found = false;
+      for (const term of String(value).matchAll(/([-+]?)\s*(\d+(?:\.\d+)?)\s*(px|in|cm|mm|pt|pc|q)\b/gi)) {
+        total += (term[1] === "-" ? -1 : 1) * parseFloat(term[2]) * CSS_PX_PER_UNIT[term[3].toLowerCase()];
+        found = true;
+      }
+      return found ? Math.round(total) : null;
+    };
+    const resolveRollingIdentifier = (name, hostnameSum) => {
+      const token = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const source = String(script || "");
+      const measured = new RegExp(`\\b${token}\\s*=\\s*[A-Za-z_$][\\w$]*\\.(?:offset|client)(Width|Height)\\b`).exec(source);
+      if (measured) {
+        const axis = measured[1] === "Width" ? "width" : "height";
+        const css = new RegExp(`(?:^|[;"'\\s])${axis}\\s*:\\s*([^;"']+)`, "i")
+          .exec(source.substring(Math.max(0, measured.index - 600), measured.index));
+        const pixels = css ? cssLengthToPx(css[1]) : null;
+        return pixels ?? 0;
+      }
+      const literal = new RegExp(`\\b${token}\\s*=\\s*(0[xX][0-9a-fA-F]+|\\d+)\\s*[;,]`).exec(source);
+      if (literal && !new RegExp(`\\b${token}\\s*=\\s*\\(?\\s*${token}\\s*\\+`).test(source)) {
+        return Number(literal[1]);
+      }
+      return hostnameSum;
+    };
+
+    const unifiedRollingXorPattern =
+      /(?:var\s+)?(?<rawBytes>[A-Za-z_$][\w$]*)\s*=\s*atob\(\s*[A-Za-z_$][\w$]*\s*\)(?:\s*,\s*(?<bytes>[A-Za-z_$][\w$]*)\s*=\s*\k<rawBytes>\.split\(\s*["']["']\s*\)\s*\.reverse\(\s*\)\s*\.join\(\s*["']["']\s*\))?[\s\S]{0,512}?for\s*\(\s*var\s+(?<index>[A-Za-z_$][\w$]*)\s*=\s*0\s*;\s*\k<index>\s*<\s*(?:[A-Za-z_$][\w$]*)\.length\s*;\s*\k<index>\+\+\s*\)\s*\{[\s\S]{0,512}?(?:var\s+)?(?<key>[A-Za-z_$][\w$]*)\s*=\s*\(\s*(?<keyExpression>[\s\S]{1,128}?)\s*\)\s*&\s*(?<mask0>0[xX][0-9a-fA-F]+|\d+)\s*;[\s\S]{0,512}?(?<output>[A-Za-z_$][\w$]*)\s*\+=\s*String\.fromCharCode\(\s*(?:[A-Za-z_$][\w$]*)\.charCodeAt\(\s*\k<index>\s*\)\s*\^\s*\k<key>\s*\)[\s\S]{0,256}?\}\s*return\b[\s\S]{1,512}?\)\s*\(\s*["'](?<payload>[A-Za-z0-9+/_=-]{1,32768})["']\s*\)/g;
+
+    for (const match of String(script || "").matchAll(unifiedRollingXorPattern)) {
+      const groups = match.groups || {};
+      const mask = Number(groups.mask0);
+      const parameters = parseRollingParameters(
+        groups.keyExpression || "",
+        groups.index || "",
+        mask,
+      );
+      if (
+        !parameters ||
+        !Number.isSafeInteger(parameters.seed) ||
+        !Number.isSafeInteger(parameters.step) ||
+        !Number.isSafeInteger(mask) ||
+        mask < 0 ||
+        mask > 255
+      )
+        continue;
+      const payload = groups.payload || "";
+      const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+      if (!payload || normalizedPayload.length % 4 === 1) continue;
+      const paddedPayload = normalizedPayload.padEnd(
+        normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+        "=",
+      );
+      try {
+        const rawDecoded = atob(paddedPayload);
+        const byteArray = Array.from(rawDecoded, (c) => c.charCodeAt(0));
+        if (groups.bytes) byteArray.reverse();
+        const matchIndex = match.index || 0;
+        const matchTail = script.substring(matchIndex);
+        const postReverse =
+          !groups.bytes && /\.reverse\(\s*\)\s*\.join/.test(matchTail.substring(0, 500));
+        const decodeWith = (seed, fatal) => {
+          const decodedBytes = Uint8Array.from(
+            byteArray,
+            (byteVal, index) => byteVal ^ ((seed + index * parameters.step) & mask),
+          );
+          if (postReverse) decodedBytes.reverse();
+          try {
+            return new TextDecoder("utf-8", { fatal }).decode(decodedBytes);
+          } catch {
+            return "";
+          }
+        };
+        const candidate = normalizeCandidate(decodeWith(parameters.seed, false));
+        if (candidate) return candidate;
+
+        // La graine dépend de mesures faites dans le navigateur
+        // (offsetWidth d'un div enfant à 50 % d'un parent en
+        // `calc(1in + Npx)`, somme du hostname…) que la page fait tourner.
+        // Une mesure mal relue donne une clé fausse, donc le leurre `troll`.
+        // La graine n'a que `mask + 1` valeurs possibles : on les essaie
+        // toutes et on n'accepte qu'une URL m3u8 complète, en ASCII
+        // imprimable, hors leurre.
+        for (let alternative = 0; alternative <= mask; alternative++) {
+          if (alternative === (parameters.seed & mask)) continue;
+          const decoded = decodeWith(alternative, true);
+          if (!/^https:\/\/[\x21-\x7e]+$/i.test(decoded)) continue;
+          const fallback = normalizeCandidate(decoded);
+          if (fallback) return fallback;
+        }
+      } catch {}
+    }
+
+    const xorPattern =
+      /var\s+[A-Za-z_$][\w$]*\s*=\s*\[([0-9,\s]+)\]\s*,\s*[A-Za-z_$][\w$]*\s*=\s*atob\(\s*[A-Za-z_$][\w$]*\s*\)[\s\S]{0,2000}?\}\)\s*\(\s*["']([A-Za-z0-9+/_=-]{1,32768})["']\s*\)/g;
+    for (const match of String(script || "").matchAll(xorPattern)) {
+      const key = match[1].split(",").map((value) => Number(value.trim()));
+      if (
+        key.length < 1 ||
+        key.length > 64 ||
+        key.some(
+          (value) => !Number.isInteger(value) || value < 0 || value > 255,
+        )
+      ) {
+        continue;
+      }
+
+      const payload = match[2];
+      if (payload.length > MAX_XOR_PAYLOAD_LENGTH) continue;
+      const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+      if (normalizedPayload.length % 4 === 1) continue;
+      const paddedPayload = normalizedPayload.padEnd(
+        normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
+        "=",
+      );
+
+      try {
+        const encrypted = atob(paddedPayload);
+        const decodedBytes = Uint8Array.from(
+          encrypted,
+          (character, index) =>
+            character.charCodeAt(0) ^ key[index % key.length],
+        );
+        const decoded = new TextDecoder("utf-8", { fatal: true }).decode(
+          decodedBytes,
+        );
+        const candidate = normalizeCandidate(decoded);
+        if (candidate) return candidate;
+      } catch {
+        // Try the legacy formats below.
+      }
+    }
+
+    const legacyPatterns = [
+      /sources:\s*\[\s*\{[^}]*?src:\s*["']([^"']+\.m3u8[^"']*)["']/,
+      /src:\s*["']([^"']+\.m3u8[^"']*)["']/,
+      /file:\s*["']([^"']+\.m3u8[^"']*)["']/,
+      /sources:\s*\[\s*\{[^}]*?["']([^"']+\.m3u8[^"']*)["']/,
+      /["']([^"']*\.m3u8[^"']*)["']/,
+    ];
+    for (const pattern of legacyPatterns) {
+      const match = String(script || "").match(pattern);
+      const candidate = match ? normalizeCandidate(match[1]) : null;
+      if (candidate) return candidate;
+    }
+    return null;
+  }
+
+  /**
+   * PURPOSE: Fetch an embed page the way a browser would, and only that way.
+   *
+   * LuluStream classifies its clients: a request from Chromium's own fetch is
+   * served a working token, while the very same headers coming from another HTTP
+   * stack — curl, okhttp, undici — get a token its CDN then refuses with a flat
+   * 403. Routing this through the mobile app's native stack therefore broke the
+   * app while the browser extension kept working. So there is no native path
+   * here: extraction always runs in the page's engine, on every platform.
+   *
+   * Returns { ok, status, url, text }.
+   */
+  const LULUSTREAM_RULE_DOMAINS = [
+    "lulustream.com", "luluvdo.com", "luluvdoo.com", "luluvid.com", "lulu.st",
+    "streamhihi.com", "cdn1.site", "d00ds.site", "732eg54de642sa.sbs",
+  ];
+  const VEEV_RULE_DOMAINS = ["veev.to", "veev.pro", "poophq.com", "doods.to"];
+
+  // Le CDN LuluStream/Veev lie son jeton à l'`Accept-Language` de la requête
+  // qui l'a obtenu. Brave, Shields activés, réduit celui des requêtes de la
+  // page (`fr-FR,fr;q=0.5`) sans toucher au `fetch` de l'extraction, resté
+  // complet : les deux valeurs divergent et le manifeste répond 403. On épingle
+  // donc la même valeur des deux côtés — celle qu'émet aussi le proxy serveur.
+  const CLUSTER_ACCEPT_LANGUAGE = "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7";
+
+  async function fetchIpBoundPage(url, { headers, signal }) {
+    const resp = await fetch(url, { headers, redirect: "follow", signal });
+    return {
+      ok: resp.ok,
+      status: resp.status,
+      url: resp.url || url,
+      text: resp.ok ? await resp.text() : "",
+    };
+  }
+
+  function extractFsvidVidzyM3u8FromHtml(html, embedUrl) {
+    const direct = extractM3u8UrlFromDecodedScript(html, embedUrl);
+    if (direct) return direct;
+
+    const decoded = decodePackedScriptFromHtml(html);
+    return decoded
+      ? extractM3u8UrlFromDecodedScript(decoded, embedUrl)
+      : null;
+  }
+
+  const FSVID_VIDZY_QUICKJS_CDN_URL =
+    "https://cdn.jsdelivr.net/npm/quickjs-emscripten@0.32.0/dist/index.global.js";
+  const FSVID_VIDZY_QUICKJS_CDN_SHA256 =
+    "5da6906cbf09eef0b150d2759bf371f496e4ba6b57f55d775666feef58da8d20";
+  const FSVID_VIDZY_QUICKJS_MAX_CDN_BYTES = 3 * 1024 * 1024;
+  const FSVID_VIDZY_QUICKJS_MAX_HTML_LENGTH = 512 * 1024;
+  const FSVID_VIDZY_QUICKJS_MAX_SCRIPT_LENGTH = 128 * 1024;
+  const FSVID_VIDZY_QUICKJS_MAX_TOTAL_SCRIPT_LENGTH = 256 * 1024;
+  const FSVID_VIDZY_QUICKJS_MAX_SCRIPT_COUNT = 16;
+  const FSVID_VIDZY_QUICKJS_MEMORY_LIMIT = 16 * 1024 * 1024;
+  const FSVID_VIDZY_QUICKJS_STACK_LIMIT = 512 * 1024;
+  const FSVID_VIDZY_QUICKJS_TIMEOUT_MS = 1500;
+  const FSVID_VIDZY_MAX_MEDIA_URL_LENGTH = 16 * 1024;
+  const FSVID_VIDZY_PLAYER_SIGNALS = [
+    "videojs",
+    "jwplayer",
+    "sources",
+    "atob(",
+    "eval(function",
+    "eval ( function",
+    ".m3u8",
+  ];
+  let fsvidVidzyQuickJsPromise = null;
+
+  function fsvidVidzyBytesToHex(bytes) {
+    return Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+  }
+
+  function normalizeFsvidVidzyEmbedUrl(rawUrl, provider) {
+    if (provider !== "fsvid" && provider !== "vidzy") return null;
+    try {
+      const parsed = new URL(String(rawUrl || "").trim());
+      if (
+        parsed.protocol !== "https:" ||
+        parsed.username ||
+        parsed.password ||
+        (parsed.port && parsed.port !== "443") ||
+        !parsed.hostname ||
+        !/\/embed(?:[-/])/i.test(parsed.pathname)
+      ) {
+        return null;
+      }
+      return parsed.href;
+    } catch {
+      return null;
+    }
+  }
+
+  function normalizeFsvidVidzyMediaUrl(rawCandidate, embedUrl, provider) {
+    const safeEmbedUrl = normalizeFsvidVidzyEmbedUrl(embedUrl, provider);
+    if (!safeEmbedUrl) return null;
+
+    const candidate = String(rawCandidate || "")
+      .replace(/\\\//g, "/")
+      .replace(/&amp;/gi, "&")
+      .trim()
+      .replace(/\\+$/, "");
+    if (
+      !candidate ||
+      candidate.length > FSVID_VIDZY_MAX_MEDIA_URL_LENGTH ||
+      !candidate.toLowerCase().includes(".m3u8") ||
+      candidate.toLowerCase().includes("troll")
+    ) {
+      return null;
+    }
+
+    try {
+      const parsed = /^https:\/\//i.test(candidate)
+        ? new URL(candidate)
+        : new URL(candidate, safeEmbedUrl);
+      if (
+        parsed.protocol !== "https:" ||
+        parsed.username ||
+        parsed.password ||
+        (parsed.port && parsed.port !== "443") ||
+        !parsed.hostname ||
+        !parsed.pathname.toLowerCase().includes(".m3u8") ||
+        parsed.href.length > FSVID_VIDZY_MAX_MEDIA_URL_LENGTH
+      ) {
+        return null;
+      }
+      return parsed.href;
+    } catch {
+      return null;
+    }
+  }
+
+  function requestFsvidVidzyQuickJsSource() {
+    return new Promise((resolve, reject) => {
+      let request;
+      try {
+        request = getGMRequest()({
+          method: "GET",
+          url: FSVID_VIDZY_QUICKJS_CDN_URL,
+          timeout: 15000,
+          anonymous: true,
+          responseType: "text",
+          onprogress: (event) => {
+            if (
+              Number(event?.loaded || 0) > FSVID_VIDZY_QUICKJS_MAX_CDN_BYTES
+            ) {
+              request?.abort?.();
+              reject(new Error("quickjs_cdn_too_large"));
+            }
+          },
+          onload: (response) => {
+            const status = Number(response?.status || 0);
+            if (status < 200 || status >= 300) {
+              reject(new Error(`quickjs_cdn_http_${status}`));
+              return;
+            }
+
+            try {
+              const expectedUrl = new URL(FSVID_VIDZY_QUICKJS_CDN_URL).href;
+              const finalUrl = new URL(
+                response?.finalUrl || FSVID_VIDZY_QUICKJS_CDN_URL,
+              ).href;
+              if (finalUrl !== expectedUrl) {
+                reject(new Error("quickjs_cdn_redirect_rejected"));
+                return;
+              }
+            } catch {
+              reject(new Error("quickjs_cdn_invalid_final_url"));
+              return;
+            }
+
+            const source = String(
+              response?.responseText ?? response?.response ?? "",
+            );
+            const bytes = new TextEncoder().encode(source);
+            if (
+              !bytes.byteLength ||
+              bytes.byteLength > FSVID_VIDZY_QUICKJS_MAX_CDN_BYTES
+            ) {
+              reject(new Error("quickjs_cdn_invalid_size"));
+              return;
+            }
+            resolve({ source, bytes });
+          },
+          onerror: () => reject(new Error("quickjs_cdn_network_error")),
+          ontimeout: () => reject(new Error("quickjs_cdn_timeout")),
+          onabort: () => reject(new Error("quickjs_cdn_aborted")),
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async function loadFsvidVidzyQuickJsFromCdn() {
+    if (!fsvidVidzyQuickJsPromise) {
+      fsvidVidzyQuickJsPromise = (async () => {
+        const { source, bytes } = await requestFsvidVidzyQuickJsSource();
+        const webCrypto = globalThis.crypto || pageWindow.crypto;
+        if (!webCrypto?.subtle) throw new Error("quickjs_crypto_unavailable");
+        const digest = await webCrypto.subtle.digest("SHA-256", bytes);
+        if (
+          fsvidVidzyBytesToHex(new Uint8Array(digest)) !==
+          FSVID_VIDZY_QUICKJS_CDN_SHA256
+        ) {
+          throw new Error("quickjs_cdn_hash_mismatch");
+        }
+
+        // The only dynamically evaluated code is this immutable, hash-pinned
+        // QuickJS loader. Player scripts are evaluated later inside QuickJS.
+        const quickJsApi = eval(`${source}\n;typeof QJS !== "undefined" ? QJS : null`);
+        if (
+          !quickJsApi ||
+          typeof quickJsApi.getQuickJS !== "function" ||
+          typeof quickJsApi.shouldInterruptAfterDeadline !== "function"
+        ) {
+          throw new Error("quickjs_cdn_invalid_api");
+        }
+        return quickJsApi;
+      })().catch((error) => {
+        fsvidVidzyQuickJsPromise = null;
+        throw error;
+      });
+    }
+    return fsvidVidzyQuickJsPromise;
+  }
+
+  function selectFsvidVidzyPlayerScripts(html) {
+    if (
+      typeof html !== "string" ||
+      html.length > FSVID_VIDZY_QUICKJS_MAX_HTML_LENGTH
+    ) {
+      return [];
+    }
+
+    const scripts = [];
+    let totalLength = 0;
+    const pattern = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
+    for (const match of html.matchAll(pattern)) {
+      const attributes = match[1] || "";
+      const source = (match[2] || "").trim();
+      if (
+        !source ||
+        source.length > FSVID_VIDZY_QUICKJS_MAX_SCRIPT_LENGTH ||
+        /\bsrc\s*=/i.test(attributes) ||
+        /\btype\s*=\s*["'](?:application\/json|application\/ld\+json|module)["']/i.test(
+          attributes,
+        )
+      ) {
+        continue;
+      }
+      const lowered = source.toLowerCase();
+      if (!FSVID_VIDZY_PLAYER_SIGNALS.some((signal) => lowered.includes(signal))) {
+        continue;
+      }
+      if (scripts.length >= FSVID_VIDZY_QUICKJS_MAX_SCRIPT_COUNT) break;
+      if (
+        totalLength + source.length >
+        FSVID_VIDZY_QUICKJS_MAX_TOTAL_SCRIPT_LENGTH
+      ) {
+        break;
+      }
+      scripts.push(source);
+      totalLength += source.length;
+    }
+    return scripts;
+  }
+
+  const FSVID_VIDZY_VIEWPORT_WIDTH = 1280;
+  const FSVID_VIDZY_VIEWPORT_HEIGHT = 720;
+
+  // Mini-DOM injecté dans QuickJS via `toString()` : la fonction doit rester
+  // autonome (aucune référence à la portée du userscript). Les lecteurs Fsvid
+  // et Vidzy dérivent leur clé de `offsetWidth` d'éléments qu'ils créent (un
+  // div enfant à 50 % d'un parent en `calc(1in + Npx)` en octobre 2026). On
+  // calcule donc les largeurs comme un navigateur : `style.cssText`, arbre
+  // parent/enfant, pourcentages relatifs au bloc conteneur, unités absolues
+  // et relatives, `calc()`, padding/bordure, `display:none` et élément
+  // détaché à 0, `html`/`body` posés sur une fenêtre de 1280 × 720.
+  // Copie conforme de `movixCreateDomEmulator` dans
+  // extension/runtime/fsvid-vidzy-quickjs-entry.js : garder les deux en phase.
+  function movixCreateDomEmulator(fallback, viewportWidth, viewportHeight) {
+    var BLOCK_TAGS = { html: 1, body: 1, div: 1, p: 1, section: 1, article: 1, main: 1, header: 1, footer: 1, nav: 1, aside: 1, ul: 1, ol: 1, li: 1, form: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, pre: 1, blockquote: 1, figure: 1, table: 1, fieldset: 1, center: 1, dl: 1, dd: 1, dt: 1, hr: 1 };
+    var HIDDEN_TAGS = { head: 1, script: 1, style: 1, meta: 1, link: 1, title: 1, template: 1, noscript: 1 };
+    var REPLACED_SIZES = { img: [0, 0], video: [300, 150], canvas: [300, 150], iframe: [300, 150], object: [300, 150], embed: [300, 150], input: [153, 21], button: [0, 0], textarea: [182, 36], select: [0, 19] };
+    var ABSOLUTE_UNITS = { px: 1, 'in': 96, cm: 96 / 2.54, mm: 96 / 25.4, q: 96 / 101.6, pt: 96 / 72, pc: 16 };
+    var FONT_KEYWORDS = { 'xx-small': 9, 'x-small': 10, small: 13, medium: 16, large: 18, 'x-large': 24, 'xx-large': 32, 'xxx-large': 48 };
+    var BORDER_KEYWORDS = { thin: 1, medium: 3, thick: 5 };
+    var BORDER_STYLES = { none: 1, hidden: 1, dotted: 1, dashed: 1, solid: 1, double: 1, groove: 1, ridge: 1, inset: 1, outset: 1 };
+    var SIDES = ['top', 'right', 'bottom', 'left'];
+
+    function kebab(name) {
+      name = String(name);
+      if (name.indexOf('-') !== -1) return name.toLowerCase();
+      return name.replace(/[A-Z]/g, function (c) { return '-' + c.toLowerCase(); });
+    }
+
+    function splitTopLevel(text, separator) {
+      var parts = [];
+      var depth = 0;
+      var start = 0;
+      for (var i = 0; i < text.length; i++) {
+        var c = text.charAt(i);
+        if (c === '(') depth++;
+        else if (c === ')') depth = Math.max(0, depth - 1);
+        else if (depth === 0 && (separator === ' ' ? /\s/.test(c) : c === separator)) {
+          parts.push(text.slice(start, i));
+          start = i + 1;
+        }
+      }
+      parts.push(text.slice(start));
+      var out = [];
+      for (var j = 0; j < parts.length; j++) {
+        var part = parts[j].trim();
+        if (part) out.push(part);
+      }
+      return out;
+    }
+
+    function expandBox(declarations, name, value) {
+      var values = splitTopLevel(value, ' ');
+      if (!values.length || values.length > 4) return;
+      var top = values[0];
+      var right = values.length > 1 ? values[1] : top;
+      var bottom = values.length > 2 ? values[2] : top;
+      var left = values.length > 3 ? values[3] : right;
+      var expanded = [top, right, bottom, left];
+      for (var i = 0; i < 4; i++) {
+        declarations[name.replace('*', SIDES[i])] = expanded[i];
+      }
+    }
+
+    function expandBorder(declarations, sides, value) {
+      var width = 'medium';
+      var style = 'none';
+      var tokens = splitTopLevel(value, ' ');
+      for (var i = 0; i < tokens.length; i++) {
+        var token = tokens[i].toLowerCase();
+        if (BORDER_STYLES[token]) style = token;
+        else if (BORDER_KEYWORDS[token] !== undefined || /^[-+.\d]|^calc\(/.test(token)) width = token;
+      }
+      for (var j = 0; j < sides.length; j++) {
+        declarations['border-' + sides[j] + '-width'] = width;
+        declarations['border-' + sides[j] + '-style'] = style;
+      }
+    }
+
+    function setDeclaration(declarations, rawName, rawValue) {
+      var name = kebab(rawName).trim();
+      var value = String(rawValue == null ? '' : rawValue).replace(/!\s*important\s*$/i, '').trim();
+      if (!name) return;
+      if (!value) {
+        delete declarations[name];
+        return;
+      }
+      if (name === 'padding' || name === 'margin') expandBox(declarations, name + '-*', value);
+      else if (name === 'border-width') expandBox(declarations, 'border-*-width', value);
+      else if (name === 'border-style') expandBox(declarations, 'border-*-style', value);
+      else if (name === 'border') expandBorder(declarations, SIDES, value);
+      else if (/^border-(top|right|bottom|left)$/.test(name)) expandBorder(declarations, [name.slice(7)], value);
+      else if (name === 'inset') expandBox(declarations, '*', value);
+      else declarations[name] = value;
+    }
+
+    function parseCssText(declarations, text) {
+      var keys = Object.keys(declarations);
+      for (var k = 0; k < keys.length; k++) delete declarations[keys[k]];
+      var entries = splitTopLevel(String(text == null ? '' : text), ';');
+      for (var i = 0; i < entries.length; i++) {
+        var colon = entries[i].indexOf(':');
+        if (colon <= 0) continue;
+        setDeclaration(declarations, entries[i].slice(0, colon), entries[i].slice(colon + 1));
+      }
+    }
+
+    function serialize(declarations) {
+      var keys = Object.keys(declarations);
+      var out = [];
+      for (var i = 0; i < keys.length; i++) out.push(keys[i] + ': ' + declarations[keys[i]] + ';');
+      return out.join(' ');
+    }
+
+    // Évalue une longueur CSS (calc() compris) en px. `context.percent` est la
+    // base des pourcentages (null = indéfinie → la valeur est ignorée).
+    function resolveLength(raw, context) {
+      var text = String(raw == null ? '' : raw).trim().toLowerCase();
+      if (!text) return null;
+      var position = 0;
+      function skip() { while (position < text.length && /\s/.test(text.charAt(position))) position++; }
+      function fail() { throw new Error('css'); }
+      function primary() {
+        skip();
+        var c = text.charAt(position);
+        if (c === '(') {
+          position++;
+          var inner = sum();
+          skip();
+          if (text.charAt(position) !== ')') fail();
+          position++;
+          return inner;
+        }
+        var fn = /^(calc|min|max|clamp)\(/.exec(text.slice(position));
+        if (fn) {
+          position += fn[0].length;
+          var args = [sum()];
+          skip();
+          while (text.charAt(position) === ',') {
+            position++;
+            args.push(sum());
+            skip();
+          }
+          if (text.charAt(position) !== ')') fail();
+          position++;
+          if (fn[1] === 'calc') return args[0];
+          if (fn[1] === 'min') return Math.min.apply(Math, args);
+          if (fn[1] === 'max') return Math.max.apply(Math, args);
+          if (args.length !== 3) fail();
+          return Math.max(args[0], Math.min(args[1], args[2]));
+        }
+        var number = /^([-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)(%|[a-z]+)?/.exec(text.slice(position));
+        if (!number) fail();
+        position += number[0].length;
+        var value = parseFloat(number[1]);
+        var unit = number[2] || '';
+        if (!unit) return value;
+        if (unit === '%') {
+          if (context.percent == null) throw new Error('indefinite');
+          return (value * context.percent) / 100;
+        }
+        if (ABSOLUTE_UNITS[unit] !== undefined) return value * ABSOLUTE_UNITS[unit];
+        if (unit === 'em') return value * context.fontSize;
+        if (unit === 'rem') return value * 16;
+        if (unit === 'ex' || unit === 'ch') return value * context.fontSize * 0.5;
+        if (unit === 'vw' || unit === 'svw' || unit === 'lvw' || unit === 'dvw') return (value * viewportWidth) / 100;
+        if (unit === 'vh' || unit === 'svh' || unit === 'lvh' || unit === 'dvh') return (value * viewportHeight) / 100;
+        if (unit === 'vmin') return (value * Math.min(viewportWidth, viewportHeight)) / 100;
+        if (unit === 'vmax') return (value * Math.max(viewportWidth, viewportHeight)) / 100;
+        fail();
+      }
+      function product() {
+        var value = primary();
+        for (;;) {
+          skip();
+          var c = text.charAt(position);
+          if (c !== '*' && c !== '/') return value;
+          position++;
+          var right = primary();
+          if (c === '*') value *= right;
+          else {
+            if (!right) fail();
+            value /= right;
+          }
+        }
+      }
+      function sum() {
+        var value = product();
+        for (;;) {
+          skip();
+          var c = text.charAt(position);
+          if (c !== '+' && c !== '-') return value;
+          position++;
+          var right = product();
+          value = c === '+' ? value + right : value - right;
+        }
+      }
+      try {
+        var result = sum();
+        skip();
+        if (position !== text.length || !isFinite(result)) return null;
+        return result;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    var nodes = [];
+    var documentElement;
+    var body;
+    var head;
+
+    function nodeOf(value) {
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].proxy === value || nodes[i] === value) return nodes[i];
+      }
+      return null;
+    }
+
+    function declared(node, name) {
+      return node.style[name];
+    }
+
+    function displayOf(node) {
+      var value = String(declared(node, 'display') || '').toLowerCase();
+      if (value) return value;
+      if (HIDDEN_TAGS[node.tag]) return 'none';
+      if (BLOCK_TAGS[node.tag]) return 'block';
+      if (REPLACED_SIZES[node.tag]) return 'inline-block';
+      return 'inline';
+    }
+
+    function positionOf(node) {
+      return String(declared(node, 'position') || 'static').toLowerCase();
+    }
+
+    function isRendered(node) {
+      var current = node;
+      while (current) {
+        if (displayOf(current) === 'none') return false;
+        if (current === documentElement) return true;
+        current = current.parent;
+      }
+      return false;
+    }
+
+    function fontSizeOf(node) {
+      var parentSize = node.parent ? fontSizeOf(node.parent) : 16;
+      var raw = String(declared(node, 'font-size') || '').toLowerCase();
+      if (!raw) return parentSize;
+      if (FONT_KEYWORDS[raw] !== undefined) return FONT_KEYWORDS[raw];
+      if (raw === 'smaller') return parentSize / 1.2;
+      if (raw === 'larger') return parentSize * 1.2;
+      var size = resolveLength(raw, { percent: parentSize, fontSize: parentSize });
+      return size == null || size < 0 ? parentSize : size;
+    }
+
+    function lengthOf(node, name, percentBase, fallbackValue) {
+      var raw = declared(node, name);
+      if (raw == null || raw === '' || /^(auto|none|initial|inherit|unset)$/i.test(String(raw))) return fallbackValue;
+      var value = resolveLength(raw, { percent: percentBase, fontSize: fontSizeOf(node) });
+      return value == null ? fallbackValue : value;
+    }
+
+    function borderOf(node, side) {
+      var style = String(declared(node, 'border-' + side + '-style') || 'none').toLowerCase();
+      if (style === 'none' || style === 'hidden') return 0;
+      var raw = String(declared(node, 'border-' + side + '-width') || 'medium').toLowerCase();
+      if (BORDER_KEYWORDS[raw] !== undefined) return BORDER_KEYWORDS[raw];
+      var value = resolveLength(raw, { percent: null, fontSize: fontSizeOf(node) });
+      return value == null || value < 0 ? 0 : value;
+    }
+
+    function horizontalExtras(node, containingWidth) {
+      return {
+        padding: Math.max(0, lengthOf(node, 'padding-left', containingWidth, 0)) + Math.max(0, lengthOf(node, 'padding-right', containingWidth, 0)),
+        border: borderOf(node, 'left') + borderOf(node, 'right'),
+        margin: lengthOf(node, 'margin-left', containingWidth, node.tag === 'body' ? 8 : 0) + lengthOf(node, 'margin-right', containingWidth, node.tag === 'body' ? 8 : 0)
+      };
+    }
+
+    function verticalExtras(node, containingWidth) {
+      return {
+        padding: Math.max(0, lengthOf(node, 'padding-top', containingWidth, 0)) + Math.max(0, lengthOf(node, 'padding-bottom', containingWidth, 0)),
+        border: borderOf(node, 'top') + borderOf(node, 'bottom'),
+        margin: lengthOf(node, 'margin-top', containingWidth, node.tag === 'body' ? 8 : 0) + lengthOf(node, 'margin-bottom', containingWidth, node.tag === 'body' ? 8 : 0)
+      };
+    }
+
+    // Bloc conteneur : contenu du parent en flux normal, boîte de padding du
+    // premier ancêtre positionné pour `absolute`, la fenêtre pour `fixed`.
+    // Les largeurs ne remontent que vers les ancêtres et ne descendent que
+    // pour le rétrécissement : aucun cycle possible.
+    function positionedAncestor(node) {
+      var ancestor = node.parent;
+      while (ancestor && ancestor !== documentElement && positionOf(ancestor) === 'static') ancestor = ancestor.parent;
+      return !ancestor || ancestor === documentElement ? null : ancestor;
+    }
+
+    function containingWidthOf(node) {
+      var position = positionOf(node);
+      if (node === documentElement || position === 'fixed') return viewportWidth;
+      if (position === 'absolute') {
+        var ancestor = positionedAncestor(node);
+        if (!ancestor) return viewportWidth;
+        var box = widthBox(ancestor);
+        return box.contentWidth + box.paddingX;
+      }
+      return node.parent ? widthBox(node.parent).contentWidth : 0;
+    }
+
+    function containingHeightOf(node) {
+      var position = positionOf(node);
+      if (node === documentElement || position === 'fixed') return viewportHeight;
+      if (position === 'absolute') {
+        var ancestor = positionedAncestor(node);
+        if (!ancestor) return viewportHeight;
+        var height = definiteHeightOf(ancestor);
+        return height == null ? null : height + verticalExtras(ancestor, containingWidthOf(ancestor)).padding;
+      }
+      return node.parent ? definiteHeightOf(node.parent) : null;
+    }
+
+    function clampWidth(node, width, containingWidth, extras, borderBox) {
+      var adjust = borderBox ? extras.padding + extras.border : 0;
+      var maxWidth = lengthOf(node, 'max-width', containingWidth, null);
+      if (maxWidth != null) width = Math.min(width, Math.max(0, maxWidth - adjust));
+      var minWidth = lengthOf(node, 'min-width', containingWidth, null);
+      if (minWidth != null) width = Math.max(width, Math.max(0, minWidth - adjust));
+      return Math.max(0, width);
+    }
+
+    function shrinkToFit(node) {
+      var width = 0;
+      for (var i = 0; i < node.children.length; i++) {
+        var child = node.children[i];
+        if (displayOf(child) === 'none' || positionOf(child) === 'absolute' || positionOf(child) === 'fixed') continue;
+        var box = widthBox(child, 0);
+        width = Math.max(width, box.contentWidth + box.paddingX + box.borderX + box.marginX);
+      }
+      return width;
+    }
+
+    function widthBox(node, forcedContainingWidth) {
+      var display = displayOf(node);
+      var containingWidth = forcedContainingWidth == null ? containingWidthOf(node) : forcedContainingWidth;
+      var horizontal = horizontalExtras(node, containingWidth);
+      var borderBox = String(declared(node, 'box-sizing') || '').toLowerCase() === 'border-box';
+      var position = positionOf(node);
+      var floating = /^(left|right|inline-start|inline-end)$/i.test(String(declared(node, 'float') || ''));
+      var replaced = REPLACED_SIZES[node.tag];
+      var contentWidth;
+
+      if (display === 'inline' && !replaced) {
+        contentWidth = 0;
+      } else {
+        var specified = lengthOf(node, 'width', containingWidth, null);
+        if (specified != null) {
+          contentWidth = borderBox ? specified - horizontal.padding - horizontal.border : specified;
+        } else if (replaced) {
+          contentWidth = replaced[0];
+        } else if (position === 'absolute' || position === 'fixed') {
+          var left = lengthOf(node, 'left', containingWidth, null);
+          var right = lengthOf(node, 'right', containingWidth, null);
+          contentWidth = left != null && right != null
+            ? containingWidth - left - right - horizontal.margin - horizontal.padding - horizontal.border
+            : shrinkToFit(node);
+        } else if (
+          floating ||
+          /^inline-|^table/.test(display) ||
+          /(?:fit|max|min)-content/i.test(String(declared(node, 'width') || ''))
+        ) {
+          contentWidth = shrinkToFit(node);
+        } else {
+          contentWidth = containingWidth - horizontal.margin - horizontal.padding - horizontal.border;
+        }
+        contentWidth = clampWidth(node, contentWidth, containingWidth, horizontal, borderBox);
+      }
+
+      return {
+        contentWidth: contentWidth,
+        paddingX: horizontal.padding,
+        borderX: horizontal.border,
+        marginX: horizontal.margin
+      };
+    }
+
+    // Hauteur de contenu imposée par le style (null si `auto` ou pourcentage
+    // d'un bloc conteneur sans hauteur définie).
+    function definiteHeightOf(node) {
+      if (node === documentElement) return viewportHeight;
+      if (displayOf(node) === 'inline' && !REPLACED_SIZES[node.tag]) return null;
+      var specified = lengthOf(node, 'height', containingHeightOf(node), null);
+      if (specified == null) return null;
+      if (String(declared(node, 'box-sizing') || '').toLowerCase() === 'border-box') {
+        var vertical = verticalExtras(node, containingWidthOf(node));
+        specified -= vertical.padding + vertical.border;
+      }
+      return Math.max(0, specified);
+    }
+
+    function heightBox(node) {
+      var vertical = verticalExtras(node, containingWidthOf(node));
+      var replaced = REPLACED_SIZES[node.tag];
+      var contentHeight = definiteHeightOf(node);
+      if (contentHeight == null) {
+        if (displayOf(node) === 'inline' && !replaced) contentHeight = 0;
+        else if (replaced) contentHeight = replaced[1];
+        else {
+          contentHeight = 0;
+          for (var i = 0; i < node.children.length; i++) {
+            var child = node.children[i];
+            var childPosition = positionOf(child);
+            if (displayOf(child) === 'none' || childPosition === 'absolute' || childPosition === 'fixed') continue;
+            var childBox = heightBox(child);
+            contentHeight += childBox.contentHeight + childBox.paddingY + childBox.borderY + childBox.marginY;
+          }
+        }
+      }
+      return {
+        contentHeight: contentHeight,
+        paddingY: vertical.padding,
+        borderY: vertical.border,
+        marginY: vertical.margin
+      };
+    }
+
+    function measure(node) {
+      if (!isRendered(node)) return { width: 0, height: 0, clientWidth: 0, clientHeight: 0 };
+      var box = widthBox(node);
+      var vertical = heightBox(node);
+      var inline = displayOf(node) === 'inline' && !REPLACED_SIZES[node.tag];
+      return {
+        width: box.contentWidth + box.paddingX + box.borderX,
+        height: vertical.contentHeight + vertical.paddingY + vertical.borderY,
+        clientWidth: inline ? 0 : box.contentWidth + box.paddingX,
+        clientHeight: inline ? 0 : vertical.contentHeight + vertical.paddingY
+      };
+    }
+
+    function detach(node) {
+      if (!node.parent) return;
+      var siblings = node.parent.children;
+      var index = siblings.indexOf(node);
+      if (index !== -1) siblings.splice(index, 1);
+      node.parent = null;
+    }
+
+    function contains(ancestor, node) {
+      for (var current = node; current; current = current.parent) {
+        if (current === ancestor) return true;
+      }
+      return false;
+    }
+
+    function insert(parent, child, before) {
+      var childNode = nodeOf(child);
+      if (!childNode) return child;
+      if (contains(childNode, parent)) throw new Error('HierarchyRequestError');
+      detach(childNode);
+      var referenceNode = before == null ? null : nodeOf(before);
+      var index = referenceNode ? parent.children.indexOf(referenceNode) : -1;
+      if (index === -1) parent.children.push(childNode);
+      else parent.children.splice(index, 0, childNode);
+      childNode.parent = parent;
+      return child;
+    }
+
+    function createStyle(node) {
+      return new Proxy({}, {
+        get: function (_target, property) {
+          if (typeof property !== 'string') return undefined;
+          if (property === 'cssText') return serialize(node.style);
+          if (property === 'setProperty') return function (name, value) { setDeclaration(node.style, name, value); };
+          if (property === 'getPropertyValue') return function (name) { return node.style[kebab(name)] || ''; };
+          if (property === 'removeProperty') return function (name) { var key = kebab(name); var old = node.style[key] || ''; delete node.style[key]; return old; };
+          if (property === 'length') return Object.keys(node.style).length;
+          return node.style[kebab(property)] || '';
+        },
+        set: function (_target, property, value) {
+          if (typeof property !== 'string') return true;
+          if (property === 'cssText') parseCssText(node.style, value);
+          else setDeclaration(node.style, property, value);
+          return true;
+        }
+      });
+    }
+
+    function createNode(tagName) {
+      var node = { tag: String(tagName || 'div').toLowerCase(), parent: null, children: [], style: {}, attributes: {}, props: {} };
+      var style = createStyle(node);
+      var methods = {
+        appendChild: function (child) { return insert(node, child, null); },
+        append: function () { for (var i = 0; i < arguments.length; i++) insert(node, arguments[i], null); },
+        prepend: function () { for (var i = arguments.length - 1; i >= 0; i--) insert(node, arguments[i], node.children[0] ? node.children[0].proxy : null); },
+        insertBefore: function (child, before) { return insert(node, child, before); },
+        removeChild: function (child) { var childNode = nodeOf(child); if (childNode && childNode.parent === node) detach(childNode); return child; },
+        replaceChild: function (child, old) { insert(node, child, old); var oldNode = nodeOf(old); if (oldNode) detach(oldNode); return old; },
+        remove: function () { detach(node); },
+        contains: function (other) { var otherNode = nodeOf(other); return Boolean(otherNode && contains(node, otherNode)); },
+        setAttribute: function (name, value) {
+          name = String(name).toLowerCase();
+          node.attributes[name] = String(value);
+          if (name === 'style') parseCssText(node.style, value);
+        },
+        getAttribute: function (name) {
+          name = String(name).toLowerCase();
+          if (name === 'style') return serialize(node.style);
+          return Object.prototype.hasOwnProperty.call(node.attributes, name) ? node.attributes[name] : null;
+        },
+        hasAttribute: function (name) { return Object.prototype.hasOwnProperty.call(node.attributes, String(name).toLowerCase()); },
+        removeAttribute: function (name) { delete node.attributes[String(name).toLowerCase()]; },
+        getBoundingClientRect: function () {
+          var size = measure(node);
+          return { x: 0, y: 0, top: 0, left: 0, width: size.width, height: size.height, right: size.width, bottom: size.height };
+        },
+        getClientRects: function () { return isRendered(node) ? [methods.getBoundingClientRect()] : []; },
+        addEventListener: function () {},
+        removeEventListener: function () {},
+        dispatchEvent: function () { return true; }
+      };
+      node.proxy = new Proxy(function () {}, {
+        get: function (_target, property) {
+          if (typeof property !== 'string') {
+            if (property === Symbol.toPrimitive) return function () { return '[object HTMLElement]'; };
+            return undefined;
+          }
+          if (Object.prototype.hasOwnProperty.call(methods, property)) return methods[property];
+          if (property === 'style') return style;
+          if (property === 'tagName' || property === 'nodeName') return node.tag.toUpperCase();
+          if (property === 'nodeType') return 1;
+          if (property === 'parentNode' || property === 'parentElement') return node.parent ? node.parent.proxy : null;
+          if (property === 'isConnected') return contains(documentElement, node);
+          if (property === 'children' || property === 'childNodes') return node.children.map(function (child) { return child.proxy; });
+          if (property === 'firstChild' || property === 'firstElementChild') return node.children.length ? node.children[0].proxy : null;
+          if (property === 'lastChild' || property === 'lastElementChild') return node.children.length ? node.children[node.children.length - 1].proxy : null;
+          if (property === 'childElementCount') return node.children.length;
+          if (property === 'offsetWidth') return Math.round(measure(node).width);
+          if (property === 'offsetHeight') return Math.round(measure(node).height);
+          if (property === 'clientWidth' || property === 'scrollWidth') return node === documentElement ? viewportWidth : Math.round(measure(node).clientWidth);
+          if (property === 'clientHeight' || property === 'scrollHeight') return node === documentElement ? viewportHeight : Math.round(measure(node).clientHeight);
+          if (property === 'offsetLeft' || property === 'offsetTop' || property === 'clientLeft' || property === 'clientTop' || property === 'scrollLeft' || property === 'scrollTop') return 0;
+          if (property === 'offsetParent') return isRendered(node) && node !== body && node !== documentElement && positionOf(node) !== 'fixed' ? body.proxy : null;
+          if (property === 'id' || property === 'className') return node.attributes[property === 'id' ? 'id' : 'class'] || '';
+          if (property === 'ownerDocument') return documentProxy;
+          if (property === 'then') return undefined;
+          if (Object.prototype.hasOwnProperty.call(node.props, property)) return node.props[property];
+          return fallback[property];
+        },
+        set: function (_target, property, value) {
+          if (typeof property !== 'string') return true;
+          if (property === 'style') parseCssText(node.style, value);
+          else if (property === 'id') node.attributes.id = String(value);
+          else if (property === 'className') node.attributes['class'] = String(value);
+          else node.props[property] = value;
+          return true;
+        },
+        apply: function () { return fallback; },
+        construct: function () { return fallback; }
+      });
+      nodes.push(node);
+      return node;
+    }
+
+    documentElement = createNode('html');
+    head = createNode('head');
+    body = createNode('body');
+    insert(documentElement, head.proxy, null);
+    insert(documentElement, body.proxy, null);
+
+    function findByTag(tag) {
+      tag = String(tag || '').trim().toLowerCase();
+      if (tag === 'html') return documentElement.proxy;
+      if (tag === 'body') return body.proxy;
+      if (tag === 'head') return head.proxy;
+      return null;
+    }
+
+    var documentMethods = {
+      createElement: function (tag) { return createNode(tag).proxy; },
+      createElementNS: function (_ns, tag) { return createNode(tag).proxy; },
+      createTextNode: function () { return createNode('#text').proxy; },
+      createDocumentFragment: function () { return createNode('#fragment').proxy; },
+      querySelector: function (selector) { return findByTag(selector) || fallback; },
+      getElementsByTagName: function (tag) { var found = findByTag(tag); return found ? [found] : [fallback]; },
+      addEventListener: function () {},
+      removeEventListener: function () {}
+    };
+
+    var documentProxy = new Proxy(function () {}, {
+      get: function (_target, property) {
+        if (typeof property !== 'string') {
+          if (property === Symbol.toPrimitive) return function () { return '[object HTMLDocument]'; };
+          return undefined;
+        }
+        if (Object.prototype.hasOwnProperty.call(documentMethods, property)) return documentMethods[property];
+        if (property === 'documentElement') return documentElement.proxy;
+        if (property === 'body') return body.proxy;
+        if (property === 'head') return head.proxy;
+        if (property === 'readyState') return 'complete';
+        if (property === 'visibilityState') return 'visible';
+        if (property === 'hidden') return false;
+        if (property === 'then') return undefined;
+        return fallback[property];
+      },
+      set: function () { return true; },
+      apply: function () { return fallback; },
+      construct: function () { return fallback; }
+    });
+
+    function getComputedStyle(element) {
+      var node = nodeOf(element);
+      if (!node) return fallback;
+      return new Proxy({}, {
+        get: function (_target, property) {
+          if (typeof property !== 'string') return undefined;
+          var name = kebab(property);
+          if (property === 'getPropertyValue') return function (other) { return getComputedStyle(element)[kebab(other)]; };
+          if (name === 'width' || name === 'height') {
+            if (!isRendered(node)) return node.style[name] || 'auto';
+            var borderBox = String(node.style['box-sizing'] || '').toLowerCase() === 'border-box';
+            var box = name === 'width' ? widthBox(node) : heightBox(node);
+            var size = name === 'width'
+              ? box.contentWidth + (borderBox ? box.paddingX + box.borderX : 0)
+              : box.contentHeight + (borderBox ? box.paddingY + box.borderY : 0);
+            return size + 'px';
+          }
+          if (name === 'display') return displayOf(node);
+          if (name === 'position') return positionOf(node);
+          if (name === 'font-size') return fontSizeOf(node) + 'px';
+          return node.style[name] || '';
+        }
+      });
+    }
+
+    return { document: documentProxy, getComputedStyle: getComputedStyle };
+  }
+
+  function createFsvidVidzyQuickJsBootstrap(embedUrl) {
+    const urlObj = new URL(embedUrl);
+    const safeEmbedUrl = JSON.stringify(embedUrl);
+    const safeEmbedOrigin = JSON.stringify(urlObj.origin);
+    const safeEmbedHostname = JSON.stringify(urlObj.hostname);
+    const safeEmbedHost = JSON.stringify(urlObj.host);
+    const safeEmbedPathname = JSON.stringify(urlObj.pathname || "");
+    const safeEmbedSearch = JSON.stringify(urlObj.search || "");
+    const safeEmbedHash = JSON.stringify(urlObj.hash || "");
+    const safeEmbedPort = JSON.stringify(urlObj.port || "");
+    return `
+      "use strict";
+      var __movixCandidates = [];
+      var __movixMaxCandidates = 64;
+      var __movixMaxString = ${FSVID_VIDZY_MAX_MEDIA_URL_LENGTH};
+      var __movixSeen = new WeakSet();
+      function __movixCapture(value, depth) {
+        depth = depth || 0;
+        if (depth > 6 || value == null || __movixCandidates.length >= __movixMaxCandidates) return;
+        if (typeof value === "string") {
+          if (value.length <= __movixMaxString && value.toLowerCase().indexOf(".m3u8") !== -1) {
+            __movixCandidates.push(value);
+          }
+          return;
+        }
+        if ((typeof value !== "object" && typeof value !== "function") || __movixSeen.has(value)) return;
+        __movixSeen.add(value);
+        var keys;
+        try { keys = Object.keys(value); } catch (_) { return; }
+        for (var j = 0; j < keys.length && j < 64; j++) {
+          try { __movixCapture(value[keys[j]], depth + 1); } catch (_) {}
+        }
+      }
+      function atob(input) {
+        var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var value = String(input).replace(/[\\t\\n\\f\\r ]/g, "").replace(/-/g, "+").replace(/_/g, "/");
+        if (value.length % 4 === 1 || /[^A-Za-z0-9+/=]/.test(value)) throw new TypeError("Invalid base64");
+        value = value.replace(/=+$/, "");
+        var output = "", buffer = 0, bits = 0;
+        for (var i = 0; i < value.length; i++) {
+          var index = chars.indexOf(value.charAt(i));
+          if (index < 0) throw new TypeError("Invalid base64");
+          buffer = (buffer << 6) | index;
+          bits += 6;
+          if (bits >= 8) {
+            bits -= 8;
+            output += String.fromCharCode((buffer >> bits) & 255);
+          }
+        }
+        return output;
+      }
+      function btoa(input) {
+        var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var value = String(input), output = "";
+        for (var i = 0; i < value.length; i += 3) {
+          var a = value.charCodeAt(i), b = value.charCodeAt(i + 1), c = value.charCodeAt(i + 2);
+          if (a > 255 || b > 255 || c > 255) throw new TypeError("Invalid character");
+          output += chars.charAt(a >> 2);
+          output += chars.charAt(((a & 3) << 4) | (isNaN(b) ? 0 : b >> 4));
+          output += isNaN(b) ? "=" : chars.charAt(((b & 15) << 2) | (isNaN(c) ? 0 : c >> 6));
+          output += isNaN(c) ? "=" : chars.charAt(c & 63);
+        }
+        return output;
+      }
+      var __movixChainTarget = function () {};
+      var __movixChain = new Proxy(__movixChainTarget, {
+        apply: function (_target, _thisArg, args) {
+          for (var i = 0; i < args.length; i++) __movixCapture(args[i], 0);
+          return __movixChain;
+        },
+        construct: function (_target, args) {
+          for (var i = 0; i < args.length; i++) __movixCapture(args[i], 0);
+          return __movixChain;
+        },
+        get: function (_target, property) {
+          if (property === "then") return undefined;
+          if (property === Symbol.toPrimitive) return function () { return ""; };
+          return __movixChain;
+        },
+        set: function () { return true; }
+      });
+      function __movixPlayerFactory() {
+        for (var i = 0; i < arguments.length; i++) __movixCapture(arguments[i], 0);
+        return __movixChain;
+      }
+      __movixPlayerFactory.addLanguage = __movixPlayerFactory;
+      __movixPlayerFactory.getPlayers = function () { return {}; };
+      var __movixLooseObject = new Proxy(function () {}, {
+        apply: function () { return __movixLooseObject; },
+        construct: function () { return __movixLooseObject; },
+        get: function (_target, property) {
+          if (property === "canPlayType") return function (type) { return type && (type.indexOf("hls") !== -1 || type.indexOf("mpegURL") !== -1 || type.indexOf("mp4") !== -1) ? "probably" : "maybe"; };
+          if (property === "getAttribute") return function (attr) { return attr === "src" ? "" : "true"; };
+          if (property === "hasAttribute") return function () { return true; };
+          if (property === "referrer") return ${safeEmbedOrigin};
+          if (/^(?:offset|client|scroll)(?:Width|Height|Left|Top)$/.test(property)) return 0;
+          if (property === "then") return undefined;
+          if (property === Symbol.toPrimitive) return function () { return ""; };
+          return __movixLooseObject;
+        },
+        set: function () { return true; }
+      });
+      // Les lecteurs dérivent leur clé de la largeur d'éléments qu'ils créent :
+      // un mini-DOM calcule ces mesures comme le ferait un navigateur.
+      var __movixDom = (${movixCreateDomEmulator.toString()})(__movixLooseObject, ${FSVID_VIDZY_VIEWPORT_WIDTH}, ${FSVID_VIDZY_VIEWPORT_HEIGHT});
+      var getComputedStyle = __movixDom.getComputedStyle;
+      var innerWidth = ${FSVID_VIDZY_VIEWPORT_WIDTH};
+      var innerHeight = ${FSVID_VIDZY_VIEWPORT_HEIGHT};
+      var outerWidth = ${FSVID_VIDZY_VIEWPORT_WIDTH};
+      var outerHeight = ${FSVID_VIDZY_VIEWPORT_HEIGHT};
+      var devicePixelRatio = 1;
+      var screen = { width: ${FSVID_VIDZY_VIEWPORT_WIDTH}, height: ${FSVID_VIDZY_VIEWPORT_HEIGHT}, availWidth: ${FSVID_VIDZY_VIEWPORT_WIDTH}, availHeight: ${FSVID_VIDZY_VIEWPORT_HEIGHT}, colorDepth: 24, pixelDepth: 24 };
+      var console = { log: function(){}, info: function(){}, warn: function(){}, error: function(){}, debug: function(){} };
+      var location = {
+        href: ${safeEmbedUrl},
+        origin: ${safeEmbedOrigin},
+        hostname: ${safeEmbedHostname},
+        host: ${safeEmbedHost},
+        pathname: ${safeEmbedPathname},
+        search: ${safeEmbedSearch},
+        hash: ${safeEmbedHash},
+        port: ${safeEmbedPort},
+        ancestorOrigins: [${safeEmbedOrigin}],
+        protocol: "https:"
+      };
+      var navigator = { userAgent: "Mozilla/5.0 Chrome/140.0.0.0", language: "fr-FR" };
+      var document = __movixDom.document;
+      var videojs = __movixPlayerFactory;
+      var player = __movixPlayerFactory;
+      var jwplayer = __movixPlayerFactory;
+      var fluidPlayer = __movixPlayerFactory;
+      var Playerjs = __movixPlayerFactory;
+      var Clappr = { Player: __movixPlayerFactory };
+      function setTimeout(callback) { if (typeof callback === "function") callback(); return 1; }
+      function clearTimeout() {}
+      function setInterval() { return 0; }
+      function clearInterval() {}
+      function requestAnimationFrame() { return 0; }
+      function cancelAnimationFrame() {}
+      function addEventListener() {}
+      var fetch = undefined;
+      var XMLHttpRequest = undefined;
+      var WebSocket = undefined;
+      var EventSource = undefined;
+      var Worker = undefined;
+      var SharedWorker = undefined;
+      var window = globalThis;
+      var self = globalThis;
+    `;
+  }
+
+  function disposeFsvidVidzyQuickJsResult(result) {
+    try {
+      if (result?.error) result.error.dispose();
+      else result?.value?.dispose();
+    } catch {}
+  }
+
+  async function extractFsvidVidzyWithQuickJs(html, embedUrl, provider) {
+    const safeEmbedUrl = normalizeFsvidVidzyEmbedUrl(embedUrl, provider);
+    if (!safeEmbedUrl) return null;
+    const scripts = selectFsvidVidzyPlayerScripts(html);
+    if (!scripts.length) return null;
+
+    let quickJsApi;
+    let QuickJS;
+    try {
+      quickJsApi = await loadFsvidVidzyQuickJsFromCdn();
+      QuickJS = await quickJsApi.getQuickJS();
+    } catch (error) {
+      console.warn("[EXT-FSVID-VIDZY] QuickJS CDN unavailable:", error?.message);
+      return null;
+    }
+
+    const runtime = QuickJS.newRuntime();
+    runtime.setMemoryLimit(FSVID_VIDZY_QUICKJS_MEMORY_LIMIT);
+    runtime.setMaxStackSize(FSVID_VIDZY_QUICKJS_STACK_LIMIT);
+    const deadline = Date.now() + FSVID_VIDZY_QUICKJS_TIMEOUT_MS;
+    runtime.setInterruptHandler(
+      quickJsApi.shouldInterruptAfterDeadline(deadline),
+    );
+    const context = runtime.newContext();
+
+    try {
+      const bootstrapResult = context.evalCode(
+        createFsvidVidzyQuickJsBootstrap(safeEmbedUrl),
+        "movix-bootstrap.js",
+      );
+      if (bootstrapResult.error) {
+        disposeFsvidVidzyQuickJsResult(bootstrapResult);
+        return null;
+      }
+      disposeFsvidVidzyQuickJsResult(bootstrapResult);
+
+      for (let index = 0; index < scripts.length; index++) {
+        const result = context.evalCode(
+          scripts[index],
+          `player-script-${index + 1}.js`,
+        );
+        disposeFsvidVidzyQuickJsResult(result);
+        if (Date.now() > deadline) break;
+      }
+
+      const captureResult = context.evalCode(
+        `(function () {
+          var names = ["sources", "source", "file", "hls", "hlsUrl", "m3u8", "config", "playerConfig"];
+          for (var i = 0; i < names.length; i++) {
+            try { __movixCapture(globalThis[names[i]], 0); } catch (_) {}
+          }
+          return JSON.stringify(__movixCandidates);
+        })()`,
+        "movix-result.js",
+      );
+      if (captureResult.error) {
+        disposeFsvidVidzyQuickJsResult(captureResult);
+        return null;
+      }
+      const dumped = context.dump(captureResult.value);
+      disposeFsvidVidzyQuickJsResult(captureResult);
+      const candidates = JSON.parse(String(dumped || "[]"));
+      for (const candidate of candidates) {
+        const normalized = normalizeFsvidVidzyMediaUrl(
+          candidate,
+          safeEmbedUrl,
+          provider,
+        );
+        if (normalized) return normalized;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      context.dispose();
+      runtime.dispose();
+    }
+  }
+
+  async function extractFsvidVidzyM3u8(html, embedUrl, provider) {
+    const safeEmbedUrl = normalizeFsvidVidzyEmbedUrl(embedUrl, provider);
+    if (!safeEmbedUrl) return null;
+    const staticCandidate = normalizeFsvidVidzyMediaUrl(
+      extractFsvidVidzyM3u8FromHtml(html, safeEmbedUrl),
+      safeEmbedUrl,
+      provider,
+    );
+    if (staticCandidate) return staticCandidate;
+    return extractFsvidVidzyWithQuickJs(html, safeEmbedUrl, provider);
+  }
+
+  // Sans clé `gk`, le CDN Fsvid/Vidzy ne sert que les 9 à 19 premiers segments
+  // (selon le serveur), puis répond 403. Leur lecteur demande cette clé à une
+  // « porte » (gate.php chez Vidzy, /gk chez Fsvid) avec une empreinte du
+  // navigateur, puis l'ajoute au master ; le CDN la recopie ensuite dans les
+  // URLs des variantes et des segments. La clé ne dépend ni de l'IP ni de la
+  // vidéo, et les deux hébergeurs partagent la même : une seule sert partout.
+  // La porte refuse (`{"ok":0}`) une empreinte sans canvas : faute de canvas
+  // (QuickJS de l'app TV), on envoie les largeurs que mesure Chrome sous Windows.
+  // Même code dans extension/*/extractors.js : garder les deux en phase.
+  const FSVID_VIDZY_GATE_TEXT = "Movix7Qm@Éédoà1l";
+  const FSVID_VIDZY_GATE_FALLBACK_WIDTHS = { serif: 159.56, sans: 170.34 };
+  const FSVID_VIDZY_GATE_URLS = {
+    vidzy: "https://v6.vidzy.cc/gate.php",
+    fsvid: "https://fsvid.lol/gk",
+  };
+  const FSVID_VIDZY_GATE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+  const FSVID_VIDZY_GATE_RETRY_AFTER_MS = 60 * 1000;
+  let fsvidVidzyGateKey = null;
+  let fsvidVidzyGateKeyPromise = null;
+
+  function measureFsvidVidzyGateText() {
+    try {
+      const canvas =
+        typeof OffscreenCanvas === "function"
+          ? new OffscreenCanvas(16, 16)
+          : typeof document !== "undefined"
+            ? document.createElement("canvas")
+            : null;
+      const context = canvas?.getContext?.("2d");
+      if (context) {
+        const measure = (font) => {
+          context.textBaseline = "top";
+          context.font = font;
+          return (
+            Math.round(context.measureText(FSVID_VIDZY_GATE_TEXT).width * 100) /
+            100
+          );
+        };
+        const serif = measure("18px serif");
+        const sans = measure("18px sans-serif");
+        if (
+          Number.isFinite(serif) &&
+          Number.isFinite(sans) &&
+          serif > 0 &&
+          sans > 0
+        ) {
+          return { serif, sans };
+        }
+      }
+    } catch {}
+    return FSVID_VIDZY_GATE_FALLBACK_WIDTHS;
+  }
+
+  function buildFsvidVidzyGateQuery() {
+    const { serif, sans } = measureFsvidVidzyGateText();
+    const nav = typeof navigator !== "undefined" ? navigator : {};
+    const scr = typeof screen !== "undefined" ? screen : {};
+    const dpr =
+      typeof devicePixelRatio === "number" && devicePixelRatio > 0
+        ? devicePixelRatio
+        : 1;
+    return [
+      ["v", "p1"],
+      ["cw", serif],
+      ["cw2", sans],
+      ["wg", 1],
+      ["dpr", dpr],
+      ["sw", scr.width || 1920],
+      ["hw", nav.hardwareConcurrency || 8],
+      ["ft", "TOP"],
+      ["rf", ""],
+    ]
+      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+      .join("&");
+  }
+
+  function getFsvidVidzyGateUrls(html, provider) {
+    const urls = [];
+    // Vidzy écrit l'adresse de sa porte dans la page : la suivre si elle change.
+    const inline = /fetch\(\s*['"](https:\/\/[a-z0-9.-]+\/gate\.php)\?/i.exec(
+      String(html || ""),
+    );
+    if (
+      inline &&
+      /(?:^|\.)(?:vidzy\.cc|vidzy\.org|fsvid\.lol)$/i.test(
+        new URL(inline[1]).hostname,
+      )
+    ) {
+      urls.push(inline[1]);
+    }
+    urls.push(
+      FSVID_VIDZY_GATE_URLS[provider],
+      FSVID_VIDZY_GATE_URLS[provider === "fsvid" ? "vidzy" : "fsvid"],
+    );
+    return [...new Set(urls)];
+  }
+
+  async function requestFsvidVidzyGateKey(gateUrls) {
+    const query = buildFsvidVidzyGateQuery();
+    for (const gateUrl of gateUrls) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      try {
+        const resp = await fetch(`${gateUrl}?${query}`, {
+          signal: controller.signal,
+        });
+        if (!resp.ok) continue;
+        const data = await resp.json();
+        if (
+          typeof data?.gk === "string" &&
+          /^[A-Za-z0-9_.-]{16,512}$/.test(data.gk)
+        ) {
+          return data.gk;
+        }
+      } catch {
+        // Porte suivante.
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    return null;
+  }
+
+  function getFsvidVidzyGateKey(html, provider) {
+    if (fsvidVidzyGateKey && fsvidVidzyGateKey.expiresAt > Date.now()) {
+      return Promise.resolve(fsvidVidzyGateKey.value);
+    }
+    if (!fsvidVidzyGateKeyPromise) {
+      fsvidVidzyGateKeyPromise = requestFsvidVidzyGateKey(
+        getFsvidVidzyGateUrls(html, provider),
+      )
+        .then((value) => {
+          // La clé se termine par `.<émission>.<durée en s>` : la garder la
+          // moitié de sa durée, sans dépasser six heures.
+          const ttl = Number(String(value || "").split(".")[2]);
+          const lifetime =
+            Number.isFinite(ttl) && ttl > 0
+              ? Math.min(FSVID_VIDZY_GATE_MAX_AGE_MS, ttl * 500)
+              : FSVID_VIDZY_GATE_MAX_AGE_MS;
+          // Après un échec, ne pas rappeler les portes à chaque extraction.
+          fsvidVidzyGateKey = {
+            value: value || null,
+            expiresAt:
+              Date.now() + (value ? lifetime : FSVID_VIDZY_GATE_RETRY_AFTER_MS),
+          };
+          return value;
+        })
+        .finally(() => {
+          fsvidVidzyGateKeyPromise = null;
+        });
+    }
+    return fsvidVidzyGateKeyPromise;
+  }
+
+  function hasFsvidVidzyGateKey(url) {
+    return /[?&]gk=/.test(String(url || ""));
+  }
+
+  async function withFsvidVidzyGateKey(m3u8Url, html, provider) {
+    if (hasFsvidVidzyGateKey(m3u8Url)) return m3u8Url;
+    const gateKey = await getFsvidVidzyGateKey(html, provider);
+    if (!gateKey) {
+      console.warn(
+        `[EXT-${provider.toUpperCase()}] Gate key unavailable, playback will stop early`,
+      );
+      return m3u8Url;
+    }
+    return `${m3u8Url}${m3u8Url.includes("?") ? "&" : "?"}gk=${encodeURIComponent(gateKey)}`;
+  }
+
+  function extractUqloadMediaUrl(html) {
+    const candidates = [];
+    const collect = (value) => {
+      const normalized = String(value || "").replace(/\\\//g, "/");
+      for (const match of normalized.matchAll(/https:\/\/[^\s"'\\<>]+/gi)) {
+        const candidate = match[0].replace(/[),;]+$/, "");
+        try {
+          parseAllowedUqloadUrl(candidate);
+          candidates.push(candidate);
+        } catch {
+          // Ignore URLs outside the Uqload domain allowlist.
+        }
+      }
+    };
+
+    collect(html);
+    const decoded = decodePackedScriptFromHtml(html);
+    if (decoded) collect(decoded);
+
+    return (
+      candidates.find((url) => /\/master\.m3u8(?:[?#]|$)/i.test(url)) ||
+      candidates.find((url) => /\.m3u8(?:[?#]|$)/i.test(url)) ||
+      candidates.find((url) => /\/v\.mp4(?:[?#]|$)/i.test(url)) ||
+      null
+    );
+  }
+
+  // Code ISO 639-1 déduit du libellé jwplayer ou du suffixe du fichier
+  // (`abc_fre.vtt`), pour que le lecteur Movix range la piste dans la bonne langue.
+  const UQLOAD_SUBTITLE_LANGS = [
+    ["fr", /\b(?:fr|fra|fre|french|fran[cç]ais|vf|vostfr)\b/i],
+    ["en", /\b(?:en|eng|english|anglais)\b/i],
+    ["es", /\b(?:es|spa|spanish|espa[nñ]ol)\b/i],
+    ["de", /\b(?:de|ger|deu|german|deutsch)\b/i],
+    ["it", /\b(?:it|ita|italian|italiano)\b/i],
+    ["pt", /\b(?:pt|por|portuguese|portugu[eê]s)\b/i],
+    ["ar", /\b(?:ar|ara|arabic|arabe)\b/i],
+  ];
+
+  function guessUqloadSubtitleLang(label, url) {
+    const file = String(url || "").split(/[?#]/)[0].split("/").pop() || "";
+    const haystack = `${label || ""} ${file.replace(/[_.-]/g, " ")}`;
+    for (const [code, pattern] of UQLOAD_SUBTITLE_LANGS) {
+      if (pattern.test(haystack)) return code;
+    }
+    return "und";
+  }
+
+  /**
+   * Sous-titres déclarés dans `jwplayer().setup({ tracks: [...] })`.
+   * On ignore les vignettes (`kind: "thumbnails"`) et le `empty.srt` factice
+   * qu'Uqload ajoute sous le libellé « Upload captions ».
+   */
+  function extractUqloadSubtitles(html, pageUrl) {
+    const sources = [String(html || "")];
+    const decoded = decodePackedScriptFromHtml(html);
+    if (decoded) sources.push(decoded);
+
+    const subtitles = [];
+    const seen = new Set();
+    for (const source of sources) {
+      const normalized = source.replace(/\\\//g, "/");
+      for (const block of normalized.matchAll(/tracks\s*:\s*\[([\s\S]{0,8000}?)\]/g)) {
+        for (const entry of block[1].matchAll(/\{[^{}]*\}/g)) {
+          const field = (name) => {
+            const match = new RegExp(`["']?${name}["']?\\s*:\\s*["']([^"']*)["']`, "i").exec(entry[0]);
+            return match ? match[1].trim() : "";
+          };
+          const file = field("file") || field("src");
+          const kind = (field("kind") || "captions").toLowerCase();
+          if (!file || (kind !== "captions" && kind !== "subtitles")) continue;
+          if (/\/empty\.(?:srt|vtt)(?:[?#]|$)/i.test(file)) continue;
+          if (!/\.(?:vtt|srt)(?:[?#]|$)/i.test(file)) continue;
+
+          let url;
+          try {
+            url = parseAllowedUqloadUrl(new URL(file, pageUrl).href).href;
+          } catch {
+            continue;
+          }
+          if (seen.has(url)) continue;
+          seen.add(url);
+
+          const label = field("label");
+          const lang = guessUqloadSubtitleLang(label, url);
+          subtitles.push({
+            url,
+            label: label || (lang !== "und" ? lang.toUpperCase() : `Piste ${subtitles.length + 1}`),
+            lang,
+            format: /\.srt(?:[?#]|$)/i.test(url) ? "srt" : "vtt",
+            default: /["']?default["']?\s*:\s*(?:true|["']true["'])/i.test(entry[0]),
+          });
+          if (subtitles.length >= 20) return subtitles;
+        }
+      }
+    }
+    return subtitles;
+  }
+
+  /**
+   * Télécharge le texte des sous-titres ici, avec le Referer Uqload : le site
+   * Movix ne peut pas les lire lui-même (pas d'en-têtes CORS chez Uqload).
+   * Une piste qui échoue garde son URL seule, le lecteur tentera sa chance.
+   */
+  async function fetchUqloadSubtitleContents(subtitles, headers) {
+    const MAX_SUBTITLE_BYTES = 2 * 1024 * 1024;
+    return Promise.all(subtitles.slice(0, 8).map(async (subtitle) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      try {
+        const resp = await fetch(subtitle.url, { headers, signal: controller.signal });
+        if (!resp.ok) return subtitle;
+        const content = await resp.text();
+        if (!content.trim() || content.length > MAX_SUBTITLE_BYTES || /^\s*</.test(content)) return subtitle;
+        return { ...subtitle, content };
+      } catch {
+        return subtitle;
+      } finally {
+        clearTimeout(timer);
+      }
+    }));
   }
 
   /**
@@ -1326,13 +3626,66 @@
     });
   }
 
+  // VOE stacks the same transforms every time (ROT13 -> strip markers -> base64
+  // -> shift -3 -> reverse -> base64 -> JSON), but regenerates the marker list
+  // on every deploy and ships it in the player bundle next to the payload.
+  // Reading it from the bundle is what keeps this extractor working across
+  // rotations; VOE_LEGACY_MARKERS only covers pages still on an older player.
+  const VOE_LEGACY_MARKERS = ["@$", "^^", "~@", "%?", "*~", "!!", "#&"];
+  const VOE_PAYLOAD_PATTERN =
+    /json">\s*\[\s*"([^"]+)"\s*\]\s*<\/script>\s*<script[^>]*src="([^"]+)"/i;
+  const VOE_MARKER_TABLE_PATTERN = /(\[(?:'\W{2}'[,\]]){1,9})/;
+  // VOE stores the stream under one of these keys depending on player version.
+  const VOE_SOURCE_KEYS = ["source", "file", "direct_access_url"];
+
+  /**
+   * Marker list to strip, read from the player bundle shipped with the page.
+   */
+  function parseVoeMarkerTable(bundleJs) {
+    const match = String(bundleJs || "").match(VOE_MARKER_TABLE_PATTERN);
+    if (!match) return null;
+    // `['@$','^^']` -> ['@$', '^^']
+    return match[1].slice(2, -2).split("','").filter(Boolean);
+  }
+
+  /**
+   * Stream URL of a decrypted VOE player config, HLS first.
+   */
+  function pickVoeSource(decrypted) {
+    if (!decrypted || typeof decrypted !== "object") return null;
+    const candidates = VOE_SOURCE_KEYS.map((key) => decrypted[key]).filter(
+      (value) => typeof value === "string" && value.startsWith("http"),
+    );
+    if (candidates.length === 0) return null;
+    return candidates.find((url) => url.includes(".m3u8")) || candidates[0];
+  }
+
+  /**
+   * Stream URL of a VOE page that does not use the encrypted stack.
+   */
+  function extractVoePlainSource(html) {
+    const content = String(html || "");
+    for (const pattern of [
+      /["']hls["']\s*:\s*["']([^"']+)["']/i,
+      /["']mp4["']\s*:\s*["']([^"']+)["']/i,
+    ]) {
+      const match = content.match(pattern);
+      if (match) {
+        const candidate = match[1].replace(/\\\//g, "/");
+        if (candidate.startsWith("http")) return candidate;
+      }
+    }
+    return null;
+  }
+
   /**
    * Decrypt VOE data
    */
-  function decryptVoeData(encrypted) {
+  function decryptVoeData(encrypted, markers) {
     try {
       let step1 = rot13(encrypted);
-      const symbols = ["@$", "^^", "~@", "%?", "*~", "!!", "#&"];
+      const symbols =
+        Array.isArray(markers) && markers.length ? markers : VOE_LEGACY_MARKERS;
       for (const sym of symbols) {
         step1 = step1.split(sym).join("");
       }
@@ -1448,39 +3801,51 @@
         `[EXT-VOE] Fetched ${html.length} chars, final URL: ${finalUrl}`,
       );
 
-      const jsonContent = extractJsonFromHtml(html);
-
-      if (
-        !jsonContent ||
-        !Array.isArray(jsonContent) ||
-        jsonContent.length === 0
-      ) {
-        console.error("[EXT-VOE] JSON content not found in HTML");
-        console.log("[EXT-VOE] HTML snippet:", html.substring(0, 500));
-        return { success: false, error: "VOE: JSON content not found" };
+      let decrypted = null;
+      const payload = html.match(VOE_PAYLOAD_PATTERN);
+      if (payload) {
+        let markers = null;
+        try {
+          const bundleUrl = new URL(payload[2], finalUrl || voeUrl).href;
+          const bundleResp = await fetch(bundleUrl, {
+            headers: { ...headers, Referer: finalUrl || voeUrl },
+          });
+          if (bundleResp.ok)
+            markers = parseVoeMarkerTable(await bundleResp.text());
+        } catch (e) {
+          console.warn(
+            "[EXT-VOE] Player bundle unreachable, falling back to legacy markers:",
+            e,
+          );
+        }
+        // If the bundle moved or changed shape, the frozen list still covers
+        // pages served by the previous player.
+        decrypted =
+          decryptVoeData(payload[1], markers) || decryptVoeData(payload[1]);
       }
 
-      console.log(
-        `[EXT-VOE] Found JSON array with ${jsonContent.length} element(s), first element length: ${jsonContent[0].length}`,
-      );
-
-      const decrypted = decryptVoeData(jsonContent[0]);
       if (!decrypted) {
-        return { success: false, error: "VOE: Decryption failed" };
+        const jsonContent = extractJsonFromHtml(html);
+        if (
+          jsonContent &&
+          Array.isArray(jsonContent) &&
+          jsonContent.length > 0
+        ) {
+          decrypted = decryptVoeData(jsonContent[0]);
+        }
       }
 
-      console.log("[EXT-VOE] Decrypted keys:", Object.keys(decrypted));
-
-      const sourceUrl = decrypted.source || "";
-      if (!sourceUrl.includes(".m3u8")) {
-        console.error(
-          "[EXT-VOE] No M3U8 in source:",
-          sourceUrl.substring(0, 100),
-        );
+      const sourceUrl = pickVoeSource(decrypted) || extractVoePlainSource(html);
+      if (!sourceUrl) {
+        // Pas une erreur : un embed sans flux jouable est un résultat
+        // ordinaire, l'appelant le traite en essayant la source suivante.
+        // Le remonter en `error` noyait les vraies pannes d'extraction.
+        console.log("[EXT-VOE] No playable source found");
+        console.log("[EXT-VOE] HTML snippet:", html.substring(0, 500));
         return { success: false, error: "VOE: No M3U8 source found" };
       }
 
-      console.log(`[EXT-VOE] M3U8 found: ${sourceUrl.substring(0, 80)}...`);
+      console.log(`[EXT-VOE] Source found: ${sourceUrl.substring(0, 80)}...`);
 
       // Return the direct URL - extension handles CORS via DNR
       const result = { hlsUrl: sourceUrl, success: true, source: "voe" };
@@ -1505,14 +3870,19 @@
   async function extractFsvid(fsvidUrl) {
     console.log(`[EXT-FSVID] Extracting from: ${fsvidUrl}`);
 
-    if (!fsvidUrl || !fsvidUrl.toLowerCase().includes("fsvid")) {
+    const safeFsvidUrl = normalizeFsvidVidzyEmbedUrl(fsvidUrl, "fsvid");
+    if (!safeFsvidUrl) {
       console.warn("[EXT-FSVID] Invalid URL, skipping");
       return { success: false, error: "Fsvid: Invalid URL" };
     }
 
-    const cacheKey = md5Hash(fsvidUrl);
+    const cacheKey = md5Hash(safeFsvidUrl);
     const cached = caches.fsvid.get(cacheKey);
-    if (cached) {
+    if (
+      cached &&
+      normalizeFsvidVidzyMediaUrl(cached.m3u8Url, safeFsvidUrl, "fsvid") &&
+      hasFsvidVidzyGateKey(cached.m3u8Url)
+    ) {
       console.log("[EXT-FSVID] Cache hit");
       return { ...cached, fromCache: true };
     }
@@ -1521,7 +3891,7 @@
       // Fsvid requires referer from one of the allowed streaming sites
       // (not from fsvid.lol itself - it returns "Veuillez utiliser une URL valide" otherwise)
       const FSVID_REFERERS = [
-        "https://fs13.lol/",
+        "https://fsmirror46.lol/",
         "https://french-stream.one/",
         "https://fstream.info/",
       ];
@@ -1541,7 +3911,10 @@
 
       let resp;
       try {
-        resp = await fetch(fsvidUrl, { headers, signal: controller.signal });
+        resp = await fetch(safeFsvidUrl, {
+          headers,
+          signal: controller.signal,
+        });
       } finally {
         clearTimeout(timer);
       }
@@ -1554,81 +3927,22 @@
 
       const html = await resp.text();
       console.log(`[EXT-FSVID] HTML length: ${html.length}`);
-
-      // Check if the page has packed script
-      const hasEval = html.includes(PACKER_MARKER);
-      console.log(`[EXT-FSVID] Contains eval packer: ${hasEval}`);
-
-      if (!hasEval) {
-        // Try to find m3u8 directly in page (some fsvid pages have it in plain)
-        const directM3u8 = html.match(
-          /["'](https?:\/\/[^"']*\.m3u8[^"']*)["']/,
-        );
-        if (directM3u8) {
-          console.log(
-            `[EXT-FSVID] Found direct M3U8 (no packer needed): ${directM3u8[1]}`,
-          );
-          const m3u8Url = directM3u8[1].replace(/\\\//g, "/");
-          const result = { m3u8Url, success: true, source: "fsvid" };
-          caches.fsvid.set(cacheKey, result);
-          return result;
-        }
-        console.error("[EXT-FSVID] No eval packer and no direct M3U8 found");
-        console.log(
-          "[EXT-FSVID] HTML snippet (first 500 chars):",
-          html.substring(0, 500),
-        );
-        return { success: false, error: "Fsvid: No packed script found" };
-      }
-
-      // Pass full HTML to decodePackedScriptFromHtml (handles escaped quotes)
-      const deobfuscated = decodePackedScriptFromHtml(html);
-      if (!deobfuscated) {
-        console.error("[EXT-FSVID] Deobfuscation returned null");
-        // Log area around eval for debugging
-        const evalIdx = html.indexOf(PACKER_MARKER);
-        if (evalIdx !== -1) {
-          console.log(
-            "[EXT-FSVID] Packer snippet:",
-            html.substring(evalIdx, evalIdx + 200),
-          );
-        }
-        return { success: false, error: "Fsvid: Deobfuscation failed" };
-      }
-
-      console.log(`[EXT-FSVID] Deobfuscated length: ${deobfuscated.length}`);
-      console.log(
-        "[EXT-FSVID] Deobfuscated snippet:",
-        deobfuscated.substring(0, 300),
+      const m3u8Url = await extractFsvidVidzyM3u8(
+        html,
+        safeFsvidUrl,
+        "fsvid",
       );
 
-      let m3u8Url = null;
-      const patterns = [
-        /sources:\s*\[\s*\{[^}]*?src:\s*["']([^"']+\.m3u8[^"']*)["']/,
-        /src:\s*["']([^"']+\.m3u8[^"']*)["']/,
-        /file:\s*["']([^"']+\.m3u8[^"']*)["']/,
-        /["'](https?:\/\/[^"']*\.m3u8[^"']*)["']/,
-      ];
-
-      for (const pat of patterns) {
-        const m = deobfuscated.match(pat);
-        if (m) {
-          m3u8Url = m[1];
-          console.log(`[EXT-FSVID] M3U8 found with pattern ${pat}: ${m3u8Url}`);
-          break;
-        }
-      }
-
       if (!m3u8Url) {
-        console.error("[EXT-FSVID] No M3U8 URL found in deobfuscated script");
-        console.log("[EXT-FSVID] Full deobfuscated:", deobfuscated);
-        return { success: false, error: "Fsvid: M3U8 not found in script" };
+        // Résultat ordinaire, pas une panne : voir la note côté VOE.
+        console.log("[EXT-FSVID] No safe M3U8 URL found in page");
+        return { success: false, error: "Fsvid: M3U8 not found in page" };
       }
 
-      m3u8Url = m3u8Url.replace(/\\\//g, "/");
-      console.log(`[EXT-FSVID] Final M3U8 URL: ${m3u8Url}`);
-      const result = { m3u8Url, success: true, source: "fsvid" };
-      caches.fsvid.set(cacheKey, result);
+      const playableUrl = await withFsvidVidzyGateKey(m3u8Url, html, "fsvid");
+      console.log(`[EXT-FSVID] Final M3U8 URL: ${playableUrl}`);
+      const result = { m3u8Url: playableUrl, success: true, source: "fsvid" };
+      if (hasFsvidVidzyGateKey(playableUrl)) caches.fsvid.set(cacheKey, result);
       return result;
     } catch (e) {
       if (e.name === "AbortError") {
@@ -1646,9 +3960,20 @@
   async function extractVidzy(vidzyUrl) {
     console.log(`[EXT-VIDZY] Extracting from: ${vidzyUrl}`);
 
-    const cacheKey = md5Hash(vidzyUrl);
+    const safeVidzyUrl = normalizeFsvidVidzyEmbedUrl(vidzyUrl, "vidzy");
+    if (!safeVidzyUrl) {
+      return { success: false, error: "Vidzy: Invalid URL" };
+    }
+
+    const cacheKey = md5Hash(safeVidzyUrl);
     const cached = caches.vidzy.get(cacheKey);
-    if (cached) return { ...cached, fromCache: true };
+    if (
+      cached &&
+      normalizeFsvidVidzyMediaUrl(cached.m3u8Url, safeVidzyUrl, "vidzy") &&
+      hasFsvidVidzyGateKey(cached.m3u8Url)
+    ) {
+      return { ...cached, fromCache: true };
+    }
 
     try {
       const controller = new AbortController();
@@ -1660,41 +3985,30 @@
         "user-agent": "Mozilla/5.0 Chrome/140.0.0.0",
       };
 
-      const resp = await fetch(vidzyUrl, {
-        headers,
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
+      let resp;
+      try {
+        resp = await fetch(safeVidzyUrl, {
+          headers,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!resp.ok)
         return { success: false, error: `Vidzy: HTTP ${resp.status}` };
       const html = await resp.text();
-
-      // Pass full HTML to decodePackedScriptFromHtml (handles escaped quotes)
-      const deobfuscated = decodePackedScriptFromHtml(html);
-      if (!deobfuscated)
-        return { success: false, error: "Vidzy: Deobfuscation failed" };
-
-      // Try multiple M3U8 patterns
-      const patterns = [
-        /file:\s*["']([^"']+\.m3u8[^"']*)['"]/,
-        /sources:\s*\[["']([^"']+\.m3u8[^"']*)['"]/,
-        /["']([^"']*\.m3u8[^"']*)['"]/,
-      ];
-
-      let m3u8Url = null;
-      for (const pat of patterns) {
-        const m = deobfuscated.match(pat);
-        if (m) {
-          m3u8Url = m[1];
-          break;
-        }
-      }
+      const m3u8Url = await extractFsvidVidzyM3u8(
+        html,
+        safeVidzyUrl,
+        "vidzy",
+      );
 
       if (!m3u8Url)
-        return { success: false, error: "Vidzy: M3U8 not found in script" };
+        return { success: false, error: "Vidzy: M3U8 not found in page" };
 
-      const result = { m3u8Url, success: true, source: "vidzy" };
-      caches.vidzy.set(cacheKey, result);
+      const playableUrl = await withFsvidVidzyGateKey(m3u8Url, html, "vidzy");
+      const result = { m3u8Url: playableUrl, success: true, source: "vidzy" };
+      if (hasFsvidVidzyGateKey(playableUrl)) caches.vidzy.set(cacheKey, result);
       return result;
     } catch (e) {
       console.error("[EXT-VIDZY] Error:", e);
@@ -1723,7 +4037,7 @@
 
       // Try multiple patterns
       const patterns = [
-        /sources:\s*\[\s*\{\s*file:\s*["']([^"']+)["']/i,
+        /sources\s*:\s*\[\s*\{\s*file\s*:\s*["']([^"']+)["']/i,
         /file:\s*["']([^"']+\.m3u8[^"']*)["']/i,
         /https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/i,
       ];
@@ -1736,6 +4050,11 @@
           break;
         }
       }
+
+      // Vidmoly's MPD is not playable by our players — reject rather than hand
+      // back a URL that will fail downstream.
+      if (sourceUrl && sourceUrl.split("?")[0].endsWith(".mpd"))
+        sourceUrl = null;
 
       if (!sourceUrl)
         return { success: false, error: "Vidmoly: M3U8 not found" };
@@ -1753,7 +4072,30 @@
   }
 
   /**
-   * Extract MP4 from Sibnet embed
+   * Sibnet player URL for any shape of link.
+   *
+   * Sibnet exposes the same video through `/shell.php?videoid=N` and through
+   * `/videoN-Title.html` permalinks. Only the former serves the player, so
+   * normalize instead of depending on what the catalogue happened to scrape.
+   */
+  function normalizeSibnetUrl(rawUrl) {
+    let parsed;
+    try {
+      parsed = new URL(String(rawUrl || "").trim());
+    } catch {
+      return null;
+    }
+    const fromQuery = parsed.searchParams.get("videoid");
+    const videoId = /^\d+$/.test(fromQuery || "")
+      ? fromQuery
+      : (parsed.pathname.match(/\/video(\d+)/) || [])[1];
+    return videoId
+      ? `https://video.sibnet.ru/shell.php?videoid=${videoId}`
+      : null;
+  }
+
+  /**
+   * Extract the media URL from a Sibnet embed
    */
   async function extractSibnet(sibnetUrl) {
     console.log(`[EXT-SIBNET] Extracting from: ${sibnetUrl}`);
@@ -1766,13 +4108,19 @@
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3000);
 
+      const playerUrl = normalizeSibnetUrl(sibnetUrl);
+      if (!playerUrl) {
+        clearTimeout(timer);
+        return { success: false, error: "Sibnet: invalid URL" };
+      }
+
       const headers = {
         accept: "text/html,*/*",
         referer: "https://video.sibnet.ru/",
         "user-agent": "Mozilla/5.0 Chrome/140.0.0.0",
       };
 
-      const resp = await fetch(sibnetUrl, {
+      const resp = await fetch(playerUrl, {
         headers,
         signal: controller.signal,
       });
@@ -1780,15 +4128,18 @@
         return { success: false, error: `Sibnet: HTTP ${resp.status}` };
       const html = await resp.text();
 
-      // Find mp4 URL in player.src pattern
-      const mp4Match = html.match(
-        /player\.src\(\[\{\s*src:\s*["']([^"']+\.mp4[^"']*)["']/,
-      );
-      if (!mp4Match) return { success: false, error: "Sibnet: MP4 not found" };
+      // The source lives in a `src: "…"` of the player script. Sibnet serves
+      // MP4 today but nothing in the page guarantees it, so relay whatever
+      // extension it hands back instead of requiring `.mp4`.
+      const mp4Match =
+        html.match(/player\.src\(\s*\[\s*\{\s*src:\s*["']([^"']+)["']/) ||
+        html.match(/\bsrc:\s*["'](\/[^"']+)["']/);
+      if (!mp4Match)
+        return { success: false, error: "Sibnet: source not found" };
 
       let mp4Url = mp4Match[1];
       if (!mp4Url.startsWith("http")) {
-        mp4Url = `https://video.sibnet.ru${mp4Url}`;
+        mp4Url = new URL(mp4Url, "https://video.sibnet.ru").href;
       }
 
       // Follow the 302 redirect to get the final CDN URL (e.g. dv97.sibnet.ru)
@@ -1798,6 +4149,8 @@
         const mp4Resp = await fetch(mp4Url, {
           headers: {
             accept: "*/*",
+            // Only resolve the redirect chain — don't download the video
+            range: "bytes=0-0",
             referer: "https://video.sibnet.ru/",
             "user-agent": "Mozilla/5.0 Chrome/145.0.0.0",
           },
@@ -1807,6 +4160,12 @@
         if (mp4Resp.url && mp4Resp.url !== mp4Url) {
           mp4Url = mp4Resp.url;
           console.log(`[EXT-SIBNET] Followed redirect to: ${mp4Url}`);
+        }
+        // Stop any body download (in case the server ignored the Range header)
+        try {
+          await mp4Resp.body?.cancel();
+        } catch {
+          /* already closed */
         }
       } catch (e) {
         console.warn(
@@ -1825,7 +4184,7 @@
   }
 
   /**
-   * Extract MP4 from Uqload embed
+   * Extract HLS or MP4 from Uqload embed
    */
   async function extractUqload(uqloadUrl) {
     console.log(`[EXT-UQLOAD] Extracting from: ${uqloadUrl}`);
@@ -1834,39 +4193,30 @@
     const cached = caches.uqload.get(cacheKey);
     if (cached) return { ...cached, fromCache: true };
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3000);
-
-      // Normalize URL
-      let normalized = uqloadUrl.replace(
-        /uqload\.(cx|com|net|co)/gi,
-        "uqload.bz",
-      );
-
-      // Validate and format
-      const parts = normalized.split("/");
-      const base = parts.slice(0, -1).join("/") || "https://uqload.bz";
-      let videoId = parts[parts.length - 1];
-
-      if (!videoId.includes(".html")) videoId += ".html";
-      if (!videoId.includes("embed-")) videoId = "embed-" + videoId;
-      const fullUrl = `${base}/${videoId}`;
-
+      const fullUrl = normalizeUqloadEmbedUrl(uqloadUrl);
+      const siteOrigin = getUqloadSiteOrigin(fullUrl);
       const headers = {
         "User-Agent": "Mozilla/5.0 Chrome/91.0.0.0",
         Accept: "text/html,*/*",
+        Referer: `${siteOrigin}/`,
+        Origin: siteOrigin,
       };
 
-      // Try embed and non-embed versions
-      const urls = [fullUrl, fullUrl.replace("embed-", "")];
+      // Try embed and non-embed versions without leaving the validated host.
+      const urls = [fullUrl, fullUrl.replace("/embed-", "/")];
       let html = null;
+      let pageUrl = fullUrl;
 
       for (const url of urls) {
         try {
           const resp = await fetch(url, { headers, signal: controller.signal });
           if (resp.ok) {
             html = await resp.text();
+            pageUrl = resp.url || url;
             break;
           }
         } catch {
@@ -1874,34 +4224,38 @@
         }
       }
 
-      clearTimeout(timer);
       if (!html)
         return { success: false, error: "Uqload: Could not fetch page" };
       if (html.includes("File was deleted"))
         return { success: false, error: "Uqload: File was deleted" };
 
-      // Préférer le HLS master.m3u8 (multi-bitrate) au mp4 single-quality
-      const m3u8Matches =
-        html.match(/https?:\/\/[^"'\s]+\/master\.m3u8/g) ||
-        html.match(/https?:\/\/[^"'\s]+\.m3u8/g);
-      let videoUrl = m3u8Matches?.[0];
-
-      if (!videoUrl) {
-        const mp4Matches = html.match(/https?:\/\/.+\/v\.mp4/g);
-        videoUrl = mp4Matches?.[0];
-      }
-
+      const videoUrl = extractUqloadMediaUrl(html);
       if (!videoUrl)
         return { success: false, error: "Uqload: video URL not found" };
 
+      const subtitles = await fetchUqloadSubtitleContents(
+        extractUqloadSubtitles(html, pageUrl),
+        headers,
+      );
       const result = { m3u8Url: videoUrl, success: true, source: "uqload" };
+      if (subtitles.length) result.subtitles = subtitles;
       caches.uqload.set(cacheKey, result);
       return result;
     } catch (e) {
       console.error("[EXT-UQLOAD] Error:", e);
       return { success: false, error: e.message || "Uqload extraction failed" };
+    } finally {
+      clearTimeout(timer);
     }
   }
+
+  // `dsplayer.hotkeys … '<pass_md5 path>'`: the recent player builds the stream
+  // URL there instead of hardcoding it in the page.
+  const DOODSTREAM_MAKEPLAY_PATTERN = /dsplayer\.hotkeys[^']+'(\/[^']+)'/;
+  const DOODSTREAM_PASS_PATTERN = /\/pass_md5\/[\w-]+\/(?<token>[\w-]+)/;
+  // The token appears verbatim in makePlay(); it no longer always matches the
+  // last segment of the pass_md5 path.
+  const DOODSTREAM_TOKEN_PATTERN = /[?&]token=([\w-]+)/;
 
   /**
    * Extract video URL from DoodStream embed
@@ -1917,10 +4271,13 @@
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 3000);
 
+      // DoodStream checks the Referer against the domain it served, so it has
+      // to follow the mirror rather than stay pinned to d0000d.com.
+      const embedOrigin = new URL(doodUrl).origin;
       const headers = {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-        Referer: "https://d0000d.com/",
+        Referer: `${embedOrigin}/`,
       };
 
       // Step 1: Fetch the embed page
@@ -1933,44 +4290,102 @@
         clearTimeout(timer);
         return { success: false, error: `DoodStream: HTTP ${resp.status}` };
       }
-      const html = await resp.text();
+      let html = await resp.text();
+      let playerUrl = resp.url || doodUrl;
 
-      // Step 2: Extract pass_md5 URL and token
-      const passMatch = html.match(/\/pass_md5\/[\w-]+\/(?<token>[\w-]+)/);
-      if (!passMatch) {
-        clearTimeout(timer);
-        console.error("[EXT-DOODSTREAM] pass_md5 pattern not found");
-        return { success: false, error: "DoodStream: pass_md5 not found" };
+      // A `/d/<id>` link serves a shell page whose iframe holds the real
+      // player — without that hop there is no pass_md5 to find.
+      if (
+        !DOODSTREAM_MAKEPLAY_PATTERN.test(html) &&
+        !DOODSTREAM_PASS_PATTERN.test(html)
+      ) {
+        const iframe = html.match(/<iframe[^>]*\ssrc="([^"]+)"/i);
+        const nextUrl = iframe
+          ? new URL(iframe[1], playerUrl).href
+          : playerUrl.includes("/d/")
+            ? playerUrl.replace("/d/", "/e/")
+            : null;
+        if (nextUrl && nextUrl !== playerUrl) {
+          try {
+            const nextResp = await fetch(nextUrl, {
+              headers: { ...headers, Referer: playerUrl },
+              redirect: "follow",
+              signal: controller.signal,
+            });
+            if (nextResp.ok) {
+              html = await nextResp.text();
+              playerUrl = nextResp.url || nextUrl;
+            }
+          } catch {
+            /* keep the shell page and let the patterns below decide */
+          }
+        }
       }
 
-      const parsedUrl = new URL(doodUrl);
+      // Step 2: Extract pass_md5 URL and token. The recent player publishes the
+      // token inside makePlay(), separately from the pass_md5 path; the older
+      // one reuses the path's last segment.
+      const passMatch = html.match(DOODSTREAM_PASS_PATTERN);
+      const makePlay = html.match(DOODSTREAM_MAKEPLAY_PATTERN);
+      const passMd5Url = passMatch
+        ? passMatch[0]
+        : makePlay
+          ? makePlay[1]
+          : null;
+      if (!passMd5Url) {
+        clearTimeout(timer);
+        return {
+          success: false,
+          error: "DoodStream: File was deleted",
+          reason: "deleted",
+        };
+      }
+
+      const parsedUrl = new URL(playerUrl);
       const domain = `${parsedUrl.protocol}//${parsedUrl.host}`;
-      const passMd5Url = passMatch[0];
-      const token = passMatch.groups?.token || passMatch[0].split("/").pop();
+      const tokenMatch = html.match(DOODSTREAM_TOKEN_PATTERN);
+      const token = tokenMatch
+        ? tokenMatch[1]
+        : passMd5Url.replace(/\/+$/, "").split("/").pop();
 
       // Step 3: Call pass_md5 endpoint
       const passHeaders = {
-        Referer: domain,
+        Referer: playerUrl,
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
       };
 
-      const passResp = await fetch(`${domain}${passMd5Url}`, {
+      const passUrl = passMd5Url.startsWith("http")
+        ? passMd5Url
+        : `${domain}${passMd5Url}`;
+      const passResp = await fetch(passUrl, {
         headers: passHeaders,
         signal: controller.signal,
       });
-      const baseUrl = await passResp.text();
+      const baseUrl = (await passResp.text()).trim();
       clearTimeout(timer);
 
-      // Step 4: Build final video URL
-      const chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-      let randomStr = "";
-      for (let i = 0; i < 10; i++) {
-        randomStr += chars.charAt(Math.floor(Math.random() * chars.length));
+      if (!baseUrl.startsWith("http")) {
+        return {
+          success: false,
+          error: "DoodStream: unexpected pass_md5 payload",
+        };
       }
-      const expiry = Date.now();
-      const videoUrl = `${baseUrl}${randomStr}?token=${token}&expiry=${expiry}`;
+
+      // Step 4: Build final video URL. Files served from Cloudflare R2 come
+      // back already signed — appending a suffix and token would break them.
+      let videoUrl;
+      if (baseUrl.includes("cloudflarestorage.")) {
+        videoUrl = baseUrl;
+      } else {
+        const chars =
+          "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let randomStr = "";
+        for (let i = 0; i < 10; i++) {
+          randomStr += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        videoUrl = `${baseUrl}${randomStr}?token=${token}&expiry=${Date.now()}`;
+      }
 
       const result = { m3u8Url: videoUrl, success: true, source: "doodstream" };
       caches.doodstream.set(cacheKey, result);
@@ -1985,155 +4400,665 @@
   }
 
   /**
-   * Extract HLS URL from SeekStreaming (embed4me / embedseek) embed
+   * Extract M3U8 from a LuluStream embed (luluvdo, streamhihi, cdn1.site…)
    */
-  async function extractSeekStreaming(seekUrl) {
-    console.log(`[EXT-SEEKSTREAMING] Extracting from: ${seekUrl}`);
+  async function extractLuluStream(luluUrl) {
+    console.log(`[EXT-LULUSTREAM] Extracting from: ${luluUrl}`);
 
-    // Extract video ID
-    let videoId = null;
-    const decoded = decodeURIComponent(seekUrl);
+    const cacheKey = md5Hash(luluUrl);
+    const cached = caches.lulustream.get(cacheKey);
+    if (cached) return { ...cached, fromCache: true };
 
-    if (decoded.includes("#")) {
-      videoId = decoded.split("#").pop().trim();
-    } else if (decoded.toLowerCase().includes("/embed/")) {
-      videoId = decoded.replace(/\/$/, "").split("/").pop().trim();
-    } else {
-      try {
-        const parsed = new URL(decoded);
-        if (parsed.hash) videoId = parsed.hash.replace("#", "").trim();
-        else if (parsed.pathname && parsed.pathname !== "/") {
-          videoId = parsed.pathname.replace(/\/$/, "").split("/").pop().trim();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const parsed = new URL(luluUrl);
+      const mediaId = (
+        parsed.pathname.split("/").filter(Boolean).pop() || ""
+      ).replace(/\.html$/i, "");
+      if (!/^[0-9a-zA-Z]+$/.test(mediaId)) {
+        return { success: false, error: "LuluStream: invalid URL" };
+      }
+
+      const embedUrl = `${parsed.origin}/e/${mediaId}`;
+      const headers = {
+        Accept: "text/html,*/*",
+        Referer: `${parsed.origin}/`,
+        "User-Agent": "Mozilla/5.0 Chrome/143.0.0.0",
+      };
+
+      const resp = await fetchIpBoundPage(embedUrl, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!resp.ok)
+        return { success: false, error: `LuluStream: HTTP ${resp.status}` };
+      const html = resp.text;
+
+      // Most mirrors ship the player inside a Dean Edwards packer, so search
+      // the unpacked script first and fall back to the raw page.
+      let sourceUrl = null;
+      for (const candidate of [decodePackedScriptFromHtml(html), html]) {
+        if (!candidate) continue;
+        const match =
+          candidate.match(
+            /sources\s*:\s*\[\s*\{\s*file\s*:\s*["']([^"']+)["']/i,
+          ) || candidate.match(/https?:\/\/[^\s"'<>\\]+\.m3u8[^\s"'<>\\]*/i);
+        if (match) {
+          sourceUrl = (match[1] || match[0]).replace(/\\\//g, "/");
+          break;
         }
-      } catch {}
-    }
+      }
 
-    if (!videoId) {
+      if (!sourceUrl)
+        return { success: false, error: "LuluStream: M3U8 not found" };
+
+      const result = { m3u8Url: sourceUrl, success: true, source: "lulustream" };
+      caches.lulustream.set(cacheKey, result);
+      return result;
+    } catch (e) {
+      console.error("[EXT-LULUSTREAM] Error:", e);
       return {
         success: false,
-        error: "SeekStreaming: Could not extract video ID",
+        error: e.message || "LuluStream extraction failed",
       };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // ===== Veev =====
+  // Veev's page carries no stream URL: it carries a challenge (`ch`) that has
+  // to be decoded to query /dl, whose answer is itself encoded with an order of
+  // operations derived from that same challenge.
+  const VEEV_CHALLENGE_PATTERN =
+    /[.\s'](?:fc|_vvto\[[^\]]*)(?:['\]]*)?\s*[:=]\s*['"]([^'"]+)['"]/g;
+  const VEEV_UTF8_PADDING = "dXRmOA==";
+  // A healthy payload fits well under this; past it we are on a corrupted or
+  // booby-trapped page and decoding would only burn CPU.
+  const VEEV_MAX_PAYLOAD = 200000;
+
+  /** LZW decompression as implemented by the Veev player. */
+  function veevLzwDecode(encoded) {
+    const text = String(encoded || "");
+    if (!text) return "";
+
+    const result = [text[0]];
+    const lut = new Map();
+    let nextCode = 256;
+    let current = text[0];
+
+    for (const char of text.slice(1)) {
+      const code = char.charCodeAt(0);
+      const next = code < 256 ? char : (lut.get(code) ?? current + current[0]);
+      result.push(next);
+      lut.set(nextCode, current + next[0]);
+      nextCode += 1;
+      current = next;
     }
 
-    const cacheKey = md5Hash(videoId);
+    return result.join("");
+  }
+
+  /** `parseInt` the JS way: a non-digit is 0, not an error. */
+  function veevJsInt(value) {
+    return /^\d+$/.test(value) ? parseInt(value, 10) : 0;
+  }
+
+  /** Decode the `ch` key into the sequence of operations to replay on the URL. */
+  function veevBuildArray(challenge) {
+    const groups = [];
+    const chars = String(challenge || "").split("");
+    if (chars.length === 0) return groups;
+
+    let count = veevJsInt(chars.shift());
+    while (count) {
+      const current = [];
+      for (let i = 0; i < count; i++) {
+        if (chars.length === 0) return groups;
+        current.unshift(veevJsInt(chars.shift()));
+      }
+      groups.push(current);
+      if (chars.length === 0) break;
+      count = veevJsInt(chars.shift());
+    }
+
+    return groups;
+  }
+
+  /** Replay the hex passes (and the optional reversal) on the encoded URL. */
+  function veevDecodeUrl(encoded, operations) {
+    let decoded = String(encoded || "");
+    if (!decoded || decoded.length > VEEV_MAX_PAYLOAD) return null;
+
+    try {
+      for (const operation of operations) {
+        if (operation === 1) decoded = [...decoded].reverse().join("");
+        const bytes = decoded.match(/.{2}/g);
+        if (!bytes || bytes.length * 2 !== decoded.length) return null;
+        decoded = new TextDecoder("utf-8", { fatal: true }).decode(
+          new Uint8Array(bytes.map((b) => parseInt(b, 16))),
+        );
+        decoded = decoded.split(VEEV_UTF8_PADDING).join("");
+      }
+    } catch {
+      return null;
+    }
+
+    return decoded.startsWith("http") ? decoded : null;
+  }
+
+  /** Candidate `ch` keys of a Veev page, newest first. */
+  function extractVeevChallenges(html) {
+    const challenges = [];
+    const matches = [...String(html || "").matchAll(VEEV_CHALLENGE_PATTERN)].map(
+      (m) => m[1],
+    );
+    for (const raw of matches.reverse()) {
+      if (raw.length > VEEV_MAX_PAYLOAD) continue;
+      const decoded = veevLzwDecode(raw);
+      // An uncompressed payload decodes to itself: not a challenge.
+      if (decoded && decoded !== raw) challenges.push(decoded);
+    }
+    return challenges;
+  }
+
+  /**
+   * Extract the video URL from a Veev embed (veev.to, poophq, doods.to)
+   */
+  /**
+   * Veev sert un MP4 progressif : son URL finit sur `<video src>`, et la
+   * requête que l'élément média émet n'est interceptable ni par `fetch`, ni par
+   * XHR — elle part donc sans Referer ni Origin, et le CDN la refuse. Le
+   * navigateur ne le voit pas : la règle declarativeNetRequest de l'extension
+   * couvre le type `media`, donc les en-têtes y sont posés. L'application n'a
+   * pas d'équivalent ; son seul chemin capable de porter des en-têtes jusqu'à
+   * l'élément média est le proxy local, comme déjà fait pour KissKH.
+   *
+   * Hors application, `GM_openMediaProxy` n'existe pas et l'URL amont est
+   * rendue telle quelle — le comportement du site ne change pas.
+   */
+  /**
+   * Rend l'URL de boucle locale telle que le moteur web sait la charger.
+   *
+   * Là où il l'accepte (Chromium), on la garde en http. Là où il la refuse
+   * (WebKit, contenu mixte), on ne change que le schéma : l'hôte et le chemin
+   * restent, le handler natif les retraduit vers la boucle locale. Une seule
+   * traduction, dans un seul sens, pour ne pas avoir deux formats d'URL à
+   * suivre de part et d'autre.
+   */
+  function movixMediaProxyUrlForWebEngine(localUrl) {
+    if (globalThis.__MOVIX_MEDIA_PROXY_WEB_ROUTING__) return localUrl;
+    const scheme = globalThis.__MOVIX_MEDIA_PROXY_SCHEME__;
+    if (!scheme) return localUrl;
+    return localUrl.replace(/^http:/i, `${scheme}:`);
+  }
+
+  async function veevPlayableUrl(sourceUrl) {
+    if (!sourceUrl || typeof globalThis.GM_openMediaProxy !== "function") {
+      return {};
+    }
+    // Le moteur web doit pouvoir joindre la boucle locale. WebKit la refuse
+    // depuis une page https (contenu mixte) ; il y route en revanche un schéma
+    // personnalisé, que le natif sert en relayant vers ce même proxy. Sans
+    // l'un ni l'autre, on rend l'URL amont plutôt qu'une URL morte.
+    if (
+      !globalThis.__MOVIX_MEDIA_PROXY_WEB_ROUTING__ &&
+      !globalThis.__MOVIX_MEDIA_PROXY_SCHEME__
+    ) {
+      return {};
+    }
+    try {
+      const localUrl = kisskhValidateLocalProxyUrl(
+        await globalThis.GM_openMediaProxy({
+          url: sourceUrl,
+          method: "GET",
+          headers: {
+            Referer: "https://veev.to/",
+            Origin: "https://veev.to",
+          },
+        }),
+      );
+      if (!localUrl) return {};
+      return {
+        m3u8Url: movixMediaProxyUrlForWebEngine(localUrl),
+        upstreamUrl: sourceUrl,
+      };
+    } catch (e) {
+      // Le proxy local indisponible ne doit pas faire échouer l'extraction :
+      // on rend l'URL amont, qui reste jouable partout où les en-têtes ne sont
+      // pas exigés.
+      console.warn("[EXT-VEEV] Proxy local indisponible:", e);
+      return {};
+    }
+  }
+
+  async function extractVeev(veevUrl) {
+    console.log(`[EXT-VEEV] Extracting from: ${veevUrl}`);
+
+    const cacheKey = md5Hash(veevUrl);
+    const cached = caches.veev.get(cacheKey);
+    if (cached) return { ...cached, ...(await veevPlayableUrl(cached.m3u8Url)), fromCache: true };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const parsed = new URL(veevUrl);
+      let mediaId = parsed.pathname.split("/").filter(Boolean).pop() || "";
+      if (!/^[0-9a-zA-Z]+$/.test(mediaId)) {
+        return { success: false, error: "Veev: invalid URL" };
+      }
+
+      const embedUrl = `${parsed.origin}/e/${mediaId}`;
+      const headers = {
+        Accept: "text/html,*/*",
+        Referer: embedUrl,
+        "User-Agent": "Mozilla/5.0 Chrome/143.0.0.0",
+      };
+
+      const resp = await fetchIpBoundPage(embedUrl, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!resp.ok)
+        return { success: false, error: `Veev: HTTP ${resp.status}` };
+      const html = resp.text;
+
+      // A redirect changes the file code: restart from the one actually served.
+      const finalId =
+        new URL(resp.url || embedUrl).pathname.split("/").filter(Boolean).pop() ||
+        "";
+      if (/^[0-9a-zA-Z]+$/.test(finalId)) mediaId = finalId;
+
+      let sourceUrl = null;
+      for (const challenge of extractVeevChallenges(html)) {
+        const params = new URLSearchParams({
+          op: "player_api",
+          cmd: "gi",
+          file_code: mediaId,
+          ch: challenge,
+          ie: "1",
+        });
+        let payload;
+        try {
+          // Même sortie que la page d'embed : c'est cet appel qui obtient le
+          // lien signé, il doit partir de la même adresse.
+          const apiResp = await fetchIpBoundPage(
+            `${parsed.origin}/dl?${params}`,
+            { headers, signal: controller.signal },
+          );
+          payload = JSON.parse(apiResp.text);
+        } catch {
+          continue;
+        }
+
+        const fileInfo = payload?.file;
+        if (fileInfo?.file_status !== "OK") continue;
+
+        const encoded = Array.isArray(fileInfo.dv) ? fileInfo.dv[0]?.s : null;
+        const operations = veevBuildArray(challenge);
+        if (!encoded || operations.length === 0) continue;
+
+        sourceUrl = veevDecodeUrl(veevLzwDecode(encoded), operations[0]);
+        if (sourceUrl) break;
+      }
+
+      if (!sourceUrl) {
+        return {
+          success: false,
+          error: "Veev: video unavailable",
+          reason: "deleted",
+        };
+      }
+
+      const result = { m3u8Url: sourceUrl, success: true, source: "veev" };
+      // On met en cache l'URL amont, jamais celle de la boucle locale : cette
+      // dernière est liée à la session du proxy natif et ne survit pas au
+      // redémarrage de l'app, là où le cache dure une heure.
+      caches.veev.set(cacheKey, result);
+      return { ...result, ...(await veevPlayableUrl(sourceUrl)) };
+    } catch (e) {
+      console.error("[EXT-VEEV] Error:", e);
+      return { success: false, error: e.message || "Veev extraction failed" };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Extract the HLS master from a Vidara embed.
+   *
+   * Vidara answers `POST /api/stream` with the master playlist directly. Its
+   * token encodes the IP that called the API, so extraction and playback must
+   * share an egress — which they do here, both running in the user's browser.
+   */
+  async function extractVidara(vidaraUrl) {
+    console.log(`[EXT-VIDARA] Extracting from: ${vidaraUrl}`);
+
+    const cacheKey = md5Hash(vidaraUrl);
+    const cached = caches.vidara.get(cacheKey);
+    if (cached) return { ...cached, fromCache: true };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const parsed = new URL(vidaraUrl);
+      const filecode = parsed.pathname.split("/").filter(Boolean).pop() || "";
+      if (!/^[0-9a-zA-Z]+$/.test(filecode)) {
+        return { success: false, error: "Vidara: invalid URL" };
+      }
+
+      const resp = await fetch(`${parsed.origin}/api/stream`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json, */*",
+          "Content-Type": "application/json",
+          Referer: `${parsed.origin}/e/${filecode}`,
+          "User-Agent": "Mozilla/5.0 Chrome/143.0.0.0",
+        },
+        body: JSON.stringify({ filecode, device: "web" }),
+        signal: controller.signal,
+      });
+      if (!resp.ok)
+        return { success: false, error: `Vidara: HTTP ${resp.status}` };
+
+      const payload = await resp.json();
+      const sourceUrl = payload?.streaming_url;
+      if (typeof sourceUrl !== "string" || !sourceUrl.startsWith("http")) {
+        return {
+          success: false,
+          error: "Vidara: video unavailable",
+          reason: "deleted",
+        };
+      }
+
+      const result = { hlsUrl: sourceUrl, success: true, source: "vidara" };
+      caches.vidara.set(cacheKey, result);
+      return result;
+    } catch (e) {
+      console.error("[EXT-VIDARA] Error:", e);
+      return { success: false, error: e.message || "Vidara extraction failed" };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Extract HLS URL from a SeekStreaming root-fragment embed
+   */
+  const SEEKSTREAMING_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36";
+
+  function safelyDecodeSeekStreamingUrl(value) {
+    let decoded = String(value || "").trim();
+    for (let index = 0; index < 2; index += 1) {
+      try {
+        const next = decodeURIComponent(decoded);
+        if (next === decoded) break;
+        decoded = next;
+      } catch {
+        return null;
+      }
+    }
+    return decoded;
+  }
+
+  function parseSeekStreamingEmbedUrl(input) {
+    const decoded = safelyDecodeSeekStreamingUrl(input);
+    if (!decoded || /[\u0000-\u001f\u007f]/.test(decoded)) return null;
+    try {
+      const url = new URL(decoded);
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.pathname !== "/" ||
+        url.search
+      )
+        return null;
+      const videoId = url.hash.slice(1);
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(videoId)) return null;
+      const origin = url.origin;
+      return {
+        embedUrl: `${origin}/#${videoId}`,
+        hostname: url.hostname.toLowerCase(),
+        videoId,
+        origin,
+        referer: `${origin}/`,
+        cacheKey: `${url.hostname.toLowerCase()}:${videoId}`,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function selectSeekStreamingPlaybackSource(data) {
+    if (!data || typeof data !== "object") return null;
+    for (const kind of ["source", "master", "masterUrl"]) {
+      const rawUrl = data[kind];
+      if (typeof rawUrl !== "string") continue;
+      try {
+        const url = new URL(rawUrl);
+        if (
+          !["http:", "https:"].includes(url.protocol) ||
+          url.username ||
+          url.password
+        )
+          continue;
+        return { kind, url: url.href };
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  function selectSeekStreamingPlaybackSources(data) {
+    if (!data || typeof data !== "object") return [];
+    const candidates = [];
+    const seen = new Set();
+    const add = (kind, rawUrl) => {
+      if (typeof rawUrl !== "string") return;
+      try {
+        const url = new URL(rawUrl);
+        if (
+          !["http:", "https:"].includes(url.protocol) ||
+          url.username ||
+          url.password
+        )
+          return;
+        if (seen.has(url.href)) return;
+        seen.add(url.href);
+        candidates.push({ kind, url: url.href });
+      } catch {
+        // Ignore invalid playback candidates.
+      }
+    };
+
+    add("cfNative", data.cfNative);
+    const source = selectSeekStreamingPlaybackSource(data);
+    if (source) add("source", source.url);
+    return candidates;
+  }
+
+  function getSeekStreamingRequestHeaders(embedUrl) {
+    const parsed =
+      typeof embedUrl === "object" && embedUrl?.origin
+        ? embedUrl
+        : parseSeekStreamingEmbedUrl(embedUrl);
+    if (!parsed) return null;
+    return { Origin: parsed.origin, Referer: parsed.referer };
+  }
+
+  function getSeekStreamingPlaybackRulePattern(rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      if (!["http:", "https:"].includes(parsed.protocol)) return null;
+      const pathSegments = parsed.pathname.split("/").filter(Boolean);
+      const directorySegments = parsed.pathname.endsWith("/")
+        ? pathSegments
+        : pathSegments.slice(0, -1);
+      const mediaTypeIndex = directorySegments.length - 2;
+      const mediaType = directorySegments[mediaTypeIndex];
+      const videoId = directorySegments[mediaTypeIndex + 1];
+      const v4Index = directorySegments.indexOf("v4");
+      if (
+        v4Index !== -1 &&
+        mediaTypeIndex > v4Index &&
+        /^[a-z0-9_-]+$/i.test(mediaType || "") &&
+        /^[a-z0-9_-]+$/i.test(videoId || "")
+      ) {
+        return `*://*/${mediaType}/${videoId}/*`;
+      }
+      const slash = parsed.pathname.lastIndexOf("/");
+      const directory =
+        slash >= 0 ? parsed.pathname.slice(0, slash + 1) : "/";
+      return `*://${parsed.host}${directory}*`;
+    } catch {
+      return null;
+    }
+  }
+
+  async function extractSeekStreaming(seekUrl) {
+    const parsed = parseSeekStreamingEmbedUrl(seekUrl);
+    if (!parsed) {
+      return {
+        success: false,
+        error: "SeekStreaming: invalid embed URL",
+      };
+    }
+    const cacheKey = md5Hash(parsed.cacheKey);
     const cached = caches.seekstreaming.get(cacheKey);
     if (cached) return { ...cached, fromCache: true };
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3000);
-
-      // Determine API domain from URL
-      let apiDomain = "lpayer.embed4me.com";
-      try {
-        apiDomain = new URL(decoded).host;
-      } catch {}
-
-      const apiUrl = `https://${apiDomain}/api/v1/video?id=${videoId}&w=1920&h=1080&r=`;
+      const apiUrl = new URL("/api/v1/video", parsed.origin);
+      apiUrl.search = new URLSearchParams({
+        id: parsed.videoId,
+        w: "1920",
+        h: "1080",
+        r: "",
+      }).toString();
       const headers = {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": SEEKSTREAMING_USER_AGENT,
         Accept: "*/*",
         "Accept-Language": "en-US,en;q=0.5",
-        Referer: `https://${apiDomain}/`,
-        Origin: `https://${apiDomain}`,
+        ...getSeekStreamingRequestHeaders(parsed),
       };
-
-      const resp = await fetch(apiUrl, { headers, signal: controller.signal });
-      clearTimeout(timer);
-      if (!resp.ok)
+      const response = await fetch(apiUrl.href, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!response.ok)
         return {
           success: false,
-          error: `SeekStreaming: API HTTP ${resp.status}`,
+          error: `SeekStreaming: API HTTP ${response.status}`,
         };
-      const encryptedText = await resp.text();
-
-      // Decrypt AES-CBC response
       const decryptedRaw = await decryptAesCbc(
-        encryptedText,
+        await response.text(),
         SEEKSTREAMING_AES_KEY_RAW,
         SEEKSTREAMING_AES_IV_RAW,
       );
-      if (!decryptedRaw) {
+      const selected = selectSeekStreamingPlaybackSources(
+        JSON.parse(decryptedRaw),
+      );
+      if (selected.length === 0) {
         return {
           success: false,
-          error: "SeekStreaming: AES decryption failed",
+          error: "SeekStreaming: no direct source found",
         };
       }
-
-      const data = JSON.parse(decryptedRaw);
-      const cfUrl = data.cf || "";
-      const sourceUrl = data.source || "";
-
-      if (!cfUrl && !sourceUrl) {
-        return {
-          success: false,
-          error: "SeekStreaming: No video source found",
-        };
-      }
-
-      // Prefer CF (CDN) URL
-      const videoUrl = cfUrl || sourceUrl;
       const result = {
-        hlsUrl: videoUrl,
+        hlsUrl: selected[0].url,
+        hlsCandidates: selected,
         success: true,
         source: "seekstreaming",
-        // Also provide both URLs
-        cfUrl: cfUrl || undefined,
-        ipUrl: sourceUrl || undefined,
+        origin: parsed.origin,
+        referer: parsed.referer,
       };
-
       caches.seekstreaming.set(cacheKey, result);
       return result;
-    } catch (e) {
-      console.error("[EXT-SEEKSTREAMING] Error:", e);
+    } catch (error) {
       return {
         success: false,
-        error: e.message || "SeekStreaming extraction failed",
+        error:
+          error?.name === "AbortError"
+            ? "SeekStreaming: upstream timeout"
+            : "SeekStreaming extraction failed",
       };
+    } finally {
+      clearTimeout(timer);
     }
   }
 
   // ===== Detection =====
 
+  // VOE rotates its exit domains roughly monthly; this mirrors the alias list
+  // maintained in src/utils/hosterRegistry.ts and ResolveURL's voesx plugin.
+  const VOE_DOMAIN_PATTERN = new RegExp(
+    "voe\\.|(?:v-?o-?e)?-?un-?bl[o0]?c?k\\d{0,2}(?:-?voe)?\\.|(?:" +
+      "19turanosephantasia|20demidistance9elongations|30sensualizeexpression|321naturelikefurfuroid" +
+      "|35volitantplimsoles5|449unceremoniousnasoseptal|745mingiestblissfully|adrianmissionminute" +
+      "|alleneconomicmatter|antecoxalbobbing1010|anthonysaline|apinchcaseation|audaciousdefaulthouse" +
+      "|auraleanline|availedsmallest|bigclatterhomesguideservice|boonlessbestselling244|bradleyviewdoctor" +
+      "|brittneystandardwestern|brucevotewithin|caseyimpactstation|charlestoughrace|christopheruntilpoint" +
+      "|chromotypic|chuckle-tube|cindyeyefinal|claudiosepulchral|conscientiousedu|counterclockwisejacky" +
+      "|crownmakermacaronicism|crystaltreatmenteast|cyamidpulverulence530|dianaavoidthey|diananatureforeign" +
+      "|donaldlineelse|edwardarriveoften|effortlessexperim|ellenpoliticalfollow|erikcoldperson|figeterpiazine" +
+      "|fittingcentermondaysunday|fraudclatterflyingcar|gamoneinterrupted|garylargeavailable|generatesnitrosate" +
+      "|goofy-banana|graceaddresscommunity|greaseball6eventual20|guidon40hyporadius9|heatherdiscussionwhen" +
+      "|housecardsummerbutton|ianrequireadult|jamessoundcost|jamiesamewalk|jasminetesttry|jayservicestuff" +
+      "|jeanprofessorcentral|jefferycontrolmodel|jennifercertaindevelopment|jennifereconomicgive|jessicachoosemake" +
+      "|jessicayeahcatch|jilliandescribecompany|johnalwayssame|johnbeyondnation|jonathansociallike" +
+      "|josephseveralconcern|juliewomanwish|kathleenmemberhistory|kellywhatcould|kennethofficialitem|kinoger" +
+      "|kristiesoundsimply|lancewhosedifficult|launchreliantcleaverriver|lauradaydo|letsupload|lisatrialidea" +
+      "|loriwithinfamily|lukecomparetwo|lukesitturn|mariatheserepublican|marissasharecareer|matriculant401merited" +
+      "|matthewhotelscience|maxfinishseveral|metagnathtuggers|michaelapplysome|mikaylaarealike|nathanfromsubject" +
+      "|nectareousoverelate|nonesnanking|ogladaj|pamelachangemission|paulkitchendark|preferciseaccurate" +
+      "|prepareddare|ralphysuccessfull|realfinanceblogcenter|rebeccaneverbase|rebeccapracticeloss" +
+      "|reputationsheriffkennethsand|richardsignfish|roberteachfinal|robertordercharacter|robertplacespace" +
+      "|sandratableother|sandrataxeight|scatch176duplicities|sethniceletter|shannonpersonalcost" +
+      "|simpulumlamerop|smoki|stevenfamilyedge|stevenimaginelittle|strawberriesporail|telyn610zoanthropy" +
+      "|timberwoodanotia|timmaybealready|toddpartneranimal|toxitabellaeatrebates306|tracylocalschool" +
+      "|uptodatefinishconferenceroom|valeronevijao|walterprettytheir|wolfdyslectic|yodelswartlike" +
+      // Domaines VOE des lecteurs d'anime-sama (2026-10-19)
+      "|claireguessthousand|derricknationtop|jamesbornmain|jeremyparticipantanything|megankiddifference" +
+      "|teresapoliticallearn)\\.",
+    "i",
+  );
+
+  const DOODSTREAM_DOMAIN_PATTERN = new RegExp(
+    "do*0*o*0*ds?(?:tream|ter|cdn)?\\.(?:com|to|so|sh|cx|la|ws|pm|wf|re|yt|li|work|stream|io|net|pro)" +
+      "|ds[2v](?:play|video)\\.com|(?:my)?vid(?:pla?y|e0)\\.(?:com|net)|vvide0\\.com" +
+      "|all3do\\.com|do7go\\.com|doply\\.net|d-s\\.io|playmogo\\.com",
+    "i",
+  );
+
+  const LULUSTREAM_DOMAIN_PATTERN =
+    /(?:lulu(?:stream|vi?do?o?)?|streamhihi|d00ds|cdn1|732eg54de642sa)\.(?:com|sbs|site|st)/i;
+
+  const VEEV_DOMAIN_PATTERN = /\b(?:veev|poophq|doods)\.(?:to|com|pro)\b/i;
+
   const EMBED_PATTERNS = {
-    voe: (url) => {
-      const voeDomains = [
-        "voe.sx",
-        "voe.st",
-        "voe.gx",
-        "ralphysuccessfull.org",
-        "claudiosepulchral.org",
-        "anthonysaline.org",
-        "auraleanline.org",
-        "letsupload.io",
-      ];
-      return voeDomains.some((d) => url.toLowerCase().includes(d));
-    },
+    voe: (url) => VOE_DOMAIN_PATTERN.test(url),
     fsvid: (url) => url.toLowerCase().includes("fsvid"),
     vidzy: (url) => url.toLowerCase().includes("vidzy"),
-    vidmoly: (url) => url.toLowerCase().includes("vidmoly"),
+    // `ansembed` sert le lecteur Vidmoly sous un autre nom : même extracteur.
+    vidmoly: (url) => /vidmoly|ansembed/i.test(url),
     sibnet: (url) => url.toLowerCase().includes("sibnet.ru"),
-    uqload: (url) => /uqload\.(cx|com|bz|net|org|to|io|co)/i.test(url),
-    doodstream: (url) => {
-      const lower = url.toLowerCase();
-      return (
-        lower.includes("d0000d.com") ||
-        lower.includes("doodstream.com") ||
-        lower.includes("dood.") ||
-        lower.includes("myvidplay.com") ||
-        lower.includes("dsvplay.com") ||
-        lower.includes("doply.net")
-      );
-    },
-    seekstreaming: (url) => {
-      const lower = url.toLowerCase();
-      return (
-        lower.includes("embedseek.com") ||
-        lower.includes("embed4me.com") ||
-        lower.includes("seekstreaming")
-      );
-    },
+    uqload: (url) => /\buqload\.[a-z]{2,24}(?=[/:?#]|$)/i.test(url),
+    // Veev shares `doods.to` with the DoodStream cluster but speaks a different
+    // protocol — it must stay ABOVE doodstream, whose pattern also matches it.
+    veev: (url) => VEEV_DOMAIN_PATTERN.test(url),
+    doodstream: (url) => DOODSTREAM_DOMAIN_PATTERN.test(url),
+    lulustream: (url) => LULUSTREAM_DOMAIN_PATTERN.test(url),
+    vidara: (url) => /\bvidara\.(?:to|so)\b/i.test(url),
+    seekstreaming: (url) => Boolean(parseSeekStreamingEmbedUrl(url)),
   };
 
   const EXTRACT_FN = {
@@ -2143,7 +5068,10 @@
     vidmoly: extractVidmoly,
     sibnet: extractSibnet,
     uqload: extractUqload,
+    veev: extractVeev,
     doodstream: extractDoodStream,
+    lulustream: extractLuluStream,
+    vidara: extractVidara,
     seekstreaming: extractSeekStreaming,
   };
 
@@ -2154,8 +5082,11 @@
     vidmoly: 1,
     sibnet: 1,
     seekstreaming: 1,
+    vidara: 1,
     uqload: 2,
     doodstream: 2,
+    lulustream: 2,
+    veev: 2,
   };
 
   /**
@@ -2255,11 +5186,29 @@
   /**
    * Set up DNR headers for a service's extracted URL so the browser player can use it
    */
+  /**
+   * Cookie de session que le master Fsvid/Vidzy pose (`vz_pe`/`fsv_pe`, valeur
+   * = jeton `t=` de son URL). Depuis le 2026-10-27, Vidzy sert sa fausse
+   * playlist de 177 octets à la place des segments après quelques dizaines de
+   * requêtes sans lui. N'importe quel jeton valide du même serveur suffit,
+   * d'où une seule règle par domaine. Même code que l'extension.
+   */
+  function fsvidVidzySessionCookie(url) {
+    try {
+      const token = new URL(url).searchParams.get("t") || "";
+      if (!/^[A-Za-z0-9_-]{16,128}$/.test(token)) return null;
+      return `vz_pe=${token}; fsv_pe=${token}`;
+    } catch {
+      return null;
+    }
+  }
+
   async function setupHeadersForService(type, url, referer) {
     // Fsvid needs different referers:
     // - Embed page (fsvid.lol/embed-xxx) → fs13.lol (required by fsvid to serve content)
     // - CDN/M3U8 (s1.fsvid.lol, s2.fsvid.lol, etc.) → fsvid.lol (required by CDN)
     let fsvidHeaders;
+    let uqloadHeaders;
     if (type === "fsvid" && url) {
       try {
         const hostname = new URL(url).hostname;
@@ -2283,6 +5232,19 @@
         };
       }
     }
+    if (type === "uqload" && url) {
+      try {
+        const origin = getUqloadSiteOrigin(url);
+        uqloadHeaders = { Referer: `${origin}/`, Origin: origin };
+      } catch {
+        return null;
+      }
+    }
+    const seekHeaders =
+      type === "seekstreaming"
+        ? getSeekStreamingRequestHeaders(referer || url)
+        : null;
+    if (type === "seekstreaming" && !seekHeaders) return null;
 
     const headerMap = {
       voe: { Referer: "https://voe.sx/", Origin: "https://voe.sx" },
@@ -2299,33 +5261,80 @@
         Referer: "https://video.sibnet.ru/",
         Origin: "https://video.sibnet.ru",
       },
-      uqload: { Referer: "https://uqload.bz/", Origin: "https://uqload.bz" },
+      uqload: uqloadHeaders,
       doodstream: {
         Referer: referer || "https://d0000d.com/",
         Origin: referer ? new URL(referer).origin : "https://d0000d.com",
       },
-      seekstreaming: {
-        Referer: referer || "https://lpayer.embed4me.com/",
-        Origin: referer
-          ? new URL(referer).origin
-          : "https://lpayer.embed4me.com",
+      lulustream: {
+        Referer: "https://lulustream.com/",
+        Origin: "https://lulustream.com",
+        "Accept-Language": CLUSTER_ACCEPT_LANGUAGE,
       },
+      veev: {
+        Referer: "https://veev.to/",
+        Origin: "https://veev.to",
+        "Accept-Language": CLUSTER_ACCEPT_LANGUAGE,
+      },
+      vidara: { Referer: "https://vidara.to/", Origin: "https://vidara.to" },
+      seekstreaming: seekHeaders,
       cinep: {
-        Referer: "https://cinepulse.lol/",
-        Origin: "https://cinepulse.lol",
+        Referer: "https://purstream.mx/",
+        Origin: "https://purstream.mx",
+      },
+      kisskh: {
+        Referer: "https://kisskh.do/",
+        Origin: "https://kisskh.do",
       },
     };
 
-    const hdrs = headerMap[type];
+    let hdrs = headerMap[type];
     if (!hdrs || !url) return;
+    if (type === "fsvid" || type === "vidzy") {
+      const cookie = fsvidVidzySessionCookie(url);
+      if (cookie) hdrs = { ...hdrs, Cookie: cookie };
+    }
 
     try {
       const parsedUrl = new URL(url);
-      // Sibnet redirects to CDN subdomains (e.g. dv97.sibnet.ru),
-      // so we use a wildcard pattern to cover all subdomains.
-      const domainPattern =
-        type === "sibnet" ? "*://*.sibnet.ru/*" : `*://${parsedUrl.hostname}/*`;
-      return { domainPattern, headers: hdrs };
+      const labels = parsedUrl.hostname.split(".");
+      const registrable =
+        labels.length > 2 ? labels.slice(-2).join(".") : parsedUrl.hostname;
+      // Sibnet redirects to CDN subdomains (e.g. dv97.sibnet.ru), and Fsvid/Vidzy
+      // rotate their media across sibling hosts too (s1/s2.fsvid.lol,
+      // v1..v4.vidzy.org, media served from vidzy.cc). A rule pinned to the exact
+      // hostname of the extracted m3u8 leaves those hosts unmatched, so the player
+      // fetches their segments with the site's own Origin and the CDN answers 403.
+      let domainPattern = `*://${parsedUrl.hostname}/*`;
+      if (type === "seekstreaming") {
+        domainPattern = getSeekStreamingPlaybackRulePattern(url);
+      } else if (type === "sibnet") {
+        domainPattern = "*://*.sibnet.ru/*";
+      } else if (
+        type === "vidzy" ||
+        type === "vidara" ||
+        type === "lulustream"
+      ) {
+        // Same referer on the apex and on every sub-host, so one rule covers
+        // both. Vidara and LuluStream spread their segments over numbered CDN
+        // siblings (s25-wyl2.s1q2105.com…), which an exact-host rule would
+        // leave unmatched.
+        domainPattern = `*://*${registrable}/*`;
+      } else if (type === "fsvid" && parsedUrl.hostname !== registrable) {
+        // The fsvid apex needs the fs13.lol referer, so only widen the CDN hosts.
+        domainPattern = `*://*.${registrable}/*`;
+      }
+      if (!domainPattern) return null;
+      // La règle doit couvrir toute la grappe : un 301 fait passer l'extraction
+      // de lulustream.com à luluvdo.com, et un motif calculé sur l'URL de
+      // départ laisserait la cible du 301 sans règle.
+      const removeDomains =
+        type === "lulustream"
+          ? LULUSTREAM_RULE_DOMAINS
+          : type === "veev"
+            ? VEEV_RULE_DOMAINS
+            : [];
+      return { domainPattern, headers: hdrs, removeHeaders: [], removeDomains };
     } catch (e) {
       console.error(`[EXT-EXTRACT] Failed to setup headers for ${type}:`, e);
       return null;
@@ -2362,6 +5371,9 @@
       extractSibnet,
       extractUqload,
       extractDoodStream,
+      extractLuluStream,
+      extractVeev,
+      extractVidara,
       extractSeekStreaming,
       extractSingle,
       extractAll,
@@ -2377,23 +5389,19 @@
   // --- END extension/Chrome/extractors.js ---
 
   // --- BEGIN extension/Chrome/background.js ---
-  const VAVOO_BASE_URL = "https://tvvoo.hayd.uk/cfg-fr";
-  const WITV_BASE_URL = "https://witv.team";
-  const SOSPLAY_BASE_URL = "https://streamonsport.art";
-  const LIVETV_BASE_URL = "https://livetv882.me/frx/";
-  const LIVETV_EMBED_ORIGIN = "https://livetv882.me";
-  const LIVETV_EMBED_REFERER = LIVETV_BASE_URL;
-  // Backend API URL for got-scraping based extraction
-  const API_BASE_URL = "https://api.movix.cash";
+  // Backend API URL for got-scraping based extraction.
+  // Dev override: on localhost (Vite dev on :3000) hit the local backend (:25565).
+  const API_BASE_URL =
+    typeof location !== "undefined" &&
+    (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+      ? "http://localhost:25565"
+      : "https://api.movix.fun";
   const STREAM_PROXY_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
   // Import extractors module
 
   const Extractors = globalThis.MovixExtractors;
-
-  // Cache for Wiflix channels with their page slugs
-  let wiflixChannelCache = {};
 
   // User extraction preferences (synced from site via SET_EXTRACTION_PREFS)
   const DEFAULT_EXTRACTION_PREFS = {
@@ -2407,12 +5415,13 @@
       uqload: true,
       doodstream: true,
       seekstreaming: true,
+      lulustream: true,
+      veev: true,
+      vidara: true,
     },
     livetv: {
-      linkzy: true,
-      wiflix: true,
-      sosplay: true,
-      livetv: true,
+      northlive: true,
+      vavoo: true,
       matches: true,
     },
   };
@@ -2435,6 +5444,9 @@
       uqload: 0,
       doodstream: 0,
       seekstreaming: 0,
+      lulustream: 0,
+      veev: 0,
+      vidara: 0,
     },
   };
 
@@ -2458,6 +5470,9 @@
           uqload: 0,
           doodstream: 0,
           seekstreaming: 0,
+          lulustream: 0,
+          veev: 0,
+          vidara: 0,
         };
       }
     }
@@ -2535,7 +5550,18 @@
             "127.0.0.1",
             "movix.cash",
             "movix.club",
+            "movix.cloud",
             "movix.tax",
+            "movix.golf",
+            "movix.chat",
+            "movix.date",
+            "movix.fun",
+            "movix.show",
+            "movix.men",
+            "movix.college",
+            "movix.luxe",
+            "movix.dog",
+            "movix.miami",
           ],
           resourceTypes: [
             "xmlhttprequest",
@@ -2557,15 +5583,13 @@
   }
 
   /**
-   * Map a catalogId (e.g. "wiflix_sport") to a livetv source key.
+   * Map a catalogId (e.g. "matches_football") to a livetv source key.
    * Returns null if unknown — unknown keys are allowed by default.
    */
   function getLiveTvSourceKey(catalogId) {
     if (!catalogId || typeof catalogId !== "string") return null;
-    if (catalogId.startsWith("linkzy_")) return "linkzy";
-    if (catalogId.startsWith("wiflix_")) return "wiflix";
-    if (catalogId.startsWith("sosplay_")) return "sosplay";
-    if (catalogId.startsWith("livetv_")) return "livetv";
+    if (catalogId.startsWith("northlive_")) return "northlive";
+    if (catalogId.startsWith("vavoo_")) return "vavoo";
     if (catalogId.startsWith("matches_")) return "matches";
     return null;
   }
@@ -2622,6 +5646,8 @@
     }
 
     switch (action) {
+      case "KISSKH_FALLBACK":
+        return await handleKisskhFallback(payload);
       case "GET_MANIFEST":
         return await getManifest();
       case "GET_CATALOG": {
@@ -2699,13 +5725,34 @@
           payload.url,
         );
         if (headerInfo) {
-          await addHeadersRule(headerInfo.domainPattern, headerInfo.headers);
+          await addHeadersRule(
+            headerInfo.domainPattern,
+            headerInfo.headers,
+            headerInfo.removeHeaders,
+            headerInfo.removeDomains,
+          );
           console.log(
             `[NEXUS] DNR headers set for ${payload.type}: ${headerInfo.domainPattern}`,
           );
           return { success: true };
         }
         return { success: false, error: "Could not setup headers" };
+      }
+
+      // FCTV (matches) native: inject the player Referer on the CDN segments.
+      case "SETUP_FCTV_HEADERS": {
+        const okFctv = await setupFctvHeadersRule(payload?.referer);
+        return { success: okFctv };
+      }
+
+      // FCTV (matches) native: resolve ONE server locally (IP-bound) -> m3u8.
+      case "STREAMED_HANDSHAKE":
+        return await streamedHandshake(payload?.url);
+
+      case "RESOLVE_FCTV": {
+        const fctvUrl = await resolveFctvStream(payload || {});
+        if (fctvUrl) return { success: true, url: fctvUrl };
+        return { success: false, error: "fctv resolve failed" };
       }
 
       case "SET_EXTRACTION_PREFS": {
@@ -2750,7 +5797,105 @@
     }
   }
 
+  // Encodage base64 d'un segment vidéo. La concaténation octet par octet
+  // (`binary += String.fromCharCode(bytes[i])`) coûtait des centaines de ms sur
+  // un segment HLS de plusieurs Mo, sur le thread principal. On prend
+  // l'encodeur natif quand il existe, sinon on avance par blocs de 32 Ko.
+  function proxyBytesToBase64(bytes) {
+    if (typeof bytes.toBase64 === "function") return bytes.toBase64();
+
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 32768) {
+      binary += String.fromCharCode.apply(
+        null,
+        bytes.subarray(offset, offset + 32768),
+      );
+    }
+    return btoa(binary);
+  }
+
   // Helper to proxy HTTP requests via extension (to bypass Mixed Content)
+  // BEGIN STREAMED HANDSHAKE
+  async function streamedHandshake(embedUrl) {
+    if (extractionPrefs.livetv.streamed === false) throw new Error("Source Streamed désactivée");
+    // Pas de liste de domaines : Streamed change souvent de relais.
+    const safeUrl = value => {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || url.username || url.password || url.port ||
+        /^(?:\d+\.){3}\d+$|^\[|(?:^|\.)localhost$/.test(url.hostname)) {
+        throw new Error("URL Streamed invalide");
+      }
+      return url;
+    };
+    const parse = value => {
+      const url = safeUrl(value);
+      const parts = url.pathname.match(/^\/embed\/([a-z0-9-]{1,32})\/([^/]{1,500})\/(\d{1,3})\/?$/);
+      if (url.hostname !== "embed.st" || url.search || url.hash || !parts) throw new Error("Lecteur Streamed invalide");
+      return { source: parts[1], id: decodeURIComponent(parts[2]), stream: parts[3] };
+    };
+    let slot = parse(embedUrl);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    try {
+      if (slot.source === "golf") {
+        let page = embedUrl;
+        let referer = "https://embed.st/";
+        for (let hop = 0; hop < 4; hop++) {
+          safeUrl(page);
+          await addHeadersRule(`*://${new URL(page).host}${new URL(page).pathname}*`, { Referer: referer });
+          const response = await fetch(page, { headers: { Referer: referer }, redirect: "error", signal: controller.signal });
+          if (!response.ok) throw new Error("Lecteur golf indisponible");
+          const html = await response.text();
+          const fid = html.match(/\bfid\s*=\s*["\']([^"\']+)["\']/)?.[1];
+          if (fid) {
+            const player = `https://exposestrat.com/maestrohd1.php?player=desktop&live=${encodeURIComponent(fid)}`;
+            await addHeadersRule("*://exposestrat.com/maestrohd1.php*", { Referer: page });
+            const legacy = await fetch(player, { headers: { Referer: page }, redirect: "error", signal: controller.signal });
+            if (!legacy.ok) throw new Error("Lecteur golf indisponible");
+            const parts = (await legacy.text()).match(/return\s*\(\s*(\[\s*"[^"]+"(?:\s*,\s*"[^"]+")*\s*\])\.join\(\s*""\s*\)/)?.[1];
+            if (!parts) throw new Error("Adresse golf introuvable");
+            const media = new URL(JSON.parse(parts).join(""));
+            if (media.protocol !== "https:" || media.username || media.password || media.port) throw new Error("CDN golf inconnu");
+            return { url: media.href, referer: "https://exposestrat.com/" };
+          }
+          const iframe = html.match(/<iframe\b[^>]*\ssrc\s*=\s*(["'])(.*?)\1/is);
+          const encoded = html.match(/<iframe\b[^>]*\sdata-source\s*=\s*(["'])(.*?)\1/is) ||
+            html.match(/\.\s*src\s*=\s*atob\s*\(\s*(["'])([A-Za-z0-9+/]+={0,2})\1\s*\)/);
+          const next = iframe?.[2] || (encoded && atob(encoded[2]));
+          if (!next) throw new Error("Lecteur golf introuvable");
+          const target = safeUrl(new URL(next.replace(/&amp;/g, "&"), page).href);
+          if (target.hostname === "embed.st" && !target.pathname.startsWith("/embed/golf/")) {
+            embedUrl = target.href;
+            slot = parse(embedUrl);
+            break;
+          }
+          referer = page;
+          page = target.href;
+        }
+        if (slot.source === "golf") throw new Error("Lecteur golf natif indisponible");
+      }
+      const bytes = [];
+      ["source", "id", "stream"].forEach((key, index) => {
+        const data = new TextEncoder().encode(slot[key]);
+        bytes.push((index + 1) * 8 + 2);
+        let length = data.length;
+        while (length > 127) { bytes.push((length & 127) | 128); length >>>= 7; }
+        bytes.push(length, ...data);
+      });
+      const headers = { "Content-Type": "application/octet-stream", Origin: "https://embed.st", Referer: embedUrl };
+      await addHeadersRule("*://embed.st/fetch", headers);
+      const response = await fetch("https://embed.st/fetch", {
+        method: "POST", headers, body: new Uint8Array(bytes), redirect: "error", signal: controller.signal,
+      });
+      if (!response.ok) throw new Error("Source native Streamed indisponible");
+      const body = new Uint8Array(await response.arrayBuffer());
+      const goat = response.headers.get("goat");
+      if (!goat || body.length > 8192) throw new Error("Réponse Streamed invalide");
+      return { embedUrl, goat, body: proxyBytesToBase64(body) };
+    } finally { clearTimeout(timer); }
+  }
+  // END STREAMED HANDSHAKE
+
   async function proxyHttpRequest(url, headers = {}) {
     try {
       if (headers && Object.keys(headers).length > 0) {
@@ -2768,15 +5913,7 @@
 
       const response = await fetch(url, { headers });
       const buffer = await response.arrayBuffer();
-
-      // Convert ArrayBuffer to Base64
-      let binary = "";
-      const bytes = new Uint8Array(buffer);
-      const len = bytes.byteLength;
-      for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const base64 = btoa(binary);
+      const base64 = proxyBytesToBase64(new Uint8Array(buffer));
 
       return {
         data: base64,
@@ -2792,6 +5929,24 @@
 
   // === NEXUS M3U8 EXTRACTION HANDLERS ===
 
+  function getSeekStreamingPlaybackUrls(result) {
+    const urls = [];
+    const seen = new Set();
+    const add = (url) => {
+      if (typeof url !== "string" || !url || seen.has(url)) return;
+      seen.add(url);
+      urls.push(url);
+    };
+    if (Array.isArray(result?.hlsCandidates)) {
+      for (const candidate of result.hlsCandidates) {
+        add(candidate?.url);
+      }
+    }
+    add(result?.hlsUrl);
+    add(result?.m3u8Url);
+    return urls;
+  }
+
   /**
    * Handle single embed extraction request
    * payload: { type: 'voe'|'fsvid'|..., url: 'https://...' }
@@ -2804,6 +5959,36 @@
     const embedType = type || Extractors.detectEmbedType(url);
     if (!embedType) return { success: false, error: "Unknown embed type" };
 
+    if (embedType === "seekstreaming") {
+      let extractionRuleId = null;
+      try {
+        const extractionHeaders = await Extractors.setupHeadersForService(
+          embedType,
+          url,
+          url,
+        );
+        if (extractionHeaders) {
+          extractionRuleId = await addHeadersRule(
+            extractionHeaders.domainPattern,
+            extractionHeaders.headers,
+          );
+        }
+        const result = await Extractors.extractSingle(embedType, url);
+        if (result.success) {
+          for (const videoUrl of getSeekStreamingPlaybackUrls(result)) {
+            const playbackHeaders =
+              await Extractors.setupHeadersForService(embedType, videoUrl, url);
+            if (playbackHeaders) {
+              await replaceSeekPlaybackRule(playbackHeaders);
+            }
+          }
+        }
+        return result;
+      } finally {
+        await removeHeadersRule(extractionRuleId);
+      }
+    }
+
     // Set up DNR headers BEFORE extraction so the fetch request succeeds
     try {
       const headerInfo = await Extractors.setupHeadersForService(
@@ -2811,7 +5996,12 @@
         url,
       );
       if (headerInfo) {
-        await addHeadersRule(headerInfo.domainPattern, headerInfo.headers);
+        await addHeadersRule(
+            headerInfo.domainPattern,
+            headerInfo.headers,
+            headerInfo.removeHeaders,
+            headerInfo.removeDomains,
+          );
         console.log(
           `[NEXUS] Pre-extraction DNR headers set for ${embedType}: ${headerInfo.domainPattern}`,
         );
@@ -2831,9 +6021,15 @@
         const headerInfo = await Extractors.setupHeadersForService(
           embedType,
           videoUrl,
+          url,
         );
         if (headerInfo) {
-          await addHeadersRule(headerInfo.domainPattern, headerInfo.headers);
+          await addHeadersRule(
+            headerInfo.domainPattern,
+            headerInfo.headers,
+            headerInfo.removeHeaders,
+            headerInfo.removeDomains,
+          );
           console.log(
             `[NEXUS] DNR headers set for ${embedType}: ${headerInfo.domainPattern}`,
           );
@@ -2856,6 +6052,8 @@
 
     console.log(`[NEXUS] Extracting all from ${sources.length} sources`);
 
+    const seekExtractionRuleIds = [];
+
     // Set up DNR headers for all sources BEFORE extraction
     try {
       const detected = Extractors.detectSupportedEmbeds(sources);
@@ -2863,9 +6061,16 @@
         const headerInfo = await Extractors.setupHeadersForService(
           item.type,
           item.url,
+          item.url,
         );
         if (headerInfo) {
-          await addHeadersRule(headerInfo.domainPattern, headerInfo.headers);
+          const ruleId = await addHeadersRule(
+            headerInfo.domainPattern,
+            headerInfo.headers,
+          );
+          if (item.type === "seekstreaming" && Number.isInteger(ruleId)) {
+            seekExtractionRuleIds.push(ruleId);
+          }
         }
       }
       console.log(
@@ -2878,31 +6083,46 @@
       );
     }
 
-    const results = await Extractors.extractAll(sources);
+    try {
+      const results = await Extractors.extractAll(sources);
 
-    // Set up DNR headers for all successful extractions (video URLs)
-    for (const result of results) {
-      if (result.success) {
-        const videoUrl = result.hlsUrl || result.m3u8Url;
-        if (videoUrl) {
-          const headerInfo = await Extractors.setupHeadersForService(
-            result.type,
-            videoUrl,
-          );
-          if (headerInfo) {
-            await addHeadersRule(headerInfo.domainPattern, headerInfo.headers);
+      // Set up DNR headers for all successful extractions (video URLs)
+      for (const result of results) {
+        if (result.success) {
+          const videoUrls =
+            result.type === "seekstreaming"
+              ? getSeekStreamingPlaybackUrls(result)
+              : [result.hlsUrl || result.m3u8Url].filter(Boolean);
+          for (const videoUrl of videoUrls) {
+            const headerInfo = await Extractors.setupHeadersForService(
+              result.type,
+              videoUrl,
+              result.url,
+            );
+            if (headerInfo) {
+              if (result.type === "seekstreaming") {
+                await replaceSeekPlaybackRule(headerInfo);
+              } else {
+                await addHeadersRule(
+                  headerInfo.domainPattern,
+                  headerInfo.headers,
+                );
+              }
+            }
           }
         }
       }
-    }
 
-    const successCount = results.filter((r) => r.success).length;
-    return {
-      success: successCount > 0,
-      total: results.length,
-      successCount,
-      results,
-    };
+      const successCount = results.filter((r) => r.success).length;
+      return {
+        success: successCount > 0,
+        total: results.length,
+        successCount,
+        results,
+      };
+    } finally {
+      await Promise.all(seekExtractionRuleIds.map(removeHeadersRule));
+    }
   }
 
   /**
@@ -2927,14 +6147,36 @@
         currentHostname.endsWith(".movix.cash") ||
         currentHostname === "movix.club" ||
         currentHostname.endsWith(".movix.club") ||
+        currentHostname === "movix.cloud" ||
+        currentHostname.endsWith(".movix.cloud") ||
         currentHostname === "movix.tax" ||
-        currentHostname.endsWith(".movix.tax")
+        currentHostname.endsWith(".movix.tax") ||
+        currentHostname === "movix.golf" ||
+        currentHostname === "movix.chat" ||
+        currentHostname.endsWith(".movix.chat") ||
+        currentHostname === "movix.date" ||
+        currentHostname.endsWith(".movix.date") ||
+        currentHostname === "movix.fun" ||
+        currentHostname.endsWith(".movix.fun") ||
+        currentHostname === "movix.show" ||
+        currentHostname.endsWith(".movix.show") ||
+        currentHostname === "movix.men" ||
+        currentHostname.endsWith(".movix.men") ||
+        currentHostname === "movix.college" ||
+        currentHostname.endsWith(".movix.college") ||
+        currentHostname === "movix.luxe" ||
+        currentHostname.endsWith(".movix.luxe") ||
+        currentHostname === "movix.dog" ||
+        currentHostname.endsWith(".movix.dog") ||
+        currentHostname === "movix.miami" ||
+        currentHostname.endsWith(".movix.miami") ||
+        currentHostname.endsWith(".movix.golf")
       ) {
-        return (currentOrigin || "https://movix.cash").replace(/\/$/, "");
+        return (currentOrigin || "https://movix.fun").replace(/\/$/, "");
       }
     } catch {}
 
-    return "https://movix.cash";
+    return "https://movix.fun";
   }
 
   function buildBackendApiHeaders(accessKey, extraHeaders = {}) {
@@ -2954,12 +6196,6 @@
   }
 
   async function getManifest() {
-    console.log("Fetching manifest from Vavoo...");
-    const vavooData = await fetchSafe(
-      `${VAVOO_BASE_URL}/manifest.json`,
-      "Vavoo",
-    );
-
     const manifest = {
       id: "org.stremio.merged",
       version: "1.0.0",
@@ -2971,1719 +6207,38 @@
       idPrefixes: [],
     };
 
-    // Add Vavoo catalogs
-    if (vavooData) {
-      if (vavooData.catalogs) manifest.catalogs.push(...vavooData.catalogs);
-      if (vavooData.idPrefixes) {
-        manifest.idPrefixes.push(...vavooData.idPrefixes);
-      } else {
-        manifest.idPrefixes.push("vavoo_");
-      }
-    }
-
-    // Add Wiflix (WITV) catalogs
-    const wiflixCatalogs = [
-      { type: "tv", id: "wiflix_sport", name: "⚽ Sport" },
-      { type: "tv", id: "wiflix_cinema", name: "🎥 Cinéma" },
-      { type: "tv", id: "wiflix_generaliste", name: "📺 Généraliste" },
-      { type: "tv", id: "wiflix_documentaire", name: "🌍 Documentaire" },
-      { type: "tv", id: "wiflix_enfants", name: "🎈 Enfants" },
-      { type: "tv", id: "wiflix_info", name: "📰 Info" },
-      { type: "tv", id: "wiflix_musique", name: "🎵 Musique" },
-    ];
-
-    manifest.catalogs.push(...wiflixCatalogs);
-    manifest.idPrefixes.push("wiflix_");
-
-    // Add Bolaloca catalog (compat prefix sosplay_)
-    const sosplayCatalogs = [
-      { type: "tv", id: "sosplay_chaines", name: "📺 Chaînes (Bolaloca)" },
-    ];
-    manifest.catalogs.push(...sosplayCatalogs);
-    manifest.idPrefixes.push("sosplay_");
-
-    const livetvCatalogs = [
-      { type: "tv", id: "livetv_live", name: "🔴 En direct" },
-    ];
-    manifest.catalogs.push(...livetvCatalogs);
-    manifest.idPrefixes.push("livetv_");
-    manifest.catalogs.push(
-      { type: "tv", id: "livetv_all", name: "📅 Tous les sports" },
-      { type: "tv", id: "livetv_football", name: "⚽ Football" },
-      { type: "tv", id: "livetv_hockey", name: "🏒 Hockey" },
-      { type: "tv", id: "livetv_basketball", name: "🏀 Basketball" },
-      { type: "tv", id: "livetv_tennis", name: "🎾 Tennis" },
-      { type: "tv", id: "livetv_volleyball", name: "🏐 Volley-ball" },
-      { type: "tv", id: "livetv_handball", name: "🤾 Handball" },
-      { type: "tv", id: "livetv_rugby", name: "🏉 Rugby" },
-      { type: "tv", id: "livetv_combat", name: "🥊 Sports de combat" },
-      { type: "tv", id: "livetv_motorsport", name: "🏎️ Sports mecaniques" },
-      { type: "tv", id: "livetv_winter", name: "🎿 Sports d'hiver" },
-      { type: "tv", id: "livetv_athletics", name: "🏃 Athletisme" },
-      { type: "tv", id: "livetv_other", name: "🏟️ Autres sports" },
-    );
-
     return manifest;
   }
 
   async function getCatalog(type, catalogId, accessKey = null) {
-    // Check if this is a Wiflix catalog
-    if (catalogId.startsWith("wiflix_")) {
-      return await getWiflixCatalog(catalogId);
-    }
-
-    // Check if this is a Bolaloca/LiveTV catalog resolved by backend
-    if (catalogId.startsWith("sosplay_")) {
-      console.log(`[SOSPLAY] Fetching catalog via Backend: ${catalogId}`);
-      const response = await fetch(
-        `${API_BASE_URL}/api/livetv/catalog/tv/${catalogId}`,
-        {
-          headers: buildBackendApiHeaders(accessKey),
-        },
-      );
-      if (!response.ok)
-        throw new Error(`Backend API error: ${response.status}`);
-      return await response.json();
-    }
-
-    if (catalogId.startsWith("livetv_")) {
-      console.log(`[LIVETV] Fetching catalog via Backend: ${catalogId}`);
-      const response = await fetch(
-        `${API_BASE_URL}/api/livetv/catalog/tv/${catalogId}`,
-        {
-          headers: buildBackendApiHeaders(accessKey),
-        },
-      );
-      if (!response.ok)
-        throw new Error(`Backend API error: ${response.status}`);
-      return await response.json();
-    }
-
-    // Default: Vavoo catalog
-    const url = `${VAVOO_BASE_URL}/catalog/${type}/${catalogId}.json`;
-    const catalog = await fetchSafe(url, "Catalog " + catalogId);
-    if (!catalog) throw new Error("Catalog fetch failed");
-
-    return catalog;
-  }
-
-  // Wiflix catalog categories mapping (URL paths)
-  const WITV_CATEGORIES = {
-    wiflix_sport: "/chaines-live/sport/",
-    wiflix_cinema: "/chaines-live/cinema/",
-    wiflix_generaliste: "/chaines-live/generaliste/",
-    wiflix_documentaire: "/chaines-live/documentaire/",
-    wiflix_enfants: "/chaines-live/enfants/",
-    wiflix_info: "/chaines-live/info/",
-    wiflix_musique: "/chaines-live/musique/",
-  };
-
-  // Scrape Wiflix channels from WITV website
-  async function getWiflixCatalog(catalogId) {
-    const categoryPath = WITV_CATEGORIES[catalogId];
-    if (!categoryPath) {
-      throw new Error(`Unknown Wiflix catalog: ${catalogId}`);
-    }
-
-    console.log(`[WITV] Fetching catalog for: ${catalogId}`);
-
-    try {
-      const categoryUrl = `${WITV_BASE_URL}${categoryPath}`;
-      console.log(`[WITV] Category URL: ${categoryUrl}`);
-
-      const response = await fetch(categoryUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch category page: ${response.status}`);
-      }
-
-      const html = await response.text();
-      console.log(`[WITV] Category page length: ${html.length}`);
-
-      // Parse channels from HTML
-      const channels = [];
-
-      const cardRegex =
-        /<div[^>]*class="[^"]*holographic-card[^"]*"[^>]*>[\s\S]*?<a[^>]*href="[^"]*\/(\d+)-[^"]*"[^>]*>[\s\S]*?<[^>]*class="[^"]*ann-short_price[^"]*"[^>]*>([^<]+)</gi;
-      let match;
-
-      while ((match = cardRegex.exec(html)) !== null) {
-        const id = match[1];
-        const name = match[2].trim();
-
-        if (id && name && !channels.find((c) => c.id === `wiflix_${id}`)) {
-          const slugMatch = html.match(
-            new RegExp(`href="([^"]*/${id}-[^"\.]+\.html)"`),
-          );
-          const pageSlug = slugMatch ? slugMatch[1] : null;
-
-          const channel = {
-            id: `wiflix_${id}`,
-            type: "tv",
-            name: name,
-            poster: null,
-            genres: [catalogId.replace("wiflix_", "")],
-            _pageSlug: pageSlug,
-            _categoryPath: categoryPath,
-          };
-          channels.push(channel);
-
-          wiflixChannelCache[channel.id] = channel;
-        }
-      }
-
-      // Pattern 2 fallback
-      if (channels.length === 0) {
-        console.log("[WITV] Pattern 1 failed, trying fallback pattern...");
-        const fallbackRegex =
-          /href="[^"]*\/(\d+)-([^"]+)\.html"[^>]*>[\s\S]*?<[^>]*class="[^"]*ann-short_price[^"]*"[^>]*>([^<]+)</gi;
-
-        while ((match = fallbackRegex.exec(html)) !== null) {
-          const id = match[1];
-          const name = match[3].trim();
-
-          if (id && name && !channels.find((c) => c.id === `wiflix_${id}`)) {
-            const slugMatch = html.match(
-              new RegExp(`href="([^"]*/${id}-[^"\.]+\.html)"`),
-            );
-            const pageSlug = slugMatch ? slugMatch[1] : null;
-
-            const channel = {
-              id: `wiflix_${id}`,
-              type: "tv",
-              name: name,
-              poster: null,
-              genres: [catalogId.replace("wiflix_", "")],
-              _pageSlug: pageSlug,
-              _categoryPath: categoryPath,
-            };
-            channels.push(channel);
-            wiflixChannelCache[channel.id] = channel;
-          }
-        }
-      }
-
-      // Pattern 3: Ultra-simple
-      if (channels.length === 0) {
-        console.log("[WITV] Pattern 2 failed, trying ultra-simple pattern...");
-        console.log("[WITV] HTML preview:", html.substring(0, 2000));
-
-        const simpleRegex = /href="[^"]*\/(\d+)-([^"\.]+)/gi;
-        const seenIds = new Set();
-
-        while ((match = simpleRegex.exec(html)) !== null) {
-          const id = match[1];
-          const slug = match[2];
-
-          const name = slug
-            .replace(/-/g, " ")
-            .replace(/\b\w/g, (c) => c.toUpperCase());
-
-          if (id && !seenIds.has(id)) {
-            seenIds.add(id);
-            const channel = {
-              id: `wiflix_${id}`,
-              type: "tv",
-              name: name,
-              poster: null,
-              genres: [catalogId.replace("wiflix_", "")],
-              _pageSlug: `${id}-${slug}.html`,
-              _categoryPath: categoryPath,
-            };
-            channels.push(channel);
-            wiflixChannelCache[channel.id] = channel;
-          }
-        }
-      }
-
-      console.log(`[WITV] Found ${channels.length} channels in ${catalogId}`);
-
-      return { metas: channels };
-    } catch (error) {
-      console.error("[WITV] Error fetching catalog:", error);
-      throw error;
-    }
+    // Route to backend (handles matches_, northlive_, vavoo_, TV Direct, etc.)
+    console.log(`[CATALOG] Fetching catalog via Backend: ${catalogId}`);
+    const response = await fetch(
+      `${API_BASE_URL}/api/livetv/catalog/tv/${catalogId}`,
+      {
+        headers: buildBackendApiHeaders(accessKey),
+      },
+    );
+    if (!response.ok)
+      throw new Error(`Backend API error: ${response.status}`);
+    return await response.json();
   }
 
   async function getStream(type, channelId, accessKey = null, options = {}) {
-    // Check if this is a Wiflix channel
-    if (channelId.startsWith("wiflix_")) {
-      return await getWiflixStream(channelId, accessKey);
-    }
-
-    // Check if this is a Sosplay channel
-    if (channelId.startsWith("sosplay_")) {
-      return await getSosplayStream(channelId, accessKey);
-    }
-
-    if (channelId.startsWith("livetv_")) {
-      return await getLiveTvStream(channelId, accessKey, options);
-    }
-
-    // Default: Vavoo stream
-    const url = `${VAVOO_BASE_URL}/stream/${type}/${channelId}.json`;
-    const streamData = await fetchSafe(url, "Vavoo Stream");
-
-    if (streamData && streamData.streams) {
-      for (const stream of streamData.streams) {
-        if (stream.url) {
-          await addUserAgentRule(stream.url, "VAVOO/2.6");
-        }
-      }
-    }
-
-    if (!streamData) throw new Error("Stream fetch failed");
-
-    return streamData;
-  }
-
-  // Find the channel page URL from cache or by searching
-  async function findWiflixChannelPageUrl(channelId) {
-    if (wiflixChannelCache[channelId]) {
-      const channel = wiflixChannelCache[channelId];
-      if (channel._pageSlug) {
-        const pageUrl = channel._pageSlug.startsWith("http")
-          ? channel._pageSlug
-          : `${WITV_BASE_URL}${channel._categoryPath}${channel._pageSlug.replace(/^\//, "")}`;
-        console.log(`[WITV] Found channel page URL in cache: ${pageUrl}`);
-        return pageUrl;
-      }
-    }
-
-    const id = channelId.replace("wiflix_", "");
-    console.log(`[WITV] Channel ${channelId} not in cache, searching...`);
-
-    for (const [catId, categoryPath] of Object.entries(WITV_CATEGORIES)) {
-      try {
-        const categoryUrl = `${WITV_BASE_URL}${categoryPath}`;
-        const response = await fetch(categoryUrl, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          },
-        });
-
-        if (!response.ok) continue;
-
-        const html = await response.text();
-        const regex = new RegExp(`href="([^"]*/${id}-[^"\.]+\.html)"`, "i");
-        const match = html.match(regex);
-
-        if (match) {
-          const channelPath = match[1];
-          const pageUrl = channelPath.startsWith("http")
-            ? channelPath
-            : `${WITV_BASE_URL}${channelPath}`;
-          console.log(`[WITV] Found channel page URL via search: ${pageUrl}`);
-          return pageUrl;
-        }
-      } catch (e) {
-        console.warn(`[WITV] Error searching in ${catId}: ${e.message}`);
-      }
-    }
-
-    return null;
-  }
-
-  // Wiflix (WITV) stream extraction
-  async function getWiflixStream(channelId, accessKey = null) {
-    console.log(`[WITV] Extracting stream for channel: ${channelId}`);
-
-    try {
-      const channelPageUrl = await findWiflixChannelPageUrl(channelId);
-
-      if (!channelPageUrl) {
-        throw new Error(`Could not find page URL for ${channelId}`);
-      }
-
-      console.log(`[WITV] Channel page URL: ${channelPageUrl}`);
-
-      const pageResponse = await fetch(channelPageUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Referer: WITV_BASE_URL + "/",
-        },
-      });
-
-      if (!pageResponse.ok) {
-        throw new Error(`Failed to fetch channel page: ${pageResponse.status}`);
-      }
-
-      const pageHtml = await pageResponse.text();
-      console.log(`[WITV] Channel page length: ${pageHtml.length}`);
-
-      const iframeMatch = pageHtml.match(/<iframe[^>]*src=["']([^"']+)["']/i);
-
-      if (!iframeMatch) {
-        console.error("[WITV] No iframe found on channel page");
-        throw new Error("No iframe found on page");
-      }
-
-      let embedSrc = iframeMatch[1];
-      console.log(`[WITV] Found embed iframe: ${embedSrc}`);
-
-      // Type 1: witv-player.php
-      if (embedSrc.includes("witv-player.php")) {
-        const playerUrl = embedSrc.startsWith("http")
-          ? embedSrc
-          : `${WITV_BASE_URL}${embedSrc}`;
-        console.log(
-          `[WITV] Type 1: witv-player detected, fetching ${playerUrl}`,
-        );
-
-        const playerResponse = await fetch(playerUrl, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Referer: channelPageUrl,
-          },
-        });
-
-        if (!playerResponse.ok) {
-          throw new Error(
-            `Failed to fetch player page: ${playerResponse.status}`,
-          );
-        }
-
-        const playerHtml = await playerResponse.text();
-
-        let m3u8Url = null;
-        const streamMatch = playerHtml.match(
-          /var\s+streamUrl\s*=\s*["']([^"']+)["']/,
-        );
-        if (streamMatch) {
-          m3u8Url = streamMatch[1];
-        } else {
-          const fileMatch = playerHtml.match(
-            /file:\s*["']([^"']+\.m3u8[^"']*)["']/,
-          );
-          if (fileMatch) {
-            m3u8Url = fileMatch[1];
-          } else {
-            const genericMatch = playerHtml.match(
-              /["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/,
-            );
-            if (genericMatch) {
-              m3u8Url = genericMatch[1];
-            }
-          }
-        }
-
-        if (!m3u8Url) {
-          throw new Error("Could not extract stream URL from witv-player");
-        }
-
-        await addWiflixHeadersRule(m3u8Url);
-
-        return {
-          streams: [
-            {
-              title: "Orca",
-              url: m3u8Url,
-              originalUrl: m3u8Url,
-              behaviorHints: { notWebReady: false },
-            },
-          ],
-        };
-      }
-
-      // Type 2: livehdtv.com
-      if (embedSrc.includes("livehdtv.com")) {
-        const cacheKey = `witv_livehdtv_${channelId}`;
-        const cachedStream = await getFromCache(cacheKey);
-
-        if (cachedStream) {
-          console.log(`[WITV] Found valid stream in cache for ${channelId}`);
-          await addWiflixHeadersRule(
-            cachedStream.url,
-            "https://www.livehdtv.com/",
-          );
-          return { streams: [cachedStream] };
-        }
-
-        console.log(
-          `[WITV] Type 2: livehdtv detected, using backend stream API...`,
-        );
-
-        const apiUrl = `${API_BASE_URL}/api/livetv/stream/tv/${channelId}`;
-        console.log(`[WITV] Calling backend stream API: ${apiUrl}`);
-
-        try {
-          const apiResponse = await fetch(apiUrl, {
-            headers: buildBackendApiHeaders(accessKey),
-          });
-
-          if (!apiResponse.ok) {
-            throw new Error(`Backend API error: ${apiResponse.status}`);
-          }
-
-          const apiData = await apiResponse.json();
-
-          if (apiData.error) {
-            throw new Error(apiData.error);
-          }
-
-          if (!apiData.streams || apiData.streams.length === 0) {
-            throw new Error("No streams returned from backend");
-          }
-
-          const stream = apiData.streams[0];
-          const m3u8Url = stream.originalUrl || stream.url;
-
-          await addWiflixHeadersRule(m3u8Url, "https://www.livehdtv.com/");
-
-          // Verify stream availability
-          console.log("[WITV] Verifying stream availability...");
-          let retries = 0;
-          const maxRetries = 20;
-
-          while (retries < maxRetries) {
-            try {
-              const checkResponse = await fetch(m3u8Url, {
-                method: "GET",
-                headers: {
-                  Origin: "https://www.livehdtv.com",
-                  Referer: "https://www.livehdtv.com/",
-                },
-              });
-
-              if (checkResponse.ok) {
-                console.log(`[WITV] Stream verified after ${retries} retries`);
-                break;
-              }
-            } catch (e) {
-              // retry
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            retries++;
-          }
-
-          const streamData = {
-            title: "Orca",
-            url: m3u8Url,
-            originalUrl: m3u8Url,
-            behaviorHints: { notWebReady: false },
-          };
-
-          await saveToCache(cacheKey, streamData, 1);
-
-          return { streams: [streamData] };
-        } catch (apiError) {
-          console.error(
-            `[WITV] Backend API failed, trying direct fetch fallback:`,
-            apiError.message,
-          );
-
-          const livehdtvResponse = await fetch(embedSrc, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
-              Referer: "https://www.livehdtv.com/",
-            },
-          });
-
-          if (!livehdtvResponse.ok) {
-            throw new Error(
-              `Failed to fetch livehdtv page: ${livehdtvResponse.status}`,
-            );
-          }
-
-          const livehdtvHtml = await livehdtvResponse.text();
-
-          const innerIframeMatch = livehdtvHtml.match(
-            /<iframe[^>]*src=["']([^"']+)["']/i,
-          );
-          if (!innerIframeMatch) {
-            throw new Error("No inner iframe found in livehdtv page");
-          }
-
-          let tokenPhpUrl = innerIframeMatch[1];
-          if (!tokenPhpUrl.startsWith("http")) {
-            tokenPhpUrl = `https://www.livehdtv.com${tokenPhpUrl}`;
-          }
-
-          const tokenResponse = await fetch(tokenPhpUrl, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
-              Referer: embedSrc,
-            },
-          });
-
-          if (!tokenResponse.ok) {
-            throw new Error(
-              `Failed to fetch token.php: ${tokenResponse.status}`,
-            );
-          }
-
-          const tokenHtml = await tokenResponse.text();
-          const fileMatch = tokenHtml.match(
-            /file:\s*["']([^"']+\.m3u8[^"']*)["']/,
-          );
-
-          if (!fileMatch) {
-            throw new Error("Could not extract m3u8 from token.php");
-          }
-
-          const m3u8Url = fileMatch[1];
-          await addWiflixHeadersRule(m3u8Url, "https://www.livehdtv.com/");
-
-          return {
-            streams: [
-              {
-                title: "Orca",
-                url: m3u8Url,
-                originalUrl: m3u8Url,
-                behaviorHints: { notWebReady: false },
-              },
-            ],
-          };
-        }
-      }
-
-      // Type 3: Unknown embed - try generic extraction
-      console.log(
-        `[WITV] Unknown embed type, attempting generic extraction from: ${embedSrc}`,
-      );
-
-      const unknownUrl = embedSrc.startsWith("http")
-        ? embedSrc
-        : `${WITV_BASE_URL}${embedSrc}`;
-      const unknownResponse = await fetch(unknownUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Referer: channelPageUrl,
-        },
-      });
-
-      if (!unknownResponse.ok) {
-        throw new Error(
-          `Failed to fetch unknown embed: ${unknownResponse.status}`,
-        );
-      }
-
-      const unknownHtml = await unknownResponse.text();
-      const m3u8Match = unknownHtml.match(
-        /["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/,
-      );
-
-      if (!m3u8Match) {
-        throw new Error("Could not extract stream URL from unknown embed");
-      }
-
-      const m3u8Url = m3u8Match[1];
-      await addWiflixHeadersRule(m3u8Url);
-
-      return {
-        streams: [
-          {
-            title: "Orca",
-            url: m3u8Url,
-            originalUrl: m3u8Url,
-            behaviorHints: { notWebReady: false },
-          },
-        ],
-      };
-    } catch (error) {
-      console.error("[WITV] Error extracting stream:", error);
-      throw error;
-    }
-  }
-
-  // Add DNR rule for Wiflix headers
-  async function addWiflixHeadersRule(
-    urlPattern,
-    referer = "https://witv.team/",
-  ) {
-    try {
-      const url = new URL(urlPattern);
-      const domainPattern = `*://${url.hostname}/*`;
-      const origin = referer.endsWith("/") ? referer.slice(0, -1) : referer;
-
-      await addHeadersRule(domainPattern, {
-        Origin: origin,
-        Referer: referer,
-      });
-    } catch (e) {
-      console.error("[WITV] Failed to add headers rule:", e);
-    }
-  }
-
-  async function getBackendIframeSourceStream(
-    channelId,
-    accessKey = null,
-    logPrefix = "LIVE",
-    options = {},
-  ) {
-    const requestUrl = new URL(
+    // Route to backend (handles matches_, northlive_, vavoo_, TV Direct, etc.)
+    console.log(`[STREAM] Fetching stream via Backend: ${channelId}`);
+    const response = await fetch(
       `${API_BASE_URL}/api/livetv/stream/tv/${channelId}`,
+      {
+        headers: buildBackendApiHeaders(accessKey),
+      },
     );
-    if (options.mode === "sources") {
-      requestUrl.searchParams.set("mode", "sources");
-    }
-    if (Number.isInteger(options.sourceIndex) && options.sourceIndex >= 0) {
-      requestUrl.searchParams.set("sourceIndex", String(options.sourceIndex));
-    }
-
-    const response = await fetch(requestUrl.toString(), {
-      headers: buildBackendApiHeaders(accessKey),
-    });
-    if (!response.ok) throw new Error(`Backend API error: ${response.status}`);
-
-    const data = await response.json();
-
-    if (options.mode === "sources") {
-      console.log(
-        `[${logPrefix}] Backend returned ${data.sources?.length || 0} source(s) for ${channelId}`,
-      );
-      return data;
-    }
-
-    if (data.streams && data.streams.length > 0) {
-      const normalizedStreams = [];
-      const isLiveTvRequest =
-        channelId.startsWith("livetv_") || logPrefix === "LIVETV";
-
-      for (const stream of data.streams) {
-        if (stream._isEmbed) {
-          const url = stream.originalUrl || stream.url;
-          if (isLiveTvRequest && url?.startsWith("http")) {
-            await addLiveTvEmbedHeadersRule(url);
-          }
-
-          normalizedStreams.push({
-            ...stream,
-            url: url || stream.url,
-            originalUrl: url || stream.originalUrl,
-            referer: isLiveTvRequest ? LIVETV_EMBED_REFERER : stream.referer,
-            behaviorHints: { notWebReady: false },
-          });
-          continue;
-        }
-
-        const url = stream.originalUrl || stream.url;
-        if (!url || !url.startsWith("http")) continue;
-
-        if (isLiveTvRequest) {
-          await addLiveTvHeadersRule(url, stream.userAgent);
-        } else {
-          await addSosplayHeadersRule(url, stream.referer, stream.userAgent);
-        }
-        normalizedStreams.push({
-          ...stream,
-          url,
-          originalUrl: url,
-          referer: isLiveTvRequest ? LIVETV_EMBED_REFERER : stream.referer,
-          behaviorHints: { notWebReady: false },
-        });
-      }
-
-      data.streams = normalizedStreams;
-    }
-
-    console.log(
-      `[${logPrefix}] Backend returned ${data.streams?.length || 0} stream(s) for ${channelId}`,
-    );
-    return data;
-  }
-
-  async function getSosplayStream(channelId, accessKey = null) {
-    console.log(`[SOSPLAY] Fetching stream logic via Extension: ${channelId}`);
-    try {
-      return await getBackendIframeSourceStream(
-        channelId,
-        accessKey,
-        "BOLALOCA",
-      );
-
-      let slug = channelId.replace("sosplay_", "");
-      let channelPageUrl = `${SOSPLAY_BASE_URL}/regardertv-${slug}-streaming-direct`;
-
-      console.log(`[SOSPLAY] Fetching channel page: ${channelPageUrl}`);
-      const pageResponse = await fetch(channelPageUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Referer: SOSPLAY_BASE_URL,
-        },
-      });
-
-      if (!pageResponse.ok) {
-        console.log(
-          `[SOSPLAY] Failed to fetch channel page: ${pageResponse.status}`,
-        );
-      }
-
-      const pageHtml = await pageResponse.text();
-
-      const serverRegex =
-        /class="[^"]*change-video[^"]*"[^>]*data-embed="([^"]+)"[^>]*>([\s\S]*?)<\/span>/gi;
-
-      let match;
-      const servers = [];
-
-      while ((match = serverRegex.exec(pageHtml)) !== null) {
-        const rawName = match[2];
-        const cleanName = rawName.replace(/<[^>]+>/g, "").trim();
-
-        if (match[1] && cleanName) {
-          const idMatch = match[1].match(/id=(\d+)\/(\d+)/);
-          servers.push({
-            embedPath: match[1],
-            name: cleanName,
-            channelNum: idMatch ? idMatch[1] : null,
-            serverNum: idMatch ? idMatch[2] : null,
-          });
-        }
-      }
-
-      console.log(
-        `[SOSPLAY] Found ${servers.length} servers: ${servers.map((s) => s.name).join(", ")}`,
-      );
-
-      const allStreams = [];
-      const allEmbeds = [];
-
-      for (const server of servers) {
-        try {
-          console.log(`[SOSPLAY] Trying server: ${server.name}`);
-
-          const partUrl = `${SOSPLAY_BASE_URL}${server.embedPath}`;
-
-          const partResponse = await fetch(partUrl, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              Referer: channelPageUrl,
-            },
-          });
-
-          const partHtml = await partResponse.text();
-
-          const tyIframeMatch = partHtml.match(/<iframe[^>]+src=["']([^"']+)/i);
-          if (!tyIframeMatch) {
-            console.warn(
-              `[SOSPLAY] No iframe in /part/ page for ${server.name}`,
-            );
-            continue;
-          }
-
-          let tyPageUrl = tyIframeMatch[1];
-          if (tyPageUrl.startsWith("//")) tyPageUrl = "https:" + tyPageUrl;
-          if (tyPageUrl.startsWith("/"))
-            tyPageUrl = SOSPLAY_BASE_URL + tyPageUrl;
-
-          const tyPageResponse = await fetch(tyPageUrl, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              Referer: partUrl,
-            },
-          });
-
-          const tyPageHtml = await tyPageResponse.text();
-
-          const playerIframeMatch = tyPageHtml.match(
-            /<iframe[^>]+src=["']([^"']+)/i,
-          );
-          if (!playerIframeMatch) {
-            console.warn(
-              `[SOSPLAY] No player iframe in ty page for ${server.name}`,
-            );
-            continue;
-          }
-
-          let playerUrl = playerIframeMatch[1];
-          if (playerUrl.startsWith("//")) playerUrl = "https:" + playerUrl;
-
-          try {
-            const playerDomain = new URL(playerUrl).hostname;
-            await addHeadersRule(`*://${playerDomain}/*`, {
-              Referer: tyPageUrl,
-              Origin: new URL(tyPageUrl).origin,
-            });
-          } catch (e) {
-            console.warn(
-              `[SOSPLAY] Could not add pre-fetch DNR rule for ${server.name}:`,
-              e,
-            );
-          }
-
-          const playerResponse = await fetch(playerUrl, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            },
-          });
-
-          const playerHtml = await playerResponse.text();
-
-          let m3u8Url = null;
-          const isHoca =
-            server.name.toLowerCase().includes("hoca") ||
-            playerUrl.includes("hoca");
-
-          if (isHoca) {
-            m3u8Url = decodeHocaStream(playerHtml);
-          } else {
-            m3u8Url = extractM3u8FromPackedHtml(playerHtml);
-          }
-
-          if (m3u8Url) {
-            console.log(
-              `[SOSPLAY] Found stream for ${server.name}: ${m3u8Url}`,
-            );
-
-            await addSosplayHeadersRule(m3u8Url, playerUrl);
-
-            allStreams.push({
-              title: `Sosplay - ${server.name}`,
-              url: m3u8Url,
-              originalUrl: m3u8Url,
-              behaviorHints: { notWebReady: false },
-              _referer: playerUrl,
-              userAgent: STREAM_PROXY_USER_AGENT,
-            });
-          } else {
-            console.warn(
-              `[SOSPLAY] Failed to decode stream for ${server.name}`,
-            );
-          }
-        } catch (serverError) {
-          console.warn(
-            `[SOSPLAY] Error with server ${server.name}:`,
-            serverError.message || serverError,
-          );
-          continue;
-        }
-      }
-
-      if (allStreams.length > 0) {
-        console.log(
-          `[SOSPLAY] Total streams found locally: ${allStreams.length}`,
-        );
-        return { streams: allStreams };
-      }
-
-      // Fallback: Use backend API
-      console.log(
-        "[SOSPLAY] Local extraction failed, falling back to Backend API",
-      );
-      const response = await fetch(
-        `${API_BASE_URL}/api/livetv/stream/tv/${channelId}`,
-      );
-      if (!response.ok)
-        throw new Error(`Backend API error: ${response.status}`);
-
-      const data = await response.json();
-
-      if (data.streams && data.streams.length > 0) {
-        for (const stream of data.streams) {
-          const url = stream.originalUrl || stream.url;
-          if (url && url.startsWith("http")) {
-            await addSosplayHeadersRule(url, stream.referer);
-            stream.url = url;
-            stream.behaviorHints = { notWebReady: false };
-          }
-        }
-      }
-
-      return data;
-    } catch (error) {
-      console.error("[SOSPLAY] Error fetching stream:", error);
-      throw error;
-    }
-  }
-
-  async function getLiveTvStream(channelId, accessKey = null, options = {}) {
-    console.log(`[LIVETV] Fetching stream logic via Extension: ${channelId}`);
-    try {
-      const sourceIndex =
-        Number.isInteger(options?.sourceIndex) && options?.sourceIndex >= 0
-          ? options.sourceIndex
-          : null;
-      const mode = options?.mode === "sources" ? "sources" : "stream";
-      const decodedPath = decodeLiveTvChannelPath(channelId);
-      if (!decodedPath) {
-        throw new Error(`Could not decode channel path for ${channelId}`);
-      }
-
-      const eventUrl = absolutizeLiveTvUrl(
-        decodedPath,
-        LIVETV_BASE_URL,
-        LIVETV_BASE_URL,
-      );
-      if (!eventUrl) {
-        throw new Error(`Could not build event URL for ${channelId}`);
-      }
-
-      const eventPage = await fetchLiveTvText(eventUrl, LIVETV_BASE_URL);
-      if (!eventPage?.html) {
-        throw new Error(`Could not fetch event page ${eventUrl}`);
-      }
-
-      const webplayerEntries = extractLiveTvWebplayerEntries(
-        eventPage.html,
-        eventPage.finalUrl || eventUrl,
-      );
-      console.log(
-        `[LIVETV] Extracted ${webplayerEntries.length} webplayer link(s) locally for ${channelId}`,
-      );
-
-      if (mode === "sources") {
-        return {
-          sources: buildLiveTvSourceOptions(webplayerEntries),
-        };
-      }
-
-      const selectedEntries =
-        sourceIndex === null
-          ? webplayerEntries
-          : webplayerEntries.filter((_, index) => index === sourceIndex);
-
-      if (selectedEntries.length === 0) {
-        return await getBackendIframeSourceStream(
-          channelId,
-          accessKey,
-          "LIVETV",
-          options,
-        );
-      }
-
-      const allStreams = [];
-      const allEmbeds = [];
-
-      for (const entry of selectedEntries) {
-        const candidateUrls = dedupeLiveTvItems(
-          [entry.exportUrl, entry.webplayerUrl].filter(Boolean),
-          (url) => url,
-        );
-
-        let resolved = { streams: [], embeds: [] };
-        for (const candidateUrl of candidateUrls) {
-          resolved = await resolveLiveTvMediaFromUrl(
-            candidateUrl,
-            eventPage.finalUrl || eventUrl,
-            6,
-            new Set(),
-          );
-
-          if (resolved.streams.length > 0 || resolved.embeds.length > 0) {
-            break;
-          }
-        }
-
-        for (const [streamIndex, stream] of resolved.streams.entries()) {
-          await addLiveTvHeadersRule(stream.url);
-          allStreams.push({
-            title:
-              resolved.streams.length > 1
-                ? `${entry.title} ${streamIndex + 1}`
-                : entry.title,
-            url: stream.url,
-            originalUrl: stream.url,
-            behaviorHints: { notWebReady: false },
-            _referer: LIVETV_EMBED_REFERER,
-            userAgent: STREAM_PROXY_USER_AGENT,
-          });
-        }
-
-        for (const [embedIndex, embed] of resolved.embeds.entries()) {
-          await addLiveTvEmbedHeadersRule(embed.url);
-          allEmbeds.push({
-            title:
-              resolved.embeds.length > 1
-                ? `${entry.title} Embed ${embedIndex + 1}`
-                : `${entry.title} Embed`,
-            url: embed.url,
-            originalUrl: embed.url,
-            referer: LIVETV_EMBED_REFERER,
-            behaviorHints: { notWebReady: false },
-            _referer: LIVETV_EMBED_REFERER,
-            userAgent: STREAM_PROXY_USER_AGENT,
-            _isEmbed: true,
-          });
-        }
-      }
-
-      const uniqueStreams = dedupeLiveTvItems(
-        allStreams,
-        (stream) => `${stream.url}__${stream._referer || ""}`,
-      );
-      const uniqueEmbeds = dedupeLiveTvItems(
-        allEmbeds,
-        (embed) => `${embed.url}__${embed._referer || ""}`,
-      );
-
-      if (uniqueStreams.length > 0 || uniqueEmbeds.length > 0) {
-        console.log(
-          `[LIVETV] Resolved ${uniqueStreams.length} direct stream(s) and ${uniqueEmbeds.length} embed(s) locally for ${channelId}`,
-        );
-        return {
-          streams: uniqueStreams.length > 0 ? uniqueStreams : uniqueEmbeds,
-        };
-      }
-
-      console.log(
-        "[LIVETV] Local extraction failed, falling back to Backend API",
-      );
-      return await getBackendIframeSourceStream(
-        channelId,
-        accessKey,
-        "LIVETV",
-        options,
-      );
-    } catch (error) {
-      console.warn(
-        `[LIVETV] Local extraction error for ${channelId}:`,
-        error.message || error,
-      );
-      return await getBackendIframeSourceStream(
-        channelId,
-        accessKey,
-        "LIVETV",
-        options,
-      );
-    }
-  }
-
-  function decodeLiveTvChannelPath(channelId) {
-    try {
-      const encodedPath = String(channelId || "").replace(/^livetv_/, "");
-      const normalized = encodedPath.replace(/-/g, "+").replace(/_/g, "/");
-      const paddingLength = (4 - (normalized.length % 4 || 4)) % 4;
-      return atob(`${normalized}${"=".repeat(paddingLength)}`);
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function absolutizeLiveTvUrl(
-    rawUrl,
-    currentUrl = "",
-    fallbackBase = LIVETV_BASE_URL,
-  ) {
-    if (!rawUrl) return null;
-
-    const normalized = String(rawUrl)
-      .trim()
-      .replace(/&amp;/gi, "&")
-      .replace(/\\u0026/g, "&")
-      .replace(/\\\//g, "/")
-      .replace(/\s+/g, "");
-
-    if (!normalized) return null;
-
-    if (normalized.startsWith("//")) {
-      const protocol = String(currentUrl || fallbackBase).startsWith("http://")
-        ? "http:"
-        : "https:";
-      return `${protocol}${normalized}`;
-    }
-
-    try {
-      return new URL(normalized, currentUrl || fallbackBase).href;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function dedupeLiveTvItems(items, getKey) {
-    const seen = new Set();
-    const deduped = [];
-
-    for (const item of items) {
-      const key = getKey(item);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      deduped.push(item);
-    }
-
-    return deduped;
-  }
-
-  function stripLiveTvHtml(value) {
-    return String(value || "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&amp;/gi, "&")
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
-      .replace(/&#(\d+);/g, (_, code) => {
-        const value = Number.parseInt(code, 10);
-        return Number.isFinite(value) ? String.fromCodePoint(value) : "";
-      })
-      .replace(/&#x([0-9a-f]+);/gi, (_, code) => {
-        const value = Number.parseInt(code, 16);
-        return Number.isFinite(value) ? String.fromCodePoint(value) : "";
-      })
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  function buildLiveTvExportUrl(webplayerUrl, eventUrl = "") {
-    try {
-      const parsed = new URL(webplayerUrl, eventUrl || LIVETV_BASE_URL);
-
-      if (/\/export\/webplayer\.iframe\.php$/i.test(parsed.pathname)) {
-        return parsed.href;
-      }
-
-      if (!/\/webplayer(?:2)?\.php$/i.test(parsed.pathname)) {
-        return parsed.href;
-      }
-
-      let cdnHost = parsed.hostname;
-      if (!cdnHost.startsWith("cdn.")) {
-        const eventHost = new URL(eventUrl || LIVETV_BASE_URL).hostname.replace(
-          /^www\./i,
-          "",
-        );
-        cdnHost = `cdn.${eventHost}`;
-      }
-
-      parsed.protocol = "https:";
-      parsed.hostname = cdnHost;
-      parsed.pathname = "/export/webplayer.iframe.php";
-      return parsed.href;
-    } catch (error) {
-      return webplayerUrl;
-    }
-  }
-
-  function extractLiveTvWebplayerEntries(html, eventUrl) {
-    const entries = [];
-    const rawHtml = String(html || "");
-    const rowPattern = /<table[^>]+class=["']lnktbj["'][\s\S]*?<\/table>/gi;
-
-    for (const rowMatch of rawHtml.matchAll(rowPattern)) {
-      const rowHtml = rowMatch[0];
-      const hrefMatch = rowHtml.match(
-        /href=["']([^"']*\/webplayer(?:2)?\.php[^"']*)["']/i,
-      );
-      if (!hrefMatch) continue;
-
-      const webplayerUrl = absolutizeLiveTvUrl(
-        hrefMatch[1],
-        eventUrl,
-        LIVETV_BASE_URL,
-      );
-      if (!webplayerUrl) continue;
-
-      let streamType = "";
-      try {
-        streamType = new URL(webplayerUrl).searchParams.get("t") || "";
-      } catch (error) {
-        streamType = "";
-      }
-
-      if (streamType.toLowerCase() === "acestream") {
-        continue;
-      }
-
-      const language =
-        stripLiveTvHtml(
-          rowHtml.match(/<img[^>]+title=["']([^"']+)["']/i)?.[1] || "",
-        ) || "Stream";
-      const bitrate = stripLiveTvHtml(
-        rowHtml.match(/class=["']bitrate["'][^>]*>([\s\S]*?)<\/td>/i)?.[1] ||
-          "",
-      );
-      const hoster = stripLiveTvHtml(
-        rowHtml.match(/class=["']lnktyt["'][^>]*>([\s\S]*?)<\/td>/i)?.[1] || "",
-      );
-      const title =
-        [language, hoster, bitrate].filter(Boolean).join(" - ") || language;
-
-      entries.push({
-        title,
-        language,
-        bitrate,
-        hoster,
-        sourceType: streamType,
-        webplayerUrl,
-        exportUrl: buildLiveTvExportUrl(webplayerUrl, eventUrl),
-      });
-    }
-
-    if (entries.length === 0) {
-      for (const hrefMatch of rawHtml.matchAll(
-        /href=["']([^"']*\/webplayer(?:2)?\.php[^"']*)["']/gi,
-      )) {
-        const webplayerUrl = absolutizeLiveTvUrl(
-          hrefMatch[1],
-          eventUrl,
-          LIVETV_BASE_URL,
-        );
-        if (!webplayerUrl) continue;
-
-        entries.push({
-          title: "Stream",
-          language: "",
-          bitrate: "",
-          hoster: "",
-          sourceType: "",
-          webplayerUrl,
-          exportUrl: buildLiveTvExportUrl(webplayerUrl, eventUrl),
-        });
-      }
-    }
-
-    if (entries.length === 0) {
-      const onclickPattern =
-        /show_webplayer\('([^']+)'\s*,\s*'([^']+)'\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*'([^']+)'\)/gi;
-
-      for (const match of rawHtml.matchAll(onclickPattern)) {
-        const [, type, contentId, eventId, linkId, countryId, streamId, lang] =
-          match;
-        if (String(type).toLowerCase() === "acestream") continue;
-
-        const webplayerUrl = absolutizeLiveTvUrl(
-          `/webplayer2.php?t=${encodeURIComponent(type)}&c=${encodeURIComponent(contentId)}&lang=${encodeURIComponent(lang)}&eid=${eventId}&lid=${linkId}&ci=${countryId}&si=${streamId}`,
-          eventUrl,
-          LIVETV_BASE_URL,
-        );
-
-        if (!webplayerUrl) continue;
-
-        entries.push({
-          title: stripLiveTvHtml(type) || "Stream",
-          language: stripLiveTvHtml(lang) || "",
-          bitrate: "",
-          hoster: "",
-          sourceType: stripLiveTvHtml(type) || "",
-          webplayerUrl,
-          exportUrl: buildLiveTvExportUrl(webplayerUrl, eventUrl),
-        });
-      }
-    }
-
-    return dedupeLiveTvItems(
-      entries,
-      (entry) => `${entry.exportUrl}__${entry.webplayerUrl}`,
-    );
-  }
-
-  function buildLiveTvSourceOptions(entries) {
-    return entries.map((entry, index) => ({
-      index,
-      title: entry.title || `Source ${index + 1}`,
-      language: entry.language || "",
-      bitrate: entry.bitrate || "",
-      hoster: entry.hoster || "",
-      sourceType: entry.sourceType || "",
-    }));
-  }
-
-  function shouldIgnoreLiveTvIframeUrl(rawUrl) {
-    const normalizedUrl = String(rawUrl || "").trim();
-    if (!normalizedUrl) {
-      return true;
-    }
-
-    if (/^(?:about:blank|javascript:|data:)/i.test(normalizedUrl)) {
-      return true;
-    }
-
-    try {
-      const parsed = new URL(normalizedUrl, LIVETV_BASE_URL);
-      const hostname = parsed.hostname.toLowerCase();
-      const pathname = parsed.pathname.toLowerCase();
-      const search = parsed.search.toLowerCase();
-      const combined = `${hostname}${pathname}${search}`;
-
-      if (
-        hostname === "ads.livetv882.me" ||
-        hostname.startsWith("ads.") ||
-        hostname.startsWith("ad.")
-      ) {
-        return true;
-      }
-
-      if (pathname.includes("getbanner.php") || search.includes("zone_id=")) {
-        return true;
-      }
-
-      if (
-        /(?:^|[./_-])(banner|ads?|popunder|popup)(?:[./_-]|$)/i.test(combined)
-      ) {
-        return true;
-      }
-    } catch (error) {
-      return false;
-    }
-
-    return false;
-  }
-
-  function shouldTreatLiveTvIframeAsTerminalEmbed(
-    rawUrl,
-    fallbackBase = LIVETV_BASE_URL,
-  ) {
-    const normalizedUrl = String(rawUrl || "").trim();
-    if (!normalizedUrl) {
-      return false;
-    }
-
-    if (/\.(m3u8|mpd)(?:[?#]|$)/i.test(normalizedUrl)) {
-      return false;
-    }
-
-    try {
-      const parsed = new URL(normalizedUrl, fallbackBase || LIVETV_BASE_URL);
-      const fallbackHost = new URL(fallbackBase || LIVETV_BASE_URL).hostname
-        .replace(/^www\./i, "")
-        .toLowerCase();
-      const hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
-
-      if (!hostname || !fallbackHost) {
-        return false;
-      }
-
-      return (
-        hostname !== fallbackHost && !hostname.endsWith(`.${fallbackHost}`)
-      );
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function isLiveTvExportIframePage(rawUrl) {
-    try {
-      const parsed = new URL(rawUrl, LIVETV_BASE_URL);
-      return /\/export\/webplayer\.iframe\.php$/i.test(parsed.pathname);
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function shouldFollowLiveTvIframeForExtraction(iframeUrl, pageUrl) {
-    try {
-      const page = new URL(pageUrl, LIVETV_BASE_URL);
-      if (!isLiveTvExportIframePage(page.href)) {
-        return false;
-      }
-
-      if ((page.searchParams.get("t") || "").toLowerCase() !== "alieztv") {
-        return false;
-      }
-
-      const iframe = new URL(iframeUrl, page.href);
-      const hostname = iframe.hostname.replace(/^www\./i, "").toLowerCase();
-      const pathname = iframe.pathname.toLowerCase();
-
-      return hostname === "emb.apl395.me" && pathname === "/player/live.php";
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function extractLiveTvIframeUrls(html, currentUrl) {
-    const iframeUrls = [];
-    const iframePattern = /<iframe[^>]+src=["']([^"']+)["']/gi;
-
-    for (const match of String(html || "").matchAll(iframePattern)) {
-      const iframeUrl = absolutizeLiveTvUrl(
-        match[1],
-        currentUrl,
-        LIVETV_BASE_URL,
-      );
-      if (iframeUrl && !shouldIgnoreLiveTvIframeUrl(iframeUrl)) {
-        iframeUrls.push(iframeUrl);
-      }
-    }
-
-    return dedupeLiveTvItems(iframeUrls, (url) => url);
-  }
-
-  function extractLiveTvDirectStreams(html, referer) {
-    const streams = [];
-    const cleaned = String(html || "").replace(/\\\//g, "/");
-
-    const addCandidate = (rawUrl, candidateReferer = referer) => {
-      const absoluteUrl = absolutizeLiveTvUrl(
-        rawUrl,
-        candidateReferer,
-        LIVETV_BASE_URL,
-      );
-      if (!absoluteUrl) return;
-      if (!/\.(m3u8|mpd)(?:[?#]|$)/i.test(absoluteUrl)) return;
-      streams.push({ url: absoluteUrl, referer: candidateReferer });
-    };
-
-    const packedStreamUrl = extractM3u8FromPackedHtml(cleaned);
-    if (packedStreamUrl) {
-      addCandidate(packedStreamUrl, referer);
-    }
-
-    const hocaStreamUrl = decodeHocaStream(cleaned);
-    if (hocaStreamUrl) {
-      addCandidate(hocaStreamUrl, referer);
-    }
-
-    for (const match of cleaned.matchAll(
-      /pl\.init\(\s*['"]([^'"]+)['"]\s*\)/gi,
-    )) {
-      addCandidate(match[1], referer);
-    }
-
-    for (const match of cleaned.matchAll(
-      /manifestUrl\s*:\s*['"]([^'"]+)['"]/gi,
-    )) {
-      addCandidate(match[1], referer);
-    }
-
-    for (const match of cleaned.matchAll(
-      /(?:source|file|src)\s*[:=]\s*['"]([^'"]+\.(?:m3u8|mpd)[^'"]*)['"]/gi,
-    )) {
-      addCandidate(match[1], referer);
-    }
-
-    for (const match of cleaned.matchAll(
-      /['"]((?:https?:)?\/\/[^'"]+\.(?:m3u8|mpd)[^'"]*)['"]/gi,
-    )) {
-      addCandidate(match[1], referer);
-    }
-
-    return dedupeLiveTvItems(
-      streams,
-      (stream) => `${stream.url}__${stream.referer || ""}`,
-    );
-  }
-
-  async function addLiveTvHeadersRule(
-    targetUrl,
-    userAgent = STREAM_PROXY_USER_AGENT,
-  ) {
-    try {
-      const url = new URL(targetUrl);
-      const rulePattern = `*://${url.host}${url.pathname}*`;
-
-      await addHeadersRule(rulePattern, {
-        Origin: LIVETV_EMBED_ORIGIN,
-        Referer: LIVETV_EMBED_REFERER,
-        "User-Agent": userAgent || STREAM_PROXY_USER_AGENT,
-      });
-    } catch (error) {
-      console.warn("[LIVETV] Failed to add page headers rule:", error);
-    }
-  }
-
-  async function addLiveTvEmbedHeadersRule(targetUrl) {
-    try {
-      const url = new URL(targetUrl);
-      const rulePattern = `*://${url.host}${url.pathname}*`;
-
-      await addHeadersRule(rulePattern, {
-        Origin: LIVETV_EMBED_ORIGIN,
-        Referer: LIVETV_EMBED_REFERER,
-      });
-    } catch (error) {
-      console.warn("[LIVETV] Failed to add embed headers rule:", error);
-    }
-  }
-
-  async function fetchLiveTvText(url, referer = "") {
-    try {
-      const absoluteUrl = absolutizeLiveTvUrl(url, referer, LIVETV_BASE_URL);
-      if (!absoluteUrl) return null;
-
-      await addLiveTvHeadersRule(absoluteUrl);
-
-      const response = await fetch(absoluteUrl, {
-        method: "GET",
-        headers: {
-          Accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-          "User-Agent": STREAM_PROXY_USER_AGENT,
-        },
-        cache: "no-cache",
-        redirect: "follow",
-      });
-
-      if (!response.ok) {
-        console.warn(
-          `[LIVETV] Fetch failed for ${absoluteUrl}: ${response.status} ${response.statusText}`,
-        );
-        return null;
-      }
-
-      return {
-        html: await response.text(),
-        finalUrl: response.url || absoluteUrl,
-      };
-    } catch (error) {
-      console.warn(`[LIVETV] Fetch error for ${url}:`, error.message || error);
-      return null;
-    }
-  }
-
-  async function resolveLiveTvMediaFromUrl(
-    startUrl,
-    referer,
-    depth = 4,
-    visited = new Set(),
-  ) {
-    const absoluteUrl = absolutizeLiveTvUrl(startUrl, referer, LIVETV_BASE_URL);
-    if (!absoluteUrl || visited.has(absoluteUrl)) {
-      return { streams: [], embeds: [] };
-    }
-
-    visited.add(absoluteUrl);
-
-    if (/\.(m3u8|mpd)(?:[?#]|$)/i.test(absoluteUrl)) {
-      return {
-        streams: [{ url: absoluteUrl, referer: referer || absoluteUrl }],
-        embeds: [],
-      };
-    }
-
-    const page = await fetchLiveTvText(absoluteUrl, referer);
-    if (!page?.html) {
-      return { streams: [], embeds: [] };
-    }
-
-    let streams = extractLiveTvDirectStreams(
-      page.html,
-      page.finalUrl || absoluteUrl,
-    );
-    let embeds = [];
-    const currentPageUrl = page.finalUrl || absoluteUrl;
-    const iframeUrls = extractLiveTvIframeUrls(
-      page.html,
-      page.finalUrl || absoluteUrl,
-    );
-
-    if (depth <= 0) {
-      return {
-        streams,
-        embeds: iframeUrls.map((url) => ({
-          url,
-          referer: LIVETV_EMBED_REFERER,
-        })),
-      };
-    }
-
-    for (const iframeUrl of iframeUrls) {
-      if (!shouldFollowLiveTvIframeForExtraction(iframeUrl, currentPageUrl)) {
-        embeds.push({ url: iframeUrl, referer: LIVETV_EMBED_REFERER });
-        continue;
-      }
-
-      console.log(`[LIVETV] Following iframe locally: ${iframeUrl}`);
-      const nested = await resolveLiveTvMediaFromUrl(
-        iframeUrl,
-        page.finalUrl || absoluteUrl,
-        depth - 1,
-        visited,
-      );
-      streams = streams.concat(nested.streams);
-      embeds = embeds.concat(nested.embeds);
-
-      if (nested.streams.length === 0 && nested.embeds.length === 0) {
-        embeds.push({ url: iframeUrl, referer: LIVETV_EMBED_REFERER });
-      }
-    }
-
-    return {
-      streams: dedupeLiveTvItems(
-        streams,
-        (stream) => `${stream.url}__${stream.referer || ""}`,
-      ),
-      embeds: dedupeLiveTvItems(
-        embeds,
-        (embed) => `${embed.url}__${embed.referer || ""}`,
-      ),
-    };
-  }
-
-  async function addSosplayHeadersRule(
-    urlPattern,
-    customReferer = null,
-    customUserAgent = STREAM_PROXY_USER_AGENT,
-  ) {
-    try {
-      const url = new URL(urlPattern);
-      const pathNoExt = url.pathname.replace(/\.[^/.]+$/, "");
-      const rulePattern = `*://${url.host}${pathNoExt}*`;
-
-      const referer = customReferer || "https://dishtrainer.net/";
-
-      let origin;
-      try {
-        origin = new URL(referer).origin;
-      } catch {
-        origin = "https://dishtrainer.net";
-      }
-
-      const userAgent = customUserAgent || STREAM_PROXY_USER_AGENT;
-
-      await addHeadersRule(rulePattern, {
-        Origin: origin,
-        Referer: referer,
-        "User-Agent": userAgent,
-      });
-    } catch (e) {
-      console.error("[SOSPLAY] Failed to add headers rule:", e);
-    }
+    if (!response.ok)
+      throw new Error(`Backend API error: ${response.status}`);
+    return await response.json();
   }
 
   // === UTILS ===
-
-  function decodeHocaStream(html) {
-    try {
-      const atobMatch = html.match(/atob\(['"]([^'"]+)['"]\)/);
-      if (atobMatch) {
-        try {
-          const decoded = atob(atobMatch[1]);
-          if (decoded.includes(".m3u8")) return decoded;
-        } catch (e) {}
-      }
-
-      const urlArrayMatch = html.match(/return\s*\(\[([^\]]+)\]\.join/);
-      if (urlArrayMatch) {
-        try {
-          const chars = urlArrayMatch[1].match(/"([^"]*)"/g);
-          if (chars) {
-            let url = chars.map((c) => c.replace(/"/g, "")).join("");
-            url = url.replace(/\\\//g, "/");
-            if (url.includes(".m3u8")) return url;
-          }
-        } catch (e) {}
-      }
-
-      const srcMatch = html.match(
-        /(?:source|src|file)\s*[:=]\s*["'](https?:\/\/[^"']+\.m3u8[^"']*)/i,
-      );
-      if (srcMatch) {
-        return srcMatch[1].replace(/\\\//g, "/");
-      }
-
-      const m3u8Match = html.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)/);
-      if (m3u8Match) {
-        return m3u8Match[1].replace(/\\\//g, "/");
-      }
-
-      const packerResult = extractM3u8FromPackedHtml(html);
-      if (packerResult) return packerResult;
-
-      return null;
-    } catch (error) {
-      console.error("[SOSPLAY-HOCA] Error:", error.message || error);
-      return null;
-    }
-  }
 
   /**
    * Dean Edwards Packer decoder (see extractors.js for full documentation).
@@ -4938,28 +6493,170 @@
 
   // DNR Helper
   let ruleIdCounter = 100;
+  // Reserved below the general 100+ allocator; FCTV owns fixed rule 60.
+  const SEEK_PLAYBACK_RULE_ID_MIN = 61;
+  const SEEK_PLAYBACK_RULE_ID_MAX = 99;
+
+  function isSeekPlaybackRuleId(ruleId) {
+    return (
+      Number.isInteger(ruleId) &&
+      ruleId >= SEEK_PLAYBACK_RULE_ID_MIN &&
+      ruleId <= SEEK_PLAYBACK_RULE_ID_MAX
+    );
+  }
 
   async function addUserAgentRule(urlPattern, userAgent) {
     return addHeadersRule(urlPattern, { "User-Agent": userAgent });
   }
 
-  async function addHeadersRule(urlPattern, headers) {
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    const existingIds = new Set(existingRules.map((r) => r.id));
-
-    let id = ruleIdCounter;
-    while (existingIds.has(id)) {
-      id++;
+  // === FCTV (matches): Referer rule + IP-bound local resolver ===============
+  const FCTV_HEADERS_RULE_ID = 60;
+  async function setupFctvHeadersRule(referer) {
+    if (!referer) return false;
+    const ref = referer.endsWith("/") ? referer : referer + "/";
+    let origin;
+    try { origin = new URL(ref).origin; } catch { origin = ref.replace(/\/+$/, ""); }
+    try {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [FCTV_HEADERS_RULE_ID],
+        addRules: [
+          {
+            id: FCTV_HEADERS_RULE_ID,
+            priority: 20,
+            action: {
+              type: "modifyHeaders",
+              requestHeaders: [
+                { header: "Referer", operation: "set", value: ref },
+                { header: "Origin", operation: "set", value: origin },
+                { header: "User-Agent", operation: "set", value: STREAM_PROXY_USER_AGENT },
+              ],
+            },
+            condition: {
+              urlFilter: "/cfall/s",
+              resourceTypes: ["xmlhttprequest", "media", "other"],
+            },
+          },
+        ],
+      });
+      return true;
+    } catch (e) {
+      console.error("[FCTV] Failed to add headers rule:", e);
+      return false;
     }
-    ruleIdCounter = id + 1;
+  }
 
+  const FCTV_API_BASE = "https://apis-data-defra10.tcore131ybdf.ru";
+  const FCTV_TOKEN_KEYSTREAM_HEX =
+    "15764bab80a419c6abdd5518f3db0ea95bb3b9a2e2b519ce5c159af6917e2000c2d680ae30706a3aba1c9c25786c7c28774eecf20450a3cf414ca17f6472798cfa557c7a8705b7861f06e84f827f8a24676eeab77ce504bfc335b79609b9";
+  function fctvRot47(s) {
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      const k = s.charCodeAt(i);
+      out += k < 33 || k > 126 ? s[i] : String.fromCharCode(33 + ((k - 33 + 47) % 94));
+    }
+    return out;
+  }
+  function fctvReadVarint(buf, off) {
+    let result = 0n, shift = 0n, cur = off;
+    while (cur < buf.length) {
+      const b = buf[cur++];
+      result |= BigInt(b & 0x7f) << shift;
+      if ((b & 0x80) === 0) return { value: result, offset: cur };
+      shift += 7n;
+      if (shift > 70n) break;
+    }
+    throw new Error("varint");
+  }
+  function fctvDecode(buf, depth = 0) {
+    const fields = [];
+    let off = 0;
+    while (off < buf.length) {
+      let tag;
+      try { tag = fctvReadVarint(buf, off); } catch { break; }
+      off = tag.offset;
+      const field = Number(tag.value >> 3n);
+      const wt = Number(tag.value & 7n);
+      const e = { field, wireType: wt };
+      if (wt === 0) {
+        const p = fctvReadVarint(buf, off); off = p.offset;
+      } else if (wt === 1) {
+        off += 8;
+      } else if (wt === 2) {
+        const pl = fctvReadVarint(buf, off); off = pl.offset;
+        const len = Number(pl.value);
+        const bytes = buf.subarray(off, off + len);
+        off += len;
+        let text = "";
+        try { text = new TextDecoder().decode(bytes); } catch {}
+        let printable = 0;
+        for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); if ((c >= 32 && c <= 126) || c >= 160) printable++; }
+        if (text && printable / text.length > 0.7) e.value = text;
+        if (depth < 8 && bytes.length) { try { const ch = fctvDecode(bytes, depth + 1); if (ch.length) e.children = ch; } catch {} }
+      } else if (wt === 5) {
+        off += 4;
+      } else break;
+      fields.push(e);
+    }
+    return fields;
+  }
+  const fctvField = (fields, f) => (fields || []).find((e) => e.field === f);
+  const fctvChildren = (fields, f) => { const x = fctvField(fields, f); return (x && x.children) || []; };
+  function fctvMakeToken(rbSession) {
+    const ks = [];
+    for (let i = 0; i < FCTV_TOKEN_KEYSTREAM_HEX.length; i += 2) ks.push(parseInt(FCTV_TOKEN_KEYSTREAM_HEX.substr(i, 2), 16));
+    const pt = new TextEncoder().encode(rbSession);
+    const n = Math.min(pt.length, ks.length);
+    let bin = "";
+    for (let i = 0; i < n; i++) bin += String.fromCharCode(pt[i] ^ ks[i]);
+    return encodeURIComponent(btoa(bin) + "a");
+  }
+  async function resolveFctvStream(opts) {
+    const { matchId, streamId, siteType, sportType, referer, apiBase } = opts || {};
+    if (!matchId || !streamId) return null;
+    const base = apiBase || FCTV_API_BASE;
+    const u = new URL(base + "/api/stream/detail");
+    u.searchParams.set("streamId", String(streamId));
+    u.searchParams.set("siteType", String(siteType || 2001));
+    u.searchParams.set("continent", "EU");
+    u.searchParams.set("country", "FR");
+    u.searchParams.set("digit", "seth");
+    u.searchParams.set("matchId", String(matchId));
+    u.searchParams.set("sportType", String(sportType || 1));
+    const resp = await fetch(u.toString(), { headers: { Accept: "*/*" } });
+    const rbSession = resp.headers.get("rb-session");
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    const root = fctvDecode(buf);
+    const body = fctvChildren(root, 10);
+    const inner = fctvChildren(body, 2).length ? fctvChildren(body, 2) : body;
+    const maskedField = fctvField(inner, 4);
+    const masked = maskedField && typeof maskedField.value === "string" ? maskedField.value : "";
+    if (!masked || !rbSession) return null;
+    let parsed;
+    try { parsed = new URL(fctvRot47(masked).slice(8)); } catch { return null; }
+    const token = fctvMakeToken(rbSession);
+    if (referer) await setupFctvHeadersRule(referer);
+    return `${parsed.origin}/token-${token}${parsed.pathname}${parsed.search}`;
+  }
+
+  function createHeadersRule(
+  id,
+  urlPattern,
+  headers,
+  removeHeaders = [],
+  requestDomains = [],
+) {
     const requestHeaders = Object.entries(headers).map(([header, value]) => ({
       header: header,
       operation: "set",
       value: value,
     }));
+    // Retirer un en-tete que le navigateur impose : `fetch` refuse de les
+    // effacer, seul declarativeNetRequest le peut. Voir fetchIpBoundPage.
+    for (const header of removeHeaders) {
+      requestHeaders.push({ header: header, operation: "remove" });
+    }
 
-    const rule = {
+    return {
       id: id,
       priority: 10,
       action: {
@@ -4978,14 +6675,109 @@
         ],
       },
     };
+  }
+
+  async function addHeadersRule(
+  urlPattern,
+  headers,
+  removeHeaders = [],
+  requestDomains = [],
+) {
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    const existingIds = new Set(existingRules.map((r) => r.id));
+
+    let id = ruleIdCounter;
+    while (existingIds.has(id)) {
+      id++;
+    }
+    ruleIdCounter = id + 1;
+
+    const rule = createHeadersRule(
+      id,
+      urlPattern,
+      headers,
+      removeHeaders,
+      requestDomains,
+    );
 
     try {
       await chrome.declarativeNetRequest.updateDynamicRules({
         addRules: [rule],
       });
+      return id;
     } catch (e) {
       console.error("Failed to add dynamic rule:", e);
+      return null;
     }
+  }
+
+  async function removeHeadersRule(ruleId) {
+    if (!Number.isInteger(ruleId)) return;
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [ruleId],
+    });
+  }
+
+  async function persistSeekPlaybackRule(headerInfo) {
+    try {
+      const existingRules =
+        await chrome.declarativeNetRequest.getDynamicRules();
+      const seekRules = existingRules.filter((rule) =>
+        isSeekPlaybackRuleId(rule.id),
+      );
+      const matchingRule = seekRules.find(
+        (rule) => rule.condition?.urlFilter === headerInfo.domainPattern,
+      );
+      const usedIds = new Set(seekRules.map((rule) => rule.id));
+      let ruleId = matchingRule?.id ?? null;
+
+      if (ruleId === null) {
+        for (
+          let candidate = SEEK_PLAYBACK_RULE_ID_MIN;
+          candidate <= SEEK_PLAYBACK_RULE_ID_MAX;
+          candidate += 1
+        ) {
+          if (!usedIds.has(candidate)) {
+            ruleId = candidate;
+            break;
+          }
+        }
+      }
+
+      if (ruleId === null) {
+        ruleId = SEEK_PLAYBACK_RULE_ID_MIN;
+        console.warn(
+          "[NEXUS] Seek playback rule capacity reached; evicting oldest slot",
+        );
+      }
+
+      const rule = createHeadersRule(
+        ruleId,
+        headerInfo.domainPattern,
+        headerInfo.headers,
+      );
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [ruleId],
+        addRules: [rule],
+      });
+      return ruleId;
+    } catch (e) {
+      console.error("Failed to persist Seek playback rule:", e);
+      return null;
+    }
+  }
+
+  let seekPlaybackRuleUpdateQueue = Promise.resolve();
+
+  function replaceSeekPlaybackRule(headerInfo) {
+    const update = seekPlaybackRuleUpdateQueue.then(() =>
+      persistSeekPlaybackRule(headerInfo),
+    );
+    seekPlaybackRuleUpdateQueue = update.then(
+      () => undefined,
+      () => undefined,
+    );
+    return update;
   }
   // --- END extension/Chrome/background.js ---
 
@@ -5065,6 +6857,13 @@
       return result.success
         ? result.data
         : { success: false, error: result.error || "Configuration impossible" };
+    };
+
+    pageWindow.movixKisskhFallback = async function movixKisskhFallback(request) {
+      const result = await requestAction("KISSKH_FALLBACK", request);
+      return result.success
+        ? result.data
+        : { success: false, code: "unsupported_transport" };
     };
 
     pageWindow.dispatchEvent(new CustomEvent("movix-extension-loaded"));

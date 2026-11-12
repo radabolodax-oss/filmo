@@ -1,7 +1,11 @@
 const range = (start: number, end: number): number[] => Array.from({ length: end - start + 1 }, (_, idx) => start + idx);
 
+const AVATAR_BASE = typeof window !== 'undefined' && (window.location.hostname === 'appassets.androidplatform.net' || typeof (window as any).ReactNativeWebView !== 'undefined')
+    ? 'https://dawgerwebsite.vercel.app'
+    : '';
+
 const buildAvatarPaths = (folder: string, prefix: string, numbers: number[]): string[] =>
-    numbers.map((num) => `/avatars/${folder}/${prefix}_${num}.png`);
+    numbers.map((num) => `${AVATAR_BASE}/avatars/${folder}/${prefix}_${num}.png`);
 
 const disney = buildAvatarPaths('disney', 'disney_avatar', range(1, 53).filter((n) => n !== 16));
 const disneyChannel = buildAvatarPaths('disney_channel', 'disneychannel_avatar', range(1, 37));

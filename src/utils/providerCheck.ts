@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { buildProxyUrl } from '../config/runtime';
+
+export const FREMBED_BASE = 'https://frembed.uno';
 
 interface Provider {
   id: string;
@@ -10,7 +13,7 @@ const PROVIDERS = {
   FREMBED: {
     id: 'frembed',
     name: 'Frembed',
-    checkUrl: 'https://frembed.click/api/public/v1'
+    checkUrl: `${FREMBED_BASE}/api/public/v1`
   },
   STREAMTAPE: {
     id: 'streamtape',
@@ -18,6 +21,39 @@ const PROVIDERS = {
     checkUrl: 'https://api.streamtape.com'
   }
 };
+
+export function isFrembedResultAvailable(data: any): boolean {
+  if (!data || data.status !== 200) return false;
+  const r = data.result;
+  if (!r || typeof r !== 'object') return false;
+  const count = r.totalItems ?? r.total ?? (Array.isArray(r.items) ? r.items.length : 0);
+  return Number(count) > 0;
+}
+
+export async function resolveFrembedPlayerUrl(
+  tmdbId: string,
+  mediaType: 'movie' | 'tv',
+  season?: number | string,
+  episode?: number | string
+): Promise<string> {
+  const qs = mediaType === 'tv' && season != null && episode != null ? `?sa=${season}&epi=${episode}` : '';
+  const fallback =
+    mediaType === 'movie'
+      ? `${FREMBED_BASE}/embed/movie/${tmdbId}`
+      : `${FREMBED_BASE}/embed/serie/${tmdbId}${qs}`;
+  try {
+    const apiPath =
+      mediaType === 'movie'
+        ? `/api/frembed/movie/${tmdbId}`
+        : `/api/frembed/tv/${tmdbId}${qs}`;
+    const res = await axios.get(buildProxyUrl(apiPath), { timeout: 5500 });
+    const resolved = res?.data?.embedUrl;
+    if (typeof resolved === 'string' && resolved.startsWith('http')) {
+      return resolved;
+    }
+  } catch {}
+  return fallback;
+}
 
 export const checkContentAvailability = async (contentId: number, mediaType: 'movie' | 'tv') => {
   const availabilityChecks = await Promise.allSettled([
@@ -42,8 +78,8 @@ const checkFrembedAvailability = async (contentId: number, mediaType: 'movie' | 
       ? `${PROVIDERS.FREMBED.checkUrl}/movies/${contentId}`
       : `${PROVIDERS.FREMBED.checkUrl}/tv/${contentId}`;
 
-    const response = await axios.get(endpoint);
-    return response.data.status === 200 && !!response.data.result;
+    const response = await axios.get(endpoint, { timeout: 3500 });
+    return isFrembedResultAvailable(response.data);
   } catch (error) {
     console.error(`Error checking Frembed availability:`, error);
     return false;
@@ -59,4 +95,4 @@ const checkStreamtapeAvailability = async (contentId: number, mediaType: 'movie'
     console.error(`Error checking Streamtape availability:`, error);
     return false;
   }
-}; 
+};

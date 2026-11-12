@@ -4,6 +4,8 @@ import { ChevronRight } from 'lucide-react';
 import ReactCountryFlag from 'react-country-flag';
 import { Select, SelectTrigger, SelectContent, SelectItem } from '@/components/ui/select';
 import { PinButton } from './ui/PinButton';
+import { OledSettingsSection } from './OledSettingsSection';
+import { DEFAULT_CUSTOM_OLED, saveCustomOled, type OledMode } from '../utils/playerVisualPrefs';
 import { sortHostersByPriority } from '../utils/sourceAutoSelect';
 import { detectHoster } from '../utils/hosterRegistry';
 import {
@@ -29,6 +31,7 @@ import type {
  */
 const SOURCE_MAIN_TO_TOP_LEVEL: Record<string, TopLevelSourceId> = {
   webflix_main: 'webflix',
+  miaw_main: 'miaw',
   moviez_main: 'moviez',
   vidzy_main: 'vidzy',
   darkino_main: 'darkino',
@@ -98,6 +101,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
     showFstreamMenu,
     showWiflixMenu,
     showWebflixMenu,
+    showMiawMenu,
     showMoviezMenu,
     showVidzyMenu,
     showJ1fMenu,
@@ -111,6 +115,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
     fstreamSources,
     wiflixSources,
     webflixSources,
+    miawSources,
     moviezSources,
     vidzySources,
     j1fSources,
@@ -187,6 +192,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
     zoomState,
     resetZoom,
     priorityCategory,
+    customSourcesContent,
   } = props;
 
   const category: PriorityCategory = priorityCategory === 'anime' ? 'anime' : 'moviesTv';
@@ -359,13 +365,13 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
         top: 0,
         left: 0,
         bottom: 0,
-        maxWidth: '90vw'
+        maxWidth: '90%'
       }}
-      className="bg-black/95 z-[10002] flex flex-col border-r border-gray-800 shadow-2xl"
+      className="bg-black/95 z-[20005] flex flex-col border-r border-gray-800 shadow-2xl overflow-hidden"
     >
-            <div className="flex flex-col border-b border-gray-800 mb-4">
-              <div className="flex justify-between items-center mb-3 px-4 pt-4">
-                <h3 className="text-white font-medium text-lg">{t('watch.settingsTitle')}</h3>
+            <div className="flex flex-col border-b border-gray-800 mb-1 sm:mb-4 shrink-0">
+              <div className="flex justify-between items-center mb-1 sm:mb-3 px-3 pt-2 sm:px-4 sm:pt-4">
+                <h3 className="text-white font-medium text-sm sm:text-lg truncate">{t('watch.settingsTitle')}</h3>
                 <button
                   onClick={() => setShowSettings(false)}
                   className="text-white hover:text-red-600 transition-colors"
@@ -379,7 +385,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
               {/* Updated Tab Button Container with Horizontal Scrolling */}
               <div className="relative border-b border-gray-700/60">
                 {/* Scroll Hint for Mobile */}
-                <div className="md:hidden text-xs text-gray-400 text-center py-1 bg-gray-800/50">
+                <div className="md:hidden text-[10px] text-gray-400 text-center py-0.5 bg-gray-800/50">
                   {t('watch.swipeForMore')}
                 </div>
 
@@ -397,15 +403,15 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
 
                   {/* Right Scroll Indicator */}
                   <div className="absolute right-0 top-0 bottom-0 w-4 bg-gradient-to-l from-gray-900 to-transparent pointer-events-none z-10 md:hidden" />
-                  {/* Only show Quality tab if not in anime HLS mode */}
-                  {!(isAnime && tvShowId && src.includes('.m3u8')) && (
+                  {/* Show Sources tab on Movies/TV and whenever customSourcesContent (Anime) is provided */}
+                  {(Boolean(customSourcesContent) || !(isAnime && tvShowId && src.includes('.m3u8'))) && (
                     <motion.button
                       onClick={() => setSettingsTab('quality')}
                       className={`relative py-2 px-3 text-sm font-medium rounded-t-md transition-colors duration-200 ease-out flex-shrink-0 min-w-max ${settingsTab === 'quality' ? 'text-white' : 'text-gray-400 hover:text-gray-200'
                         }`}
                       whileTap={{ scale: 0.97 }}
                     >
-                      {t('watch.qualityTab')}
+                      {t('watch.sources')}
                       {settingsTab === 'quality' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />}
                     </motion.button>
                   )}
@@ -493,7 +499,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4" data-lenis-prevent>
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 sm:p-4" data-lenis-prevent>
               <AnimatePresence mode="wait">
                 {settingsTab === 'quality' && (
                   <motion.div
@@ -507,14 +513,20 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                     data-source-menu
                     onFocusCapture={handleSourceMenuFocusCapture}
                   >
+                    {customSourcesContent && (
+                      <div className={sourceGroups.length > 0 ? 'mb-6' : ''}>
+                        {customSourcesContent}
+                      </div>
+                    )}
                     {/* Sources HLS d'abord */}
                     {sourceGroups.map((group, groupIndex) => (
                       <div key={`group_${groupIndex}`} className="mb-6">
                         <h4 className="text-gray-400 text-xs uppercase tracking-wider mb-2 px-2">{group.title}</h4>
 
                         {group.sources.map(source => {
-                          // Skip rendering individual VOSTFR sources here, they are handled in the dropdown
-                          if (source.type === 'vostfr') return null;
+                          // Skip rendering individual VOSTFR sources here, they are handled in the dropdown —
+                          // sauf Wavewatch qui est un lecteur autonome (bouton top-level dédié).
+                          if (source.type === 'vostfr' && source.id !== 'wavewatch') return null;
 
                           let isActive = false;
                           // Updated isActive logic for HLS sources
@@ -530,7 +542,9 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                           } else if (source.type === 'm3u8') { // Added check for AdFree M3U8
                             isActive = src === source.url;
                           } else if (source.type === 'webflix_main') {
-                            isActive = !!(webflixSources && webflixSources.some((ws: any) => ws.url === embedUrl));
+                            isActive = !!(webflixSources && webflixSources.some((ws: any) => ws.url === embedUrl || (Boolean(src) && ws.directUrl === src)));
+                          } else if (source.type === 'miaw_main') {
+                            isActive = !!(miawSources && miawSources.some((ms: any) => ms.url === embedUrl || (Boolean(src) && ms.directUrl === src)));
                           } else if (source.type === 'moviez_main') {
                             isActive = !!(moviezSources && moviezSources.some((ms: any) => ms.url === embedUrl));
                           } else if (source.type === 'vidzy_main') {
@@ -550,7 +564,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                           // `nexus_main` est exclu (agrégat ambigu) et le pin ne s'affiche que
                           // pour la catégorie `moviesTv` (langue anime gérée dans WatchAnime).
                           const topLevelForPin: TopLevelSourceId | null = category === 'moviesTv'
-                            ? (SOURCE_MAIN_TO_TOP_LEVEL[source.type] ?? null)
+                            ? (source.id === 'wavewatch' ? 'wavewatch' : (SOURCE_MAIN_TO_TOP_LEVEL[source.type] ?? null))
                             : null;
                           return (
                             <React.Fragment key={source.id}>
@@ -573,20 +587,22 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                     {group.type === 'hls' && (source.type === 'mp4' || source.type === 'm3u8') && renderSourceQualityMeta(source.url, isActive, source.quality, source.label)}
                                   </div>
                                   <div className="ml-3 flex items-center gap-2">
-                                    {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'webflix_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main') && (
+                                    {(source.type === 'darkino_main' || source.type === 'omega_main' || source.type === 'multi_main' || source.type === 'fstream_main' || source.type === 'wiflix_main' || source.type === 'webflix_main' || source.type === 'miaw_main' || source.type === 'moviez_main' || source.type === 'vidzy_main' || source.type === 'j1f_main' || source.type === 'nexus_main' || source.type === 'rivestream_main' || source.type === 'viper_main' || source.type === 'vox_main' || source.type === 'vostfr_main') && (
                                       <ChevronRight className={`w-4 h-4 transition-transform ${(source.type === 'darkino_main' && showDarkinoMenu) ||
                                         (source.type === 'omega_main' && showOmegaMenu) ||
                                         (source.type === 'multi_main' && showCoflixMenu) ||
                                         (source.type === 'fstream_main' && showFstreamMenu) ||
                                         (source.type === 'wiflix_main' && showWiflixMenu) ||
-                                    (source.type === 'webflix_main' && showWebflixMenu) ||
+                                        (source.type === 'webflix_main' && showWebflixMenu) ||
+                                        (source.type === 'miaw_main' && showMiawMenu) ||
                                         (source.type === 'moviez_main' && showMoviezMenu) ||
                                         (source.type === 'vidzy_main' && showVidzyMenu) ||
                                         (source.type === 'j1f_main' && showJ1fMenu) ||
                                         (source.type === 'nexus_main' && showNexusMenu) ||
                                         (source.type === 'rivestream_main' && showRivestreamMenu) ||
                                         (source.type === 'viper_main' && showViperMenu) ||
-                                        (source.type === 'vox_main' && showVoxMenu)
+                                        (source.type === 'vox_main' && showVoxMenu) ||
+                                        (source.type === 'vostfr_main' && showVostfrMenu)
                                         ? 'rotate-90' : ''}`}
                                       />
                                     )}
@@ -998,7 +1014,7 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                                   </div>
                                                   {catSources.map((mSource: any, index: number) => {
                                                     const globalIndex = webflixSources.findIndex((s: any) => s.url === mSource.url);
-                                                    const isMActive = onlyQualityMenu && embedType === 'webflix' && embedUrl === mSource.url;
+                                                    const isMActive = (embedType === 'webflix' && embedUrl === mSource.url) || (Boolean(src) && mSource.directUrl === src);
                                                     return (
                                                       <div key={`webflix_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
                                                         <motion.button
@@ -1032,7 +1048,72 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                     </AnimatePresence>
                                   )}
                                   
-                                  {/* Menu déroulant Moviez */}
+                                    {/* Menu déroulant Miaw */}
+                                    {source.type === 'miaw_main' && (
+                                      <AnimatePresence>
+                                        {showMiawMenu && (
+                                          <motion.div
+                                            initial={{ opacity: 0, scale: 0.95, transformOrigin: "top" }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.95 }}
+                                            transition={{ duration: 0.2, ease: "easeOut" }}
+                                            className="ml-4 pl-2 border-l-2 border-indigo-500 mb-2"
+                                          >
+                                            {miawSources && miawSources.length > 0 && (() => {
+                                              const sourcesByCategory = miawSources.reduce((acc: any, s: any) => {
+                                                const cat = s.category || 'VF';
+                                                if (!acc[cat]) acc[cat] = [];
+                                                acc[cat].push(s);
+                                                return acc;
+                                              }, {} as Record<string, any[]>);
+
+                                              const categoryOrder = [
+                                                { key: 'VF', label: t('watch.french'), flagCode: 'FR' },
+                                                { key: 'VOSTFR', label: t('watch.voSubtitledFr'), flagCode: 'GB' }
+                                              ];
+
+                                              return categoryOrder.map((cat) => {
+                                                const catSources = sourcesByCategory[cat.key];
+                                                if (!catSources || catSources.length === 0) return null;
+                                                return (
+                                                  <div key={`miaw_cat_${cat.key}`} className="mb-3">
+                                                    <div className="flex items-center gap-2 mb-2 px-2">
+                                                      <span className="text-lg"><ReactCountryFlag countryCode={cat.flagCode} svg style={{ width: '1.2em', height: '1.2em', borderRadius: '2px' }} /></span>
+                                                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                                        {cat.label} ({catSources.length})
+                                                      </span>
+                                                    </div>
+                                                    {catSources.map((mSource: any, index: number) => {
+                                                      const globalIndex = miawSources.findIndex((s: any) => s.url === mSource.url);
+                                                      const isMActive = (embedType === 'miaw' && embedUrl === mSource.url) || (Boolean(src) && mSource.directUrl === src);
+                                                      return (
+                                                        <div key={`miaw_${cat.key}_${index}`} className="mb-1 ml-4 flex items-stretch gap-2">
+                                                          <motion.button
+                                                            initial={{ opacity: 0, x: -20 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ duration: 0.2, delay: index * 0.03 }}
+                                                            onClick={() => handleSourceChange('miaw', `miaw_${globalIndex}`, mSource.url)}
+                                                            className={`w-full flex-1 px-4 py-2 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center bg-gray-900/40 text-gray-300 ${isMActive ? 'ring-2 ring-indigo-500 bg-gray-800/80' : ''}`}
+                                                          >
+                                                            <span>{mSource.label}</span>
+                                                            <div className="flex items-center gap-2">
+                                                              <span className="text-xs text-gray-500">{mSource.category}</span>
+                                                              {isMActive && <span className="text-xs px-2 py-1 bg-indigo-600 text-white rounded-full">{t('watch.inProgress')}</span>}
+                                                            </div>
+                                                          </motion.button>
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                );
+                                              }).filter(Boolean);
+                                            })()}
+                                          </motion.div>
+                                        )}
+                                      </AnimatePresence>
+                                    )}
+
+                                    {/* Menu déroulant Moviez */}
                               {source.type === 'moviez_main' && (
                                 <AnimatePresence>
                                   {showMoviezMenu && (
@@ -1325,11 +1406,11 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                       className="ml-4 pl-2 border-l-2 border-gray-700 mb-2"
                                     >
                                       {[
-                                        { id: 'peachify', label: 'Peachify' },
-                                        { id: 'vostfr', label: 'Videasy' },
-                                        { id: 'vidlink', label: 'Vidlink' },
-                                        { id: 'vidsrccc', label: 'Vidsrc.io' },
-                                        { id: 'vidsrcwtf1', label: 'Vidsrc.wtf 1' }
+                                        { id: 'vidlink', label: 'Vidlink (VOSTFR)' },
+                                        { id: 'vostfr', label: 'Videasy (VOSTFR)' },
+                                        { id: 'vidsrcwtf1', label: 'Viduki (VOSTFR)' },
+                                        { id: 'vidsrccc', label: 'Vidsrc.io (VOSTFR)' },
+                                        { id: 'peachify', label: 'Peachify (VOSTFR - Secours)' }
                                       ].map((vostfrSource, index) => {
                                         // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
                                         // (épisode spécial / Spéciaux TMDB) tombe dans le fallback '#' qui fait
@@ -1338,14 +1419,14 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                           vostfrSource.id === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
                                             vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
                                               vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/movie?tmdb=${movieId}` :
-                                                vostfrSource.id === 'vostfr' ? `https://player.videasy.net/movie/${movieId}` :
-                                                  `https://vidsrc.wtf/api/1/movie/?id=${movieId}` :
+                                                vostfrSource.id === 'vostfr' ? `https://player.videasy.to/movie/${movieId}` :
+                                                  `https://viduki.net/api/1/movie/?id=${movieId}` :
                                           (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
                                             vostfrSource.id === 'peachify' ? `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626` :
                                               vostfrSource.id === 'vidlink' ? `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                                 vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}` :
-                                                  vostfrSource.id === 'vostfr' ? `https://player.videasy.net/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                                    `https://vidsrc.wtf/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
+                                                  vostfrSource.id === 'vostfr' ? `https://player.videasy.to/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                                    `https://viduki.net/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
                                             '#'; // Fallback if neither movie nor TV info is present
 
                                         // Active state check for VOSTFR sources in main menu
@@ -2770,181 +2851,19 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
 
                 {/* Video OLED Tab Content */}
                 {settingsTab === 'oled' && (
-                  <motion.div
-                    key="oled"
-                    initial={{ opacity: 0, x: 50 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -50 }}
-                    transition={{ duration: 0.25 }}
-                    className="pr-2 space-y-3"
-                  >
-                    <div className="mb-2">
-                      <h3 className="text-base font-semibold text-white mb-1">{t('watch.oledTitle')}</h3>
-                      <p className="text-xs text-gray-400 mb-3">{t('watch.oledDesc')}</p>
-                    </div>
-
-                    {/* Off */}
-                    <button
-                      onClick={() => handleVideoOledChange('off')}
-                      className={`w-full px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center transition-colors ${videoOledMode === 'off' ? 'bg-gray-800 border-l-4 border-red-600 pl-3' : 'bg-gray-900/60 text-white'}`}
-                    >
-                      <div className="flex flex-col">
-                        <span className={videoOledMode === 'off' ? 'text-red-500 font-medium' : 'text-white'}>{t('watch.oledOff')}</span>
-                        <span className="text-xs text-gray-500">{t('watch.oledOffDesc')}</span>
-                      </div>
-                      {videoOledMode === 'off' && <span className="text-xs px-2 py-1 bg-red-600 text-white rounded-full">{t('watch.active')}</span>}
-                    </button>
-
-                    {/* Natural OLED */}
-                    <button
-                      onClick={() => handleVideoOledChange('natural')}
-                      className={`w-full px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center transition-colors ${videoOledMode === 'natural' ? 'bg-gray-800 border-l-4 border-emerald-600 pl-3' : 'bg-gray-900/60 text-white'}`}
-                    >
-                      <div className="flex flex-col">
-                        <span className={videoOledMode === 'natural' ? 'text-emerald-400 font-medium' : 'text-white'}>{t('watch.oledNatural')}</span>
-                        <span className="text-xs text-gray-500">{t('watch.oledNaturalDesc')}</span>
-                      </div>
-                      {videoOledMode === 'natural' && <span className="text-xs px-2 py-1 bg-emerald-600 text-white rounded-full">{t('watch.active')}</span>}
-                    </button>
-
-                    {/* Cinema OLED */}
-                    <button
-                      onClick={() => handleVideoOledChange('cinema')}
-                      className={`w-full px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center transition-colors ${videoOledMode === 'cinema' ? 'bg-gray-800 border-l-4 border-amber-600 pl-3' : 'bg-gray-900/60 text-white'}`}
-                    >
-                      <div className="flex flex-col">
-                        <span className={videoOledMode === 'cinema' ? 'text-amber-400 font-medium' : 'text-white'}>{t('watch.oledCinema')}</span>
-                        <span className="text-xs text-gray-500">{t('watch.oledCinemaDesc')}</span>
-                      </div>
-                      {videoOledMode === 'cinema' && <span className="text-xs px-2 py-1 bg-amber-600 text-white rounded-full">{t('watch.active')}</span>}
-                    </button>
-
-                    {/* Vivid OLED */}
-                    <button
-                      onClick={() => handleVideoOledChange('vivid')}
-                      className={`w-full px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center transition-colors ${videoOledMode === 'vivid' ? 'bg-gray-800 border-l-4 border-pink-600 pl-3' : 'bg-gray-900/60 text-white'}`}
-                    >
-                      <div className="flex flex-col">
-                        <span className={videoOledMode === 'vivid' ? 'text-pink-400 font-medium' : 'text-white'}>{t('watch.oledVivid')}</span>
-                        <span className="text-xs text-gray-500">{t('watch.oledVividDesc')}</span>
-                      </div>
-                      {videoOledMode === 'vivid' && <span className="text-xs px-2 py-1 bg-pink-600 text-white rounded-full">{t('watch.active')}</span>}
-                    </button>
-
-                    {/* Custom OLED */}
-                    <button
-                      onClick={() => handleVideoOledChange('custom')}
-                      className={`w-full px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg flex justify-between items-center transition-colors ${videoOledMode === 'custom' ? 'bg-gray-800 border-l-4 border-cyan-600 pl-3' : 'bg-gray-900/60 text-white'}`}
-                    >
-                      <div className="flex flex-col">
-                        <span className={videoOledMode === 'custom' ? 'text-cyan-400 font-medium' : 'text-white'}>{t('watch.oledCustom')}</span>
-                        <span className="text-xs text-gray-500">{t('watch.oledCustomDesc')}</span>
-                      </div>
-                      {videoOledMode === 'custom' && <span className="text-xs px-2 py-1 bg-cyan-600 text-white rounded-full">{t('watch.active')}</span>}
-                    </button>
-
-                    {/* Custom OLED Sliders */}
-                    {videoOledMode === 'custom' && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="mt-3 p-4 bg-gray-900/80 rounded-xl border border-cyan-600/30 space-y-4"
-                      >
-                        {/* Contrast */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs text-gray-300">{t('watch.contrastLabel')}</span>
-                            <span className="text-xs text-cyan-400 font-mono">{(customOled.contrast ?? 1).toFixed(2)}</span>
-                          </div>
-                          <input type="range" min="0.5" max="2" step="0.01" value={customOled.contrast ?? 1}
-                            onChange={(e) => handleCustomOledChange('contrast', parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                            style={{ background: `linear-gradient(to right, #06b6d4 0%, #06b6d4 ${(((customOled.contrast ?? 1) - 0.5) / 1.5) * 100}%, #374151 ${(((customOled.contrast ?? 1) - 0.5) / 1.5) * 100}%, #374151 100%)` }}
-                          />
-                          <div className="flex justify-between text-[10px] text-gray-500 mt-0.5"><span>0.50</span><span>1.00</span><span>2.00</span></div>
-                        </div>
-
-                        {/* Saturation */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs text-gray-300">{t('watch.saturationLabel')}</span>
-                            <span className="text-xs text-cyan-400 font-mono">{(customOled.saturate ?? 1).toFixed(2)}</span>
-                          </div>
-                          <input type="range" min="0" max="3" step="0.01" value={customOled.saturate ?? 1}
-                            onChange={(e) => handleCustomOledChange('saturate', parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                            style={{ background: `linear-gradient(to right, #06b6d4 0%, #06b6d4 ${((customOled.saturate ?? 1) / 3) * 100}%, #374151 ${((customOled.saturate ?? 1) / 3) * 100}%, #374151 100%)` }}
-                          />
-                          <div className="flex justify-between text-[10px] text-gray-500 mt-0.5"><span>{t('watch.bwLabel')}</span><span>{t('watch.normalLabel')}</span><span>3.00</span></div>
-                        </div>
-
-                        {/* Brightness */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs text-gray-300">{t('watch.brightnessLabel')}</span>
-                            <span className="text-xs text-cyan-400 font-mono">{(customOled.brightness ?? 1).toFixed(2)}</span>
-                          </div>
-                          <input type="range" min="0.3" max="1.8" step="0.01" value={customOled.brightness ?? 1}
-                            onChange={(e) => handleCustomOledChange('brightness', parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                            style={{ background: `linear-gradient(to right, #06b6d4 0%, #06b6d4 ${(((customOled.brightness ?? 1) - 0.3) / 1.5) * 100}%, #374151 ${(((customOled.brightness ?? 1) - 0.3) / 1.5) * 100}%, #374151 100%)` }}
-                          />
-                          <div className="flex justify-between text-[10px] text-gray-500 mt-0.5"><span>{t('watch.darkLabel')}</span><span>{t('watch.normalLabel')}</span><span>{t('watch.brightLabel')}</span></div>
-                        </div>
-
-                        {/* Sepia */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs text-gray-300">{t('watch.sepiaLabel')}</span>
-                            <span className="text-xs text-cyan-400 font-mono">{(customOled.sepia ?? 0).toFixed(2)}</span>
-                          </div>
-                          <input type="range" min="0" max="1" step="0.01" value={customOled.sepia ?? 0}
-                            onChange={(e) => handleCustomOledChange('sepia', parseFloat(e.target.value))}
-                            className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                            style={{ background: `linear-gradient(to right, #06b6d4 0%, #06b6d4 ${(customOled.sepia ?? 0) * 100}%, #374151 ${(customOled.sepia ?? 0) * 100}%, #374151 100%)` }}
-                          />
-                          <div className="flex justify-between text-[10px] text-gray-500 mt-0.5"><span>0</span><span>0.50</span><span>1.00</span></div>
-                        </div>
-
-                        {/* Reset custom OLED */}
-                        <button
-                          onClick={() => {
-                            const defaults = { contrast: 1, saturate: 1, brightness: 1, sepia: 0 };
-                            setCustomOled(defaults);
-                            localStorage.setItem('playerCustomOled', JSON.stringify(defaults));
-                          }}
-                          className="w-full mt-2 px-3 py-2 text-xs text-center rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors border border-gray-700/50"
-                        >
-                          {t('watch.resetValues')}
-                        </button>
-                      </motion.div>
-                    )}
-
-                    {/* Preview indicator */}
-                    {videoOledMode !== 'off' && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 p-3 bg-gradient-to-r from-gray-800/80 to-gray-900/80 rounded-lg border border-gray-700/50"
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className={`w-2 h-2 rounded-full animate-pulse ${videoOledMode === 'natural' ? 'bg-emerald-500' : videoOledMode === 'cinema' ? 'bg-amber-500' : videoOledMode === 'custom' ? 'bg-cyan-500' : 'bg-pink-500'}`} />
-                          <span className="text-xs font-medium text-white">{t('watch.activeFilter')}</span>
-                        </div>
-                        <p className="text-xs text-gray-400 font-mono">
-                          {getVideoOledFilter()}
-                        </p>
-                      </motion.div>
-                    )}
-
-                    {/* Info */}
-                    <div className="mt-3 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
-                      <p className="text-xs text-gray-400">
-                        {t('watch.oledInfo')}
-                      </p>
-                    </div>
-                  </motion.div>
+                  <OledSettingsSection
+                    t={t}
+                    videoOledMode={videoOledMode as OledMode}
+                    customOled={customOled}
+                    onSelectMode={handleVideoOledChange}
+                    onChangeCustom={handleCustomOledChange}
+                    onResetCustom={() => {
+                      const defaults = { ...DEFAULT_CUSTOM_OLED };
+                      setCustomOled(defaults);
+                      saveCustomOled(defaults);
+                    }}
+                    activeFilterPreview={getVideoOledFilter()}
+                  />
                 )}
               </AnimatePresence>
             </div>

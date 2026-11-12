@@ -18680,5 +18680,13 @@
     "langs": [
       "vo"
     ]
+  },
+  "devils-crest": {
+    "slug": "devils-crest",
+    "animeId": "50851",
+    "langs": [
+      "vf",
+      "vo"
+    ]
   }
 }

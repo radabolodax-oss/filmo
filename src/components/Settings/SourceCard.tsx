@@ -21,6 +21,7 @@ import type { TopLevelSourceId } from '../../types/sourcePriority';
  */
 export const SOURCE_LABELS: Record<string, string> = {
   webflix: 'Webflix (FastFlux 1080p)',
+  miaw: 'Miaw (1080p FHD Sans Pub)',
   fastflux: 'FastFlux (MP4 Direct)',
   moviez: 'Moviez (Ultra HD)',
   vidzy: 'Vidzy Direct (TMDB)',

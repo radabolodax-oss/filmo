@@ -45,6 +45,7 @@ import {
 import { pickAutoSelectedLanguage, sortHostersByPriority } from '../../utils/sourceAutoSelect';
 
 import { getRememberLastPlayer } from '../../utils/lastPlayerPref';
+import { saveWatchState, getWatchState } from '../../utils/watchStateCache';
 
 import { detectHoster, toCanonicalHosterDomain, getHosterDisplayName } from '../../utils/hosterRegistry';
 import { runExtractionPass } from '../../utils/runExtractionPass';
@@ -88,6 +89,7 @@ const getCleanMainApi = () => {
         custom.includes('billy-affairs') ||
 
         custom.includes('pichunter-linda') ||
+        custom.includes('highlight-gave') ||
 
         (isLocal && custom.includes('trycloudflare.com'))
 
@@ -121,7 +123,11 @@ const getCleanMainApi = () => {
 
 };
 
-const MAIN_API = getCleanMainApi();
+const MAIN_API = {
+  toString: () => getCleanMainApi(),
+  valueOf: () => getCleanMainApi(),
+  [Symbol.toPrimitive]: () => getCleanMainApi(),
+} as unknown as string;
 
 const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || '';
 
@@ -733,12 +739,20 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
   const rememberedAnimeIsM3u8Ref = useRef<boolean | null>(null);
 
   const rememberedAnicloudPlayerNameRef = useRef<string | null>(null);
+  const failedMiawDirectUrlsRef = useRef<Set<string>>(new Set());
+  const [, setMiawDirectFallbackTick] = useState(0);
+  const latestSeasonRef = useRef(season);
+  const latestEpisodeRef = useRef(episode);
+  const latestShowDetailsRef = useRef(showDetails);
+  latestSeasonRef.current = season;
+  latestEpisodeRef.current = episode;
+  latestShowDetailsRef.current = showDetails;
 
 
 
   const readSavedAnimeChoice = useCallback((animeId: string | null): {
 
-    provider?: 'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy';
+    provider?: 'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy' | 'miaw';
 
     language?: string;
 
@@ -753,10 +767,16 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
     try {
 
       const raw = localStorage.getItem(`dawger_anime_choice_${animeId}`);
-
-      if (!raw) return null;
-
-      return JSON.parse(raw);
+      if (raw) return JSON.parse(raw);
+      const cached = getWatchState('anime', animeId);
+      if (cached?.lastSource) {
+        return {
+          provider: cached.lastSource,
+          language: cached.lastLang,
+          playerName: cached.lastPlayerName,
+        };
+      }
+      return null;
 
     } catch {
 
@@ -770,7 +790,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
   const saveAnimeChoice = useCallback((patch: {
 
-    provider?: 'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy';
+    provider?: 'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy' | 'miaw';
 
     language?: string;
 
@@ -789,6 +809,20 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
       const next = { ...prev, ...patch };
 
       localStorage.setItem(`dawger_anime_choice_${id}`, JSON.stringify(next));
+      const sd = latestShowDetailsRef.current;
+      saveWatchState({
+        mediaType: 'anime',
+        id,
+        title: sd?.name || undefined,
+        posterPath: sd?.poster_path || null,
+        backdropPath: sd?.backdrop_path || null,
+        currentSeason: Number(latestSeasonRef.current) || 1,
+        currentEpisode: Number(latestEpisodeRef.current) || 1,
+        lastSource: next.provider,
+        lastLang: next.language,
+        lastPlayerName: next.playerName,
+        exactFlush: true,
+      });
 
       if (patch.language) rememberedAnimeLangRef.current = patch.language;
 
@@ -845,18 +879,18 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
   // ——— Fournisseur d'anime actif (AniCloud prioritaire avec VOE, Anime-Sama, etc.) ———
-  const getInitialAnimeProvider = (): 'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy' => {
+  const getInitialAnimeProvider = (): 'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy' | 'miaw' => {
     try {
       const prefs = getSourcePriorityPrefs();
       const first = (prefs.categories.anime?.sourceOrder || []).find((s) => s.enabled);
-      if (first && ['animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime'].includes(first.id)) {
+      if (first && ['animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime', 'miaw'].includes(first.id)) {
         return first.id as any;
       }
     } catch (_) {}
     return 'anicloud';
   };
 
-  const [provider, setProvider] = useState<'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy'>(getInitialAnimeProvider);
+  const [provider, setProvider] = useState<'animesama' | 'wavewatch' | 'anicloud' | 'franime' | 'moviez' | 'vidzy' | 'miaw'>(getInitialAnimeProvider);
 
 
 
@@ -930,6 +964,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
         const prefs = getSourcePriorityPrefs();
         const order = (prefs.categories.anime?.sourceOrder || [
           { id: 'anicloud', enabled: true },
+          { id: 'miaw', enabled: true },
           { id: 'animesama', enabled: true },
           { id: 'franime', enabled: true },
           { id: 'moviez', enabled: true },
@@ -950,6 +985,13 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
       }
     });
   }, []);
+
+    // Miaw Anime provider states
+  const [miawAnimeData, setMiawAnimeData] = useState<any>(null);
+  const [loadingMiawAnime, setLoadingMiawAnime] = useState<boolean>(false);
+  const [miawAnimeLang, setMiawAnimeLang] = useState<'vf' | 'vostfr'>('vostfr');
+  const [miawAnimePlayerIdx, setMiawAnimePlayerIdx] = useState<number>(0);
+  const [miawAnimeError, setMiawAnimeError] = useState<string | null>(null);
 
   // Moviez Anime provider states
 
@@ -1302,6 +1344,8 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
   useEffect(() => {
 
+    setMiawAnimeData(null);
+    setMiawAnimeError(null);
     setMoviezAnimeData(null);
 
     setMoviezAnimeError(null);
@@ -1314,7 +1358,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
     if (saved) {
 
-      if (saved.provider && ['animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime'].includes(saved.provider)) {
+      if (saved.provider && ['animesama', 'wavewatch', 'moviez', 'vidzy', 'anicloud', 'franime', 'miaw'].includes(saved.provider)) {
 
         setProvider(saved.provider);
 
@@ -1328,6 +1372,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
         if (l === 'vf' || l === 'vostfr') {
 
+          setMiawAnimeLang(l);
           setMoviezAnimeLang(l);
 
           setVidzyAnimeLang(l);
@@ -1369,6 +1414,48 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
   }, [id, readSavedAnimeChoice]);
 
 
+
+    // Charge Miaw quand le fournisseur miaw est actif ou quand saison/épisode change
+  useEffect(() => {
+    if (provider !== 'miaw') return;
+    if (!id) return;
+    let cancelled = false;
+    setLoadingMiawAnime(true);
+    setMiawAnimeError(null);
+    const animeTitle = showDetails?.name || '';
+    const epUrl = isMovieMode
+      ? `${MAIN_API}/api/miaw/movie/${id}`
+      : `${MAIN_API}/api/miaw/anime/${id}/season/${season}/episode/${episode}?title=${encodeURIComponent(animeTitle)}`;
+
+    axios.get(epUrl)
+      .then(res => {
+        if (cancelled) return;
+        const data = res.data;
+        setMiawAnimeData(data);
+        const saved = readSavedAnimeChoice(id);
+        const prefLang = (saved?.language?.toLowerCase() === 'vf' || saved?.language?.toLowerCase() === 'vostfr')
+          ? (saved.language.toLowerCase() as 'vf' | 'vostfr')
+          : miawAnimeLang;
+        const effectiveLang: 'vf' | 'vostfr' = data?.players?.[prefLang]?.length > 0
+          ? prefLang
+          : (data?.players?.vostfr?.length > 0 ? 'vostfr' : 'vf');
+        setMiawAnimeLang(effectiveLang);
+        const list = data?.players?.[effectiveLang] || [];
+        const remName = (saved?.playerName || rememberedAnimePlayerNameRef.current || '').toLowerCase();
+        const matchIdx = remName ? list.findIndex((p: any) => (p.name || '').toLowerCase() === remName) : -1;
+        setMiawAnimePlayerIdx(matchIdx >= 0 ? matchIdx : 0);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMiawAnimeError('Anime/Épisode non trouvé sur Miaw');
+          handleAutoFallbackNext('miaw');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMiawAnime(false);
+      });
+    return () => { cancelled = true; };
+  }, [provider, id, season, episode, isMovieMode, showDetails?.name, handleAutoFallbackNext]);
 
   // Charge Moviez quand le fournisseur moviez est actif ou quand saison/épisode change
 
@@ -1704,9 +1791,22 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
     continueWatching.tv.unshift(updatedShow);
 
-    continueWatching.tv = continueWatching.tv.slice(0, 20);
+    // Limite de 20 elements supprimee pour conserver tout l'historique anime
 
     localStorage.setItem('continueWatching', JSON.stringify(continueWatching));
+      if (id) {
+        saveWatchState({
+          mediaType: 'anime',
+          id,
+          title: showDetails?.name || undefined,
+          posterPath: showDetails?.poster_path || null,
+          backdropPath: showDetails?.backdrop_path || null,
+          currentSeason: Number(season) || 1,
+          currentEpisode: Number(episode) || 1,
+          lastSource: provider,
+          exactFlush: true,
+        });
+      }
 
   }, [id, season, episode]);
 
@@ -2572,29 +2672,8 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
 
-    // Trigger ad popup based on player type
+// Direct playback without popup lock
 
-    const playerType = source.player.toLowerCase();
-
-    if (playerType.includes('vidmoly')) {
-
-      showPopupForPlayer('vidmoly');
-
-    } else if (playerType.includes('sibnet')) {
-
-      showPopupForPlayer('vidmoly'); // Sibnet is treated as vidmoly type
-
-    } else if (playerType.includes('oneupload')) {
-
-      showPopupForPlayer('omega'); // OneUpload is treated as omega type
-
-    } else {
-
-      // For other players, show generic popup
-
-      showPopupForPlayer('adfree');
-
-    }
 
 
 
@@ -2692,19 +2771,28 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
 
-  // Handle next episode (for HLSPlayer)
-
-  const handleNextEpisodeFromPlayer = (seasonNum: number, episodeNum: number) => {
-
+  const persistAnimeEpisode = (nextS: number, nextE: number) => {
     if (!id) return;
-
-    setSeason(String(seasonNum));
-
-    setEpisode(String(episodeNum));
-
+    saveWatchState({
+      mediaType: 'anime',
+      id,
+      title: showDetails?.name || undefined,
+      posterPath: showDetails?.poster_path || null,
+      backdropPath: showDetails?.backdrop_path || null,
+      currentSeason: nextS,
+      currentEpisode: nextE,
+      lastSource: provider,
+      exactFlush: true,
+    });
   };
 
-
+  // Handle next episode (for HLSPlayer)
+  const handleNextEpisodeFromPlayer = (seasonNum: number, episodeNum: number) => {
+    if (!id) return;
+    setSeason(String(seasonNum));
+    setEpisode(String(episodeNum));
+    persistAnimeEpisode(seasonNum, episodeNum);
+  };
 
   // Handle next episode
   const handleNextEpisode = () => {
@@ -2713,6 +2801,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
     if (next) {
       setSeason(String(next.seasonNumber));
       setEpisode(String(next.episodeNumber));
+      persistAnimeEpisode(next.seasonNumber, next.episodeNumber);
     }
   };
 
@@ -2723,6 +2812,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
     if (prev) {
       setSeason(String(prev.seasonNumber));
       setEpisode(String(prev.episodeNumber));
+      persistAnimeEpisode(prev.seasonNumber, prev.episodeNumber);
     }
   };
 
@@ -2796,7 +2886,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
   return (
 
-    <div className="w-full max-w-4xl mx-auto my-6">
+    <div className="w-full max-w-4xl mx-auto mt-16 sm:mt-20 mb-6 px-3 sm:px-6 pb-20">
 
       {/* En-tête — titre + métadonnées, au-dessus de l'encadré du player */}
 
@@ -3531,7 +3621,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
               fallbackEmbedSource === 'videasy'
 
-                ? `https://player.videasy.net/tv/${id}/${season || '1'}/${episode || '1'}?autoplay=1`
+                ? `https://player.videasy.to/tv/${id}/${season || '1'}/${episode || '1'}?autoplay=1`
 
                 : `https://peachify.top/embed/tv/${id}?season=${season || '1'}&episode=${episode || '1'}&sub=French&accent=dc2626`
 
@@ -3706,59 +3796,11 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
         </div>
 
-      ) : (
-
-        <div className="relative w-full h-full">
-
-          {/* Source Selection Panel */}
-
-          <AnimatePresence>
-
-            {showEmbedQuality && (
-
-              <div onClick={() => setShowEmbedQuality(false)} className="fixed inset-0 z-[12000] bg-black/60 flex justify-start pointer-events-auto">
-
-                <motion.div
-
-                  key="embed-quality-menu"
-
-                  initial={{ opacity: 0, x: -300 }}
-
-                  animate={{ opacity: 1, x: 0 }}
-
-                  exit={{ opacity: 0, x: -300 }}
-
-                  transition={{ duration: 0.3, ease: 'easeOut' }}
-
-                  onClick={(e) => e.stopPropagation()}
-
-                  className="bg-black/95 border-r border-gray-800 shadow-2xl w-full max-w-md h-full overflow-y-auto pointer-events-auto"
-
-                  data-lenis-prevent
-
-                >
-
-                  <div className="flex justify-between items-center p-4 border-b border-gray-700/60 sticky top-0 bg-black/95 z-10">
-
-                    <h3 className="text-white text-lg font-bold">{t('watch.sourcesAndLanguages')}</h3>
-
-                    <button
-
-                      onClick={() => setShowEmbedQuality(false)}
-
-                      className="text-gray-400 hover:text-emerald-400 transition-colors text-2xl font-bold focus:outline-none"
-
-                    >
-
-                      ×
-
-                    </button>
-
-                  </div>
+      ) : (() => {
+        const renderAnimeSourcesContent = () => (
+          <>
 
 
-
-                  <div className="p-4">
 
                     {/* Current info */}
 
@@ -3792,6 +3834,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
                           const allProviders = [
                             { key: 'anicloud', label: 'AniCloud (VOE)', badge: 'Prioritaire' },
+                            { key: 'miaw', label: 'Miaw (1080p FHD)', badge: 'Sans Pub' },
                             { key: 'animesama', label: 'Anime-Sama' },
                             { key: 'franime', label: 'FRAnime (VF/VOSTFR)', badge: 'Recommandé' },
                             { key: 'moviez', label: 'Moviez (Ultra HD)' },
@@ -3871,6 +3914,55 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                       <div className="mb-6 p-4 rounded-xl bg-gray-900/60 border border-gray-800 text-sm text-gray-300">
                         <p className="font-semibold text-emerald-400 mb-1">Lecteur Wavewatch Multilingue</p>
                         <p className="text-xs text-gray-400">Audio (VF/VO) et sous-titres (VOSTFR) sont sélectionnables directement dans les options du lecteur intégré ci-dessous.</p>
+                      </div>
+                    )}
+
+                    {/* Miaw — langue + lecteurs */}
+                    {provider === 'miaw' && (
+                      <div className="mb-6">
+                        {loadingMiawAnime ? (
+                          <div className="flex items-center justify-center py-6">
+                            <svg className="animate-spin h-6 w-6 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          </div>
+                        ) : miawAnimeError || !miawAnimeData ? (
+                          <p className="text-gray-400 text-sm">{miawAnimeError ?? 'Non disponible sur Miaw'}</p>
+                        ) : (
+                          <>
+                            <h4 className="text-white text-md font-semibold mb-3">{t('watch.versionLabel')}</h4>
+                            <div className="grid grid-cols-2 gap-2 mb-4">
+                              {(['vf', 'vostfr'] as const).map(lang => {
+                                const hasLang = miawAnimeData.players?.[lang]?.length > 0;
+                                if (!hasLang) return null;
+                                return (
+                                  <button key={lang} onClick={() => { setMiawAnimeLang(lang); setMiawAnimePlayerIdx(0); saveAnimeChoice({ provider: 'miaw', language: lang, playerName: miawAnimeData.players?.[lang]?.[0]?.name }); }}
+                                    className={`px-3 py-2 rounded-lg text-sm transition-all duration-200 ${miawAnimeLang === lang ? 'bg-gray-800 border-l-4 border-emerald-500 pl-3 font-medium text-emerald-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200'}`}>
+                                    {lang.toUpperCase()}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {miawAnimeData.players?.[miawAnimeLang]?.length > 0 && (
+                              <>
+                                <h4 className="text-white text-md font-semibold mb-3">{t('watch.playersLabel')}</h4>
+                                <div className="space-y-2">
+                                  {miawAnimeData.players[miawAnimeLang].map((p: any, i: number) => (
+                                    <button key={`miaw-${i}`} onClick={() => { setMiawAnimePlayerIdx(i); saveAnimeChoice({ provider: 'miaw', language: miawAnimeLang, playerName: p.name }); setShowEmbedQuality(false); }}
+                                      className={`w-full px-4 py-3 text-sm text-left rounded-lg flex justify-between items-center ${miawAnimePlayerIdx === i ? 'bg-gray-800 border-l-4 border-emerald-500 pl-3 font-medium text-emerald-400' : 'bg-gray-900/60 hover:bg-gray-800/80 text-gray-200 hover:text-white'}`}>
+                                      {formatPlayerDisplayName(p.name)}
+                                      {miawAnimePlayerIdx === i && (
+                                        <span className="text-xs px-2 py-1 bg-emerald-600 text-white rounded-full">{t('watch.active')}</span>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -4358,95 +4450,68 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
                         {videoSources
 
-                          .filter(source => source.language?.toLowerCase() === selectedLanguage.toLowerCase())
+                          .filter(source => {
+                            if (!source.language) return true;
+                            const srcLang = source.language.toLowerCase();
+                            const selLang = selectedLanguage.toLowerCase();
+                            if (srcLang === selLang) return true;
+                            if ((selLang === 'vostfr' || selLang === 'vo') && (srcLang === 'vostfr' || srcLang === 'vo')) return true;
+                            if ((selLang === 'vf' || selLang === 'fr') && (srcLang === 'vf' || srcLang === 'fr')) return true;
+                            return false;
+                          })
 
                           .map((source, index) => (
 
-                            <motion.button
-
-                              key={index}
-
-                              initial={{ opacity: 0, y: 20 }}
-
-                              animate={{ opacity: 1, y: 0 }}
-
-                              exit={{ opacity: 0, y: -10 }}
-
-                              transition={{
-
-                                duration: 0.3,
-
-                                delay: index * 0.05,
-
-                                ease: "easeOut"
-
-                              }}
-
+                            <button
+                              type="button"
+                              key={source.id || `src-${index}`}
                               onClick={() => handleSelectSource(source)}
-
-                              className={`w-full px-4 py-3 text-sm text-left hover:bg-gray-800/80 rounded-lg mb-2 flex justify-between items-center ${selectedSource?.id === source.id
-
+                              className={`w-full px-4 py-3 text-sm text-left hover:bg-gray-800/80 active:scale-[0.98] transition-all rounded-lg mb-2 flex justify-between items-center cursor-pointer ${selectedSource?.id === source.id
                                 ? 'bg-gray-800 border-l-4 border-emerald-500 pl-3'
-
                                 : 'bg-gray-900/60 text-white'
-
                                 }`}
-
                             >
-
                               <div className="flex flex-col">
-
                                 <span className={selectedSource?.id === source.id ? 'text-emerald-400 font-medium' : 'text-white'}>
-
                                   {source.player}
-
                                 </span>
-
                                 <span className="text-xs text-gray-400">
-
                                   {source.language?.toUpperCase()} • {source.quality}
-
-                                  {source.isM3u8 && <span className="ml-1 text-green-400">HLS</span>}
-
+                                  {source.isM3u8 && <span className="ml-1 text-green-400 font-medium">HLS</span>}
                                 </span>
-
                               </div>
 
                               {selectedSource?.id === source.id && (
-
                                 <span className="text-xs px-2 py-1 bg-emerald-600 text-white rounded-full">{t('watch.active')}</span>
-
                               )}
-
-                            </motion.button>
-
+                            </button>
                           ))}
-
                       </div>
 
                     </div>
 
                     )}
 
-                  </div>
-
-                </motion.div>
-
-              </div>
-
-            )}
-
-          </AnimatePresence>
-
-
-
-          {provider === 'animesama' && showHLSPlayer && hlsPlayerSrc ? (
-
-            <HLSPlayer
-
-              priorityCategory="anime"
-
-              src={hlsPlayerSrc}
+              </>
+            );
+            return (
+              <div className="relative w-full h-full">
+                {(() => {
+            const miawPlayers = provider === 'miaw' && miawAnimeData
+              ? (miawAnimeData.players?.[miawAnimeLang] || miawAnimeData.players?.vostfr || miawAnimeData.players?.vf || [])
+              : [];
+            const activeMiawPlayer = miawPlayers[miawAnimePlayerIdx] || miawPlayers[0];
+            const miawDirectSrc = activeMiawPlayer?.directUrl && !failedMiawDirectUrlsRef.current.has(activeMiawPlayer.directUrl)
+              ? activeMiawPlayer.directUrl
+              : '';
+            const useDirectHls = (provider === 'animesama' && showHLSPlayer && Boolean(hlsPlayerSrc)) || (provider === 'miaw' && Boolean(miawDirectSrc));
+            if (useDirectHls) {
+              const activeSrc = provider === 'miaw' ? miawDirectSrc : hlsPlayerSrc;
+              return (
+                <HLSPlayer
+                  key={`${provider}-${season}-${episode}-${activeSrc}`}
+                  priorityCategory="anime"
+                  src={activeSrc}
 
               autoPlay={true}
 
@@ -4478,21 +4543,35 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
               onShowEpisodesMenu={() => setShowEpisodesMenu(!showEpisodesMenu)}
 
-              onShowSources={() => setShowEmbedQuality(true)}
+              settingsOpen={showEmbedQuality}
+
+              onSettingsOpenChange={setShowEmbedQuality}
+
+              customSourcesContent={renderAnimeSourcesContent()}
 
               isAnime={true}
 
               nextEpisode={getNextEpisodeInfo(animeData, season, episode, showDetails?.seasons)}
-
-            />
-
-          ) : (
-
-            <EmbedPlayerChrome
+                  onError={provider === 'miaw' ? () => {
+                    if (miawDirectSrc) failedMiawDirectUrlsRef.current.add(miawDirectSrc);
+                    setMiawDirectFallbackTick((tick) => tick + 1);
+                    if (!activeMiawPlayer?.url || activeMiawPlayer.url === miawDirectSrc) {
+                      handleAutoFallbackNext('miaw');
+                    }
+                  } : undefined}
+                />
+              );
+            }
+            return (
+              <EmbedPlayerChrome
 
               onBack={handleBackNav}
 
-              onChangeSource={() => setShowEmbedQuality(true)}
+              isMenuOpen={showEmbedQuality}
+
+              onMenuOpenChange={setShowEmbedQuality}
+
+              renderSourcesPanel={renderAnimeSourcesContent}
 
               onFallbackNext={handleAutoFallbackNext}
 
@@ -4502,6 +4581,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                 provider === 'animesama' ? (selectedSource?.player || 'Anime-Sama') :
                 provider === 'franime' ? `FRAnime (${(franimeLang || 'VF').toUpperCase()})` :
                 provider === 'wavewatch' ? 'Wavewatch (Multi)' :
+                provider === 'miaw' ? 'Miaw (1080p)' :
                 provider === 'moviez' ? 'Moviez' :
                 provider === 'vidzy' ? 'Vidzy' :
                 provider === 'anicloud' ? 'AniCloud' :
@@ -4550,8 +4630,8 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
               {provider === 'wavewatch' && (() => {
                 const wavewatchUrl = isMovieMode
-                  ? `https://wwembed.wavewatch.top/api/v1/streaming/ww-movie-${id}`
-                  : `https://wwembed.wavewatch.top/api/v1/streaming/ww-tv-${id}-s${season}-e${episode}`;
+                  ? `https://wwembed.wavewatch.icu/api/v1/streaming/ww-movie-${id}`
+                  : `https://wwembed.wavewatch.icu/api/v1/streaming/ww-tv-${id}-s${season}-e${episode}`;
                 return (
                   <iframe
                     key={`wavewatch-${season}-${episode}`}
@@ -4561,6 +4641,38 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
                     allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
                     title={`${showDetails?.name || 'Anime'} S${season}E${episode} - Wavewatch`}
                   />
+                );
+              })()}
+
+              {provider === 'miaw' && (() => {
+                if (loadingMiawAnime) return (
+                  <div className="w-full h-full flex items-center justify-center bg-black">
+                    <svg className="animate-spin h-10 w-10 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  </div>
+                );
+                if (miawAnimeError || !miawAnimeData) return (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-black text-gray-400 gap-3">
+                    <span className="text-sm">{miawAnimeError ?? 'Aucun lecteur Miaw disponible'}</span>
+                  </div>
+                );
+                const players = miawAnimeData.players?.[miawAnimeLang] || miawAnimeData.players?.vostfr || miawAnimeData.players?.vf || [];
+                const currentPlayer = players[miawAnimePlayerIdx] || players[0];
+                return currentPlayer ? (
+                  <iframe
+                    key={`miaw-${season}-${episode}-${miawAnimeLang}-${miawAnimePlayerIdx}`}
+                    src={currentPlayer.url}
+                    className="w-full h-full border-0"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                    title={`${showDetails?.name} S${season}E${episode} - Miaw`}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-black text-gray-400 text-sm">
+                    Aucun lecteur disponible pour cette langue
+                  </div>
                 );
               })()}
 
@@ -4800,12 +4912,11 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
               })()}
 
             </EmbedPlayerChrome>
-
-          )}
-
+            );
+          })()}
         </div>
-
-      )}
+        );
+      })()}
 
 
 
@@ -4871,7 +4982,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
           </div>
 
-          <div className="flex gap-3 justify-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
 
             {recommendations.slice(0, 4).map((rec: any) => (
 
@@ -4883,7 +4994,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
                 className="group relative block flex-shrink-0 rounded-[10px] overflow-hidden border border-transparent hover:border-green-400/35 hover:shadow-[0_0_16px_rgba(74,222,128,0.15)] transition-all duration-200"
 
-                style={{ aspectRatio: '2/3', minWidth: 'calc(25% - 9px)', maxWidth: 'calc(25% - 9px)' }}
+                style={{ aspectRatio: '2/3' }}
 
               >
 

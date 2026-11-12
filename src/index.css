@@ -1825,7 +1825,7 @@ body {
   input[type="submit"],
   input[type="button"],
   input[type="reset"] {
-    min-height: 48px;
+    min-height: 0px;
   }
 
   /* Espace bas pour la bottom navigation (56px + safe-area) */
@@ -1835,7 +1835,7 @@ body {
 
   /* Cards carousel plus grandes au toucher */
   .embla-slide {
-    contain-intrinsic-size: 160px 240px;
+    contain-intrinsic-size: 132px 198px;
   }
 }
 

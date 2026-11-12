@@ -1,11 +1,24 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Clock, Layers, Maximize, Minimize, FastForward, SkipForward, Settings, X, Check } from 'lucide-react';
-import FrameRedirectWatch, { triggerFrameBlocked } from './FrameRedirectWatch';
+import { ArrowLeft, Maximize, Minimize, Settings, SkipForward } from 'lucide-react';
+import { triggerFrameBlocked } from './FrameRedirectWatch';
+import { EmbedSettingsDrawer } from './EmbedSettingsDrawer';
+import {
+  DEFAULT_CUSTOM_OLED,
+  getOledFilterString,
+  PREFS_CHANGED_EVENT,
+  readEmbedZoom,
+  readOledPrefs,
+  type CustomOledSettings,
+  type OledMode,
+} from '../utils/playerVisualPrefs';
 
 export interface EmbedPlayerChromeProps {
   onBack: () => void;
-  onChangeSource: () => void;
+  onChangeSource?: () => void;
+  isMenuOpen?: boolean;
+  onMenuOpenChange?: (open: boolean) => void;
+  renderSourcesPanel?: () => React.ReactNode;
   onFallbackNext?: () => void;
   onNextEpisode?: () => void;
   onNextMovie?: () => void;
@@ -18,66 +31,64 @@ export interface EmbedPlayerChromeProps {
 
 /**
  * Unified Dawger player chrome for all embed/iframe players across Movies, Series, and Anime.
- * Provides the 4+ left vertical controls (Back, Sources, Next Episode, Fullscreen, Player Settings),
- * top-center dynamic session end badge,
- * FrameRedirectWatch auto-fallback watchdog, and real-time OLED video rendering filter.
+ * Provides the left vertical controls (Back, unified Gear for Sources & Settings, Next Episode/Movie, Fullscreen),
+ * FrameRedirectWatch auto-fallback watchdog, CSS zoom, and real-time OLED video rendering filter.
  */
 const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
   onBack,
   onChangeSource,
-  onFallbackNext,
+  isMenuOpen,
+  onMenuOpenChange,
+  renderSourcesPanel,
+  onFallbackNext: _onFallbackNext,
   onNextEpisode,
   onNextMovie,
   nextMovieTitle,
-  currentSourceLabel,
-  runtimeMinutes,
+  currentSourceLabel: _currentSourceLabel,
+  runtimeMinutes: _runtimeMinutes,
   extraHeaderControls,
   children,
 }) => {
   const { t } = useTranslation();
   const [showControls, setShowControls] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [clockTick, setClockTick] = useState(Date.now());
-  const [showSkipIntroPill, setShowSkipIntroPill] = useState(true);
+  const [internalMenuOpen, setInternalMenuOpen] = useState(false);
+  const isControlledMenu = isMenuOpen !== undefined;
+  const menuOpen = isControlledMenu ? Boolean(isMenuOpen) : internalMenuOpen;
+  const setMenuOpen = useCallback((next: boolean) => {
+    if (!isControlledMenu) setInternalMenuOpen(next);
+    onMenuOpenChange?.(next);
+  }, [isControlledMenu, onMenuOpenChange]);
 
   // Synced preferences from localStorage
-  const [autoSkipIntro, setAutoSkipIntro] = useState<boolean>(() => localStorage.getItem('dawger_auto_skip_intro') !== 'false');
-  const [sessionEndPref, setSessionEndPref] = useState<boolean>(() => localStorage.getItem('dawger_session_end_time') !== 'false');
   const [autoFallbackPref, setAutoFallbackPref] = useState<boolean>(() => localStorage.getItem('dawger_auto_fallback') !== 'false');
-  const [videoOled, setVideoOled] = useState<string>(() => localStorage.getItem('playerVideoOled') || 'off');
+  const [videoOled, setVideoOled] = useState<OledMode>(() => readOledPrefs().mode);
+  const [customOled, setCustomOled] = useState<CustomOledSettings>(() => readOledPrefs().custom || DEFAULT_CUSTOM_OLED);
+  const [embedZoom, setEmbedZoom] = useState<number>(() => readEmbedZoom());
   const [speedPref, setSpeedPref] = useState<string>(() => localStorage.getItem('playerPlaybackSpeed') || '1');
   const [autoNext, setAutoNext] = useState<boolean>(() => localStorage.getItem('playerAutoNextEpisodePref') !== 'false');
-  const [saveProgress, setSaveProgress] = useState<boolean>(() => localStorage.getItem('playerSaveProgressPref') !== 'false');
+  const [sessionEndEnabled, setSessionEndEnabled] = useState<boolean>(() => localStorage.getItem('dawger_session_end_time') !== 'false');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  const notifyPrefsChanged = () => {
-    window.dispatchEvent(new CustomEvent('dawger-player-prefs-changed'));
-  };
-
-  // Clock tick every 20 seconds to keep dynamic session end accurate
-  useEffect(() => {
-    const timer = setInterval(() => setClockTick(Date.now()), 20000);
-    return () => clearInterval(timer);
-  }, []);
+  const manualFullscreenRef = useRef<boolean>(false);
 
   // Sync preferences from other components/tabs
   useEffect(() => {
     const syncFromStorage = () => {
-      setAutoSkipIntro(localStorage.getItem('dawger_auto_skip_intro') !== 'false');
-      setSessionEndPref(localStorage.getItem('dawger_session_end_time') !== 'false');
       setAutoFallbackPref(localStorage.getItem('dawger_auto_fallback') !== 'false');
-      setVideoOled(localStorage.getItem('playerVideoOled') || 'off');
+      const { mode, custom } = readOledPrefs();
+      setVideoOled(mode);
+      setCustomOled(custom);
+      setEmbedZoom(readEmbedZoom());
       setSpeedPref(localStorage.getItem('playerPlaybackSpeed') || '1');
       setAutoNext(localStorage.getItem('playerAutoNextEpisodePref') !== 'false');
-      setSaveProgress(localStorage.getItem('playerSaveProgressPref') !== 'false');
+      setSessionEndEnabled(localStorage.getItem('dawger_session_end_time') !== 'false');
     };
-    window.addEventListener('dawger-player-prefs-changed', syncFromStorage);
+    window.addEventListener(PREFS_CHANGED_EVENT, syncFromStorage);
     window.addEventListener('storage', syncFromStorage);
     return () => {
-      window.removeEventListener('dawger-player-prefs-changed', syncFromStorage);
+      window.removeEventListener(PREFS_CHANGED_EVENT, syncFromStorage);
       window.removeEventListener('storage', syncFromStorage);
     };
   }, []);
@@ -146,68 +157,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
     };
   }, [autoFallbackPref, children]);
 
-  // Auto-skip intro: hide skip pill after 2 minutes
-  useEffect(() => {
-    const timer = setTimeout(() => setShowSkipIntroPill(false), 120000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleToggleAutoSkip = () => {
-    const next = !autoSkipIntro;
-    setAutoSkipIntro(next);
-    localStorage.setItem('dawger_auto_skip_intro', next ? 'true' : 'false');
-    notifyPrefsChanged();
-  };
-
-  const handleToggleSessionEnd = () => {
-    const next = !sessionEndPref;
-    setSessionEndPref(next);
-    localStorage.setItem('dawger_session_end_time', next ? 'true' : 'false');
-    notifyPrefsChanged();
-  };
-
-  const handleToggleAutoFallback = () => {
-    const next = !autoFallbackPref;
-    setAutoFallbackPref(next);
-    localStorage.setItem('dawger_auto_fallback', next ? 'true' : 'false');
-    notifyPrefsChanged();
-  };
-
-  const handleOledChange = (mode: string) => {
-    setVideoOled(mode);
-    localStorage.setItem('playerVideoOled', mode);
-    notifyPrefsChanged();
-  };
-
-  const handleSpeedChange = (spd: string) => {
-    setSpeedPref(spd);
-    localStorage.setItem('playerPlaybackSpeed', spd);
-    applyPlaybackSpeed(spd);
-    notifyPrefsChanged();
-  };
-
-  const handleToggleAutoNext = () => {
-    const next = !autoNext;
-    setAutoNext(next);
-    localStorage.setItem('playerAutoNextEpisodePref', next ? 'true' : 'false');
-    notifyPrefsChanged();
-  };
-
-  const handleToggleSaveProgress = () => {
-    const next = !saveProgress;
-    setSaveProgress(next);
-    localStorage.setItem('playerSaveProgressPref', next ? 'true' : 'false');
-    notifyPrefsChanged();
-  };
-
-  const getOledFilterStyle = () => {
-    switch (videoOled) {
-      case 'natural': return 'contrast(1.08) saturate(1.1) brightness(0.98)';
-      case 'cinema': return 'contrast(1.15) saturate(1.15) brightness(0.95)';
-      case 'vivid': return 'contrast(1.25) saturate(1.25) brightness(0.93)';
-      default: return 'none';
-    }
-  };
+  const oledFilterStyle = getOledFilterString(videoOled, customOled);
 
   const resetHideTimer = useCallback(() => {
     setShowControls(true);
@@ -217,26 +167,27 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
     }, 3500);
   }, []);
 
-  // Dynamic session end calculation
-  const sessionEndTime = useMemo(() => {
-    if (!sessionEndPref) return null;
-    const mins = runtimeMinutes && runtimeMinutes > 0 ? runtimeMinutes : 45;
-    const rate = parseFloat(speedPref) || 1;
-    const endMs = clockTick + (mins / rate) * 60 * 1000;
-    const end = new Date(endMs);
-    return end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
-  }, [sessionEndPref, runtimeMinutes, clockTick, speedPref]);
-
   const toggleFullscreen = async () => {
     try {
-      if (!document.fullscreenElement) {
+      const wantFullscreen = !isFullscreen;
+      if (wantFullscreen) {
+        manualFullscreenRef.current = true;
+        setIsFullscreen(true);
         if (containerRef.current) {
-          await containerRef.current.requestFullscreen();
-          setIsFullscreen(true);
+          await containerRef.current.requestFullscreen?.().catch(() => {});
         }
+        try {
+          await (window.screen?.orientation as any)?.lock?.('landscape');
+        } catch {}
       } else {
-        await document.exitFullscreen();
+        manualFullscreenRef.current = false;
         setIsFullscreen(false);
+        if (document.fullscreenElement) {
+          await document.exitFullscreen?.().catch(() => {});
+        }
+        try {
+          (window.screen?.orientation as any)?.unlock?.();
+        } catch {}
       }
     } catch (err) {
       console.warn('[EmbedPlayerChrome] Fullscreen error:', err);
@@ -245,55 +196,43 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const active = !!document.fullscreenElement;
+      if (active) {
+        setIsFullscreen(true);
+      } else if (!manualFullscreenRef.current) {
+        setIsFullscreen(false);
+        try {
+          (window.screen?.orientation as any)?.unlock?.();
+        } catch {}
+      }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const handleManualSkipIntro = () => {
-    if (containerRef.current) {
-      const videos = containerRef.current.querySelectorAll('video');
-      videos.forEach((v) => {
-        try {
-          v.currentTime = Math.min(v.duration || 9999, v.currentTime + 85);
-        } catch { /* ignore */ }
-      });
-      const iframes = containerRef.current.querySelectorAll('iframe');
-      iframes.forEach((ifr) => {
-        try {
-          ifr.contentWindow?.postMessage({ event: 'command', func: 'seekTo', args: [85] }, '*');
-          ifr.contentWindow?.postMessage({ type: 'player:seek', value: 85 }, '*');
-          ifr.contentWindow?.postMessage({ action: 'seek', time: 85 }, '*');
-          ifr.contentWindow?.postMessage({ method: 'seek', value: 85 }, '*');
-          ifr.contentWindow?.postMessage('seek:+85', '*');
-        } catch { /* ignore */ }
-      });
-    }
-    setShowSkipIntroPill(false);
-  };
+  const gearLabel = `${t('watch.sources')} & ${t('watch.settingsTitle')}`;
 
   return (
     <div
       ref={containerRef}
       onMouseMove={resetHideTimer}
-      onTouchStart={resetHideTimer}
       className={`relative w-full h-full bg-black overflow-hidden select-none group ${
         isFullscreen
-          ? 'fixed inset-0 z-[9999] w-screen h-screen m-0 p-0 rounded-none flex flex-col justify-center'
+          ? '!fixed !inset-0 !z-[19999] !w-screen !h-[100dvh] !m-0 !p-0 !rounded-none flex flex-col justify-center'
           : 'w-full h-full'
       }`}
     >
-      {/* Left Vertical Controls Column: Back, Sources, Next Episode, Fullscreen */}
+      {/* Left Vertical Controls Column: Back, Unified Gear (Sources + Settings), Next Episode, Fullscreen */}
       <div
         onMouseEnter={() => {
           if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
           setShowControls(true);
         }}
-        className={`absolute left-2.5 top-2.5 sm:left-3 sm:top-3 z-[10000] transition-all duration-200 flex flex-col gap-1.5 pointer-events-auto ${
+        onTouchStart={resetHideTimer}
+        className={`absolute left-[max(0.5rem,env(safe-area-inset-left))] top-[max(0.5rem,env(safe-area-inset-top))] sm:left-3 sm:top-3 z-[10000] transition-all duration-200 flex ${isFullscreen ? 'flex-col' : 'flex-row sm:flex-col'} gap-1.5 pointer-events-auto ${
           showControls
             ? 'opacity-100 translate-x-0'
-            : 'opacity-35 hover:opacity-100 translate-x-0'
+            : 'opacity-45 hover:opacity-100 translate-x-0'
         }`}
       >
         {/* 1. Bouton Retour */}
@@ -301,7 +240,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onBack();
+            if (isFullscreen) { void toggleFullscreen(); } else { onBack(); }
           }}
           className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 hover:border-emerald-500/60 hover:text-emerald-400 active:scale-95 text-white border border-white/15 backdrop-blur-md shadow-xl transition-all group"
           title={isFullscreen ? t('watch.exitFullscreen') : t('watch.back')}
@@ -310,18 +249,26 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
           <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
         </button>
 
-        {/* 2. Bouton Sources (vert émeraude Dawger) */}
+        {/* 2. Bouton Engrenage Unifié (Sources & Paramètres Dawger) */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onChangeSource();
+            if (renderSourcesPanel) {
+              setMenuOpen(!menuOpen);
+            } else {
+              onChangeSource?.();
+            }
           }}
-          className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border border-emerald-500/50 hover:border-emerald-400 active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group"
-          title={t('watch.sources')}
-          aria-label={t('watch.sources')}
+          className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group ${
+            menuOpen
+              ? 'border-emerald-400 text-emerald-400'
+              : 'border-emerald-500/50 hover:border-emerald-400 text-emerald-400'
+          }`}
+          title={gearLabel}
+          aria-label={gearLabel}
         >
-          <Layers className="w-3.5 h-3.5 text-emerald-400 transition-transform group-hover:scale-110" />
+          <Settings className={`w-3.5 h-3.5 text-emerald-400 transition-transform ${menuOpen ? 'rotate-45' : 'group-hover:rotate-45'}`} />
         </button>
 
         {/* 3. Bouton Épisode suivant (si disponible) */}
@@ -354,23 +301,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
           </button>
         )}
 
-        {/* 4. Bouton Paramètres (colonne de gauche) */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowSettings((prev) => !prev);
-          }}
-          className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 active:scale-95 text-white border backdrop-blur-md shadow-xl transition-all group ${
-            showSettings ? 'border-emerald-500 text-emerald-400' : 'border-white/15 hover:border-emerald-500/60 hover:text-emerald-400'
-          }`}
-          title={t('watch.settingsTitle') || 'Paramètres'}
-          aria-label={t('watch.settingsTitle') || 'Paramètres'}
-        >
-          <Settings className={`w-3.5 h-3.5 transition-transform ${showSettings ? 'rotate-45' : 'group-hover:rotate-45'}`} />
-        </button>
-
-        {/* 5. Bouton Plein écran */}
+        {/* 4. Bouton Plein écran */}
         <button
           type="button"
           onClick={(e) => {
@@ -388,139 +319,44 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
           )}
         </button>
 
-
-
         {extraHeaderControls}
       </div>
 
-      {/* Panneau Paramètres Player (ouvert depuis la colonne de gauche) */}
-      {showSettings && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="absolute inset-y-0 left-0 w-80 sm:w-96 max-w-[90vw] z-[10001] bg-black/95 border-r border-emerald-500/30 backdrop-blur-xl p-5 flex flex-col shadow-2xl animate-in slide-in-from-left duration-200 overflow-y-auto"
-        >
-          <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-4">
-            <div className="flex items-center gap-2">
-              <Settings className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-white font-bold text-sm sm:text-base">Paramètres du lecteur</h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowSettings(false)}
-              className="p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="space-y-5 text-xs sm:text-sm">
-            {/* Mode OLED */}
-            <div>
-              <span className="text-gray-300 font-semibold block mb-2">Filtre d'image OLED</span>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'off', label: 'Désactivé' },
-                  { id: 'natural', label: 'Naturel' },
-                  { id: 'cinema', label: 'Cinéma' },
-                  { id: 'vivid', label: 'Vif' },
-                ].map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => handleOledChange(mode.id)}
-                    className={`px-3 py-2 rounded-lg text-left font-medium transition-all border ${
-                      videoOled === mode.id
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                        : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Vitesse de lecture */}
-            <div>
-              <span className="text-gray-300 font-semibold block mb-2">Vitesse de lecture</span>
-              <div className="flex gap-1.5 flex-wrap">
-                {['0.75', '1', '1.25', '1.5', '2'].map((spd) => (
-                  <button
-                    key={spd}
-                    type="button"
-                    onClick={() => handleSpeedChange(spd)}
-                    className={`flex-1 min-w-[50px] py-1.5 rounded-lg font-medium text-center transition-all border ${
-                      speedPref === spd
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                        : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
-                    }`}
-                  >
-                    {spd}x
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Toggles */}
-            <div className="pt-2 border-t border-white/10 space-y-3">
-              <label className="flex items-center justify-between cursor-pointer group">
-                <span className="text-gray-300 group-hover:text-white transition-colors">Passer les intros auto</span>
-                <input
-                  type="checkbox"
-                  checked={autoSkipIntro}
-                  onChange={handleToggleAutoSkip}
-                  className="accent-emerald-500 w-4 h-4 cursor-pointer"
-                />
-              </label>
-
-              <label className="flex items-center justify-between cursor-pointer group">
-                <span className="text-gray-300 group-hover:text-white transition-colors">Auto-fallback en cas de panne</span>
-                <input
-                  type="checkbox"
-                  checked={autoFallbackPref}
-                  onChange={handleToggleAutoFallback}
-                  className="accent-emerald-500 w-4 h-4 cursor-pointer"
-                />
-              </label>
-
-              <label className="flex items-center justify-between cursor-pointer group">
-                <span className="text-gray-300 group-hover:text-white transition-colors">Estimation fin de séance</span>
-                <input
-                  type="checkbox"
-                  checked={sessionEndPref}
-                  onChange={handleToggleSessionEnd}
-                  className="accent-emerald-500 w-4 h-4 cursor-pointer"
-                />
-              </label>
-
-              <label className="flex items-center justify-between cursor-pointer group">
-                <span className="text-gray-300 group-hover:text-white transition-colors">Épisode suivant auto</span>
-                <input
-                  type="checkbox"
-                  checked={autoNext}
-                  onChange={handleToggleAutoNext}
-                  className="accent-emerald-500 w-4 h-4 cursor-pointer"
-                />
-              </label>
-            </div>
-          </div>
-        </div>
-      )}
-
-
-
-
-
-      {/* Video Content Container with Direct Hardware OLED CSS Filter */}
+      {/* Video Content Container with Direct Hardware OLED CSS Filter + CSS Zoom */}
       <div
         data-embed-chrome-content
-        style={{ filter: getOledFilterStyle() }}
+        style={{
+          filter: oledFilterStyle !== 'none' ? oledFilterStyle : undefined,
+          transform: embedZoom !== 1 ? `scale(${embedZoom})` : undefined,
+          transformOrigin: 'center center',
+        }}
         className="w-full h-full flex items-center justify-center transition-all duration-300"
       >
         {children}
       </div>
 
-
+      {/* Unified Gear Drawer for Iframes (rendered inside containerRef for fullscreen support) */}
+      {renderSourcesPanel && (
+        <EmbedSettingsDrawer
+          isOpen={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          sourcesContent={renderSourcesPanel()}
+          videoOledMode={videoOled}
+          customOled={customOled}
+          onOledChange={(mode, custom) => {
+            setVideoOled(mode);
+            setCustomOled(custom);
+          }}
+          embedZoom={embedZoom}
+          onEmbedZoomChange={setEmbedZoom}
+          autoNext={autoNext}
+          autoFallback={autoFallbackPref}
+          sessionEndEnabled={sessionEndEnabled}
+          onToggleAutoNext={setAutoNext}
+          onToggleAutoFallback={setAutoFallbackPref}
+          onToggleSessionEnd={setSessionEndEnabled}
+        />
+      )}
     </div>
   );
 };

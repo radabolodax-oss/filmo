@@ -15,9 +15,15 @@ export const IntroProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [introCompleted, setIntroCompleted] = useState(true);
 
   useEffect(() => {
+    const dawgerVal = localStorage.getItem('dawger_intro_enabled');
+    const movixVal = localStorage.getItem('movix_intro_enabled');
+    // Activé par défaut (true) sauf si l'utilisateur l'a désactivé ('false')
     const introEnabled =
-      localStorage.getItem('dawger_intro_enabled') === 'true' ||
-      localStorage.getItem('movix_intro_enabled') === 'true';
+      dawgerVal !== null
+        ? dawgerVal === 'true'
+        : movixVal !== null
+        ? movixVal === 'true'
+        : true;
     const hasSeenIntro = sessionStorage.getItem('dawger_intro_seen') === 'true';
 
     if (introEnabled && !hasSeenIntro) {

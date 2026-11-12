@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -250,6 +250,39 @@ const SettingsPage: React.FC = () => {
   });
 
   // ─── Appearance settings state ───────────────────────────────────────────
+  const [displayMode, setDisplayMode] = useState<'fullscreen' | 'borderless' | 'windowed'>(() => {
+    const saved = localStorage.getItem('dawger_display_mode');
+    if (saved === 'windowed' || saved === 'borderless' || saved === 'fullscreen') return saved;
+    return 'fullscreen';
+  });
+
+  const handleDisplayModeChange = (mode: 'fullscreen' | 'borderless' | 'windowed') => {
+    setDisplayMode(mode);
+    localStorage.setItem('dawger_display_mode', mode);
+    const win = window as any;
+    if (win.dawgerDisplay?.setMode) {
+      win.dawgerDisplay.setMode(mode);
+    } else {
+      if (mode === 'fullscreen') {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+      } else if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    }
+  };
+
+  useEffect(() => {
+    const win = window as any;
+    if (win.dawgerDisplay?.getMode) {
+      win.dawgerDisplay.getMode().then((mode: any) => {
+        if (mode && (mode === 'fullscreen' || mode === 'borderless' || mode === 'windowed')) {
+          setDisplayMode(mode);
+          localStorage.setItem('dawger_display_mode', mode);
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
 
   const [disableAutoScroll, setDisableAutoScroll] = useState(() => {
     return localStorage.getItem('settings_disable_auto_scroll') === 'true';
@@ -270,7 +303,11 @@ const SettingsPage: React.FC = () => {
   
 
   const [introEnabled, setIntroEnabled] = useState(() => {
-    return localStorage.getItem('movix_intro_enabled') === 'true';
+    const dawgerVal = localStorage.getItem('dawger_intro_enabled');
+    if (dawgerVal !== null) return dawgerVal === 'true';
+    const movixVal = localStorage.getItem('movix_intro_enabled');
+    if (movixVal !== null) return movixVal === 'true';
+    return true; // Activé par défaut
   });
 
   const [screensaverEnabled, setScreensaverEnabled] = useState(() => {
@@ -1310,6 +1347,54 @@ const SettingsPage: React.FC = () => {
               </div>
 
               <div className="space-y-3">
+                {/* Mode d'affichage de la fenêtre */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.015 }}
+                  className="p-4 bg-gray-800/30 rounded-xl border border-gray-700/40 hover:border-gray-600/50 transition-colors"
+                >
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <h4 className="font-medium text-white mb-0.5 text-sm">
+                        {t('settings.displayMode', "Mode d'affichage de la fenêtre")}
+                      </h4>
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        {t('settings.displayModeDesc', "Choisis comment Dawger s'affiche à l'écran. Tu peux aussi basculer à tout moment avec la touche F11 sur PC.")}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {([
+                        { id: 'fullscreen', label: '📺 Plein écran', desc: 'Immersif complet (sans bordures ni barre des tâches)' },
+                        { id: 'borderless', label: '🖥️ Fenêtré sans bordure', desc: "Maximisé sur tout l'écran avec barre des tâches" },
+                        { id: 'windowed',   label: '🪟 Fenêtré', desc: 'Fenêtre classique (1280×800) déplaçable' },
+                      ] as const).map((opt) => {
+                        const active = displayMode === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => handleDisplayModeChange(opt.id)}
+                            className={`flex-1 min-w-[140px] px-3.5 py-2.5 rounded-lg border text-left transition-all ${
+                              active
+                                ? 'bg-red-500/15 border-red-500/60 text-white shadow-sm shadow-red-500/10'
+                                : 'bg-gray-900/40 border-gray-700/40 text-gray-300 hover:bg-gray-800/50 hover:border-gray-600/60'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-semibold">{opt.label}</span>
+                              {active && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                              )}
+                            </div>
+                            <p className="text-[11px] text-gray-400 leading-tight">{opt.desc}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </motion.div>
+
                 {/* Conserver la position entre les pages */}
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}

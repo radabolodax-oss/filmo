@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import { ArrowLeft, Search, Clapperboard, Drama, RotateCcw, EyeOff, Ticket } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +11,14 @@ const VARIANT_ICONS = [Clapperboard, Drama, RotateCcw, EyeOff, Ticket];
 
 const NotFound = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.pathname === '/index.html' || location.pathname.endsWith('/index.html')) {
+      navigate('/', { replace: true });
+    }
+  }, [location.pathname, navigate]);
   const [variant] = useState(() => Math.floor(Math.random() * VARIANT_ICONS.length) + 1);
   const [bgMode] = useState<'combined' | 'static' | 'animated'>(() =>
     (localStorage.getItem('settings_bg_mode') as 'combined' | 'static' | 'animated') || 'combined'

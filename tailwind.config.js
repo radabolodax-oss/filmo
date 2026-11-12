@@ -7,7 +7,8 @@ export default {
   theme: {
     extend: {
       screens: {
-        'phone-ls': { raw: '(max-width: 767px) and (orientation: landscape)' },
+        xs: '380px',
+        'phone-ls': { raw: '(max-height: 520px) and (orientation: landscape)' },
         tv: '1921px',
       },
       animation: {

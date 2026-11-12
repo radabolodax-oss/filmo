@@ -1463,6 +1463,19 @@ export const platformAvatars: AllPlatformAvatars = {
   }
 };
 
+const AVATAR_BASE_NEW = typeof window !== 'undefined' && (window.location.hostname === 'appassets.androidplatform.net' || typeof (window as any).ReactNativeWebView !== 'undefined')
+  ? 'https://dawgerwebsite.vercel.app'
+  : '';
+
+if (AVATAR_BASE_NEW) {
+  for (const plat of Object.keys(platformAvatars)) {
+    const cats = platformAvatars[plat];
+    for (const cat of Object.keys(cats)) {
+      cats[cat] = cats[cat].map((p) => (p.startsWith('/') ? AVATAR_BASE_NEW + p : p));
+    }
+  }
+}
+
 // Get all platforms
 export const platforms = Object.keys(platformAvatars);
 

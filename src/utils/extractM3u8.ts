@@ -53,7 +53,7 @@ function hasNexusExtractors(): boolean {
  * which makes some hosters disappear until a manual refresh.
  */
 async function waitForNexusExtractors(timeoutMs = 1500): Promise<boolean> {
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return true;
   }
 
@@ -86,7 +86,7 @@ async function waitForNexusExtractors(timeoutMs = 1500): Promise<boolean> {
     window.addEventListener('movix-extension-loaded', handleLoaded, { once: true });
 
     intervalId = window.setInterval(() => {
-      if (hasNexusExtractors()) {
+      if (hasNexusExtractors() || isMobileNativeApp()) {
         finish(true);
       }
     }, 50);
@@ -100,8 +100,17 @@ async function waitForNexusExtractors(timeoutMs = 1500): Promise<boolean> {
 /**
  * Try extraction via extension first, fallback to server
  */
+function isMobileNativeApp(): boolean {
+  return typeof window !== 'undefined' && (
+    typeof (window as any).GM_xmlhttpRequest === 'function' ||
+    typeof (window as any).ReactNativeWebView !== 'undefined' ||
+    window.location.hostname === 'appassets.androidplatform.net'
+  );
+}
+
 async function tryExtensionFirst(type: string, url: string, serverFallback: () => Promise<M3u8Result | null>): Promise<M3u8Result | null> {
-  const extensionReady = hasNexusExtractors() || await waitForNexusExtractors();
+  const isMobile = isMobileNativeApp();
+  const extensionReady = hasNexusExtractors() || await waitForNexusExtractors(isMobile ? 400 : 1500);
 
   if (extensionReady && window.movixExtractM3u8) {
     try {
@@ -110,6 +119,9 @@ async function tryExtensionFirst(type: string, url: string, serverFallback: () =
       if (result && result.success) {
         console.log(`[NEXUS] Extension extraction success for ${type}`);
         return result;
+      }
+      if (isMobile) {
+        return result || { success: false, error: `${type} extraction failed via mobile userscript` };
       }
       // Extension failed - only fallback to server if VIP
       if (isUserVip()) {
@@ -120,11 +132,14 @@ async function tryExtensionFirst(type: string, url: string, serverFallback: () =
       return result || { success: false, error: `${type} extraction failed via extension` };
     } catch (e) {
       console.warn(`[NEXUS] Extension error for ${type}:`, e);
-      if (isUserVip()) {
+      if (!isMobile && isUserVip()) {
         return serverFallback();
       }
       return { success: false, error: `Extension error for ${type}` };
     }
+  }
+  if (isMobile) {
+    return { success: false, error: `Mobile userscript not ready for ${type}` };
   }
   // No extension - server requires VIP (checked inside server functions)
   return serverFallback();
@@ -147,6 +162,9 @@ export const isVidmolyExtractionEnabled = () => isM3u8ExtractorEnabled('vidmoly'
 export const isSibnetExtractionEnabled = () => isM3u8ExtractorEnabled('sibnet');
 export const isDoodStreamExtractionEnabled = () => isM3u8ExtractorEnabled('doodstream');
 export const isSeekStreamingExtractionEnabled = () => isM3u8ExtractorEnabled('seekstreaming');
+export const isLuluStreamExtractionEnabled = () => isM3u8ExtractorEnabled('lulustream');
+export const isVeevExtractionEnabled = () => isM3u8ExtractorEnabled('veev');
+export const isVidaraExtractionEnabled = () => isM3u8ExtractorEnabled('vidara');
 
 export interface PlayerInfo {
   player: string;
@@ -172,7 +190,8 @@ export interface M3u8Result {
 // fallback pour ne pas casser le narrowing des usages existants.
 export type BuiltinEmbedType =
   | 'supervideo' | 'dropload' | 'voe' | 'uqload' | 'darkibox' | 'vidzy'
-  | 'fsvid' | 'sibnet' | 'doodstream' | 'seekstreaming';
+  | 'fsvid' | 'sibnet' | 'doodstream' | 'seekstreaming' | 'vidmoly'
+  | 'lulustream' | 'veev' | 'vidara';
 
 export interface EmbedDetectionResult {
   type: BuiltinEmbedType | string;
@@ -339,7 +358,7 @@ export async function extractVoeM3u8(
   if (!voeUrl) return null;
 
   // Try extension first (no VIP needed - everyone gets access via extension)
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return tryExtensionFirst('voe', voeUrl, () => extractVoeM3u8Server(voeUrl));
   }
 
@@ -410,7 +429,7 @@ export async function extractUqloadFile(
   const normalizedUrl = uqloadUrl.replace(/uqload\.[a-z0-9-]+/gi, 'uqload.is');
 
   // Try extension first (no VIP needed)
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return tryExtensionFirst('uqload', normalizedUrl, () => extractUqloadFileServer(normalizedUrl));
   }
 
@@ -591,7 +610,7 @@ export async function extractVidzyM3u8(
   if (!vidzyUrl) return null;
 
   // Try extension first (no VIP needed)
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return tryExtensionFirst('vidzy', vidzyUrl, () => extractVidzyM3u8Server(vidzyUrl));
   }
 
@@ -670,7 +689,7 @@ export async function extractFsvidM3u8(
   if (!fsvidUrl) return null;
 
   // Try extension first (no VIP needed)
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return tryExtensionFirst('fsvid', fsvidUrl, () => extractFsvidM3u8Server(fsvidUrl));
   }
 
@@ -735,7 +754,7 @@ export async function extractVidmolyM3u8(
   if (!vidmolyUrl) return null;
 
   // Try extension first (no VIP needed)
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return tryExtensionFirst('vidmoly', vidmolyUrl, () => extractVidmolyM3u8Server(vidmolyUrl));
   }
 
@@ -803,7 +822,7 @@ export async function extractSibnetM3u8(
   if (!sibnetUrl) return null;
 
   // Try extension first (no VIP needed)
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return tryExtensionFirst('sibnet', sibnetUrl, () => extractSibnetM3u8Server(sibnetUrl));
   }
 
@@ -1020,7 +1039,9 @@ export function detectSupportedEmbeds(
     const hasExtension = hasNexusExtractors();
     const canAccess = isVip || hasExtension;
     
-    if (urlLower.includes('voe.sx') && isVoeExtractionEnabled() && canAccess) {
+    const detectedHoster = detectHosterFromPrefs(url);
+
+    if ((detectedHoster === 'voe' || urlLower.includes('voe.sx')) && isVoeExtractionEnabled() && canAccess) {
       detectedEmbeds.push({
         type: 'voe',
         url,
@@ -1029,7 +1050,7 @@ export function detectSupportedEmbeds(
       });
     }
 
-    if (urlLower.includes('uqload') && isUqloadExtractionEnabled() && canAccess) {
+    if ((detectedHoster === 'uqload' || urlLower.includes('uqload')) && isUqloadExtractionEnabled() && canAccess) {
       detectedEmbeds.push({
         type: 'uqload',
         url,
@@ -1049,7 +1070,7 @@ export function detectSupportedEmbeds(
     }
 
     // Détection Vidzy (VIP ou extension)
-    if (urlLower.includes('vidzy') && isVidzyExtractionEnabled() && canAccess) {
+    if ((detectedHoster === 'vidzy' || urlLower.includes('vidzy')) && isVidzyExtractionEnabled() && canAccess) {
       detectedEmbeds.push({
         type: 'vidzy',
         url,
@@ -1058,8 +1079,8 @@ export function detectSupportedEmbeds(
       });
     }
 
-    // Détection Fsvid (VIP requis)
-    if (urlLower.includes('fsvid') && isFsvidExtractionEnabled() && isVip) {
+    // Détection Fsvid (VIP ou extension/userscript v1.7.7)
+    if ((detectedHoster === 'fsvid' || urlLower.includes('fsvid')) && isFsvidExtractionEnabled() && canAccess) {
       detectedEmbeds.push({
         type: 'fsvid',
         url,
@@ -1068,8 +1089,18 @@ export function detectSupportedEmbeds(
       });
     }
 
+    // Détection Vidmoly (VIP ou extension)
+    if ((detectedHoster === 'vidmoly' || urlLower.includes('vidmoly')) && isVidmolyExtractionEnabled() && canAccess) {
+      detectedEmbeds.push({
+        type: 'vidmoly',
+        url,
+        enabled: isVidmolyExtractionEnabled(),
+        priority: 2
+      });
+    }
+
     // Détection Sibnet (VIP ou extension)
-    if (urlLower.includes('sibnet.ru') && isSibnetExtractionEnabled() && canAccess) {
+    if ((detectedHoster === 'sibnet' || urlLower.includes('sibnet.ru')) && isSibnetExtractionEnabled() && canAccess) {
       detectedEmbeds.push({
         type: 'sibnet',
         url,
@@ -1079,11 +1110,41 @@ export function detectSupportedEmbeds(
     }
 
     // Détection DoodStream (VIP ou extension)
-    if (isDoodStreamEmbed(url) && isDoodStreamExtractionEnabled() && canAccess) {
+    if (detectedHoster === 'doodstream' && isDoodStreamExtractionEnabled() && canAccess) {
       detectedEmbeds.push({
         type: 'doodstream',
         url,
         enabled: isDoodStreamExtractionEnabled(),
+        priority: 2
+      });
+    }
+
+    // Détection Veev (extension/userscript)
+    if (detectedHoster === 'veev' && isVeevExtractionEnabled() && canAccess) {
+      detectedEmbeds.push({
+        type: 'veev',
+        url,
+        enabled: isVeevExtractionEnabled(),
+        priority: 1
+      });
+    }
+
+    // Détection LuluStream (extension/userscript)
+    if (detectedHoster === 'lulustream' && isLuluStreamExtractionEnabled() && canAccess) {
+      detectedEmbeds.push({
+        type: 'lulustream',
+        url,
+        enabled: isLuluStreamExtractionEnabled(),
+        priority: 2
+      });
+    }
+
+    // Détection Vidara (extension/userscript)
+    if (detectedHoster === 'vidara' && isVidaraExtractionEnabled() && canAccess) {
+      detectedEmbeds.push({
+        type: 'vidara',
+        url,
+        enabled: isVidaraExtractionEnabled(),
         priority: 2
       });
     }
@@ -1266,6 +1327,22 @@ export async function extractM3u8OnDetection(
             result = await extractSeekStreamingM3u8(embed.url);
             break;
 
+          case 'vidmoly':
+            result = await extractVidmolyM3u8(embed.url, MAIN_API);
+            break;
+
+          case 'lulustream':
+            result = await extractLuluStreamM3u8(embed.url);
+            break;
+
+          case 'veev':
+            result = await extractVeevM3u8(embed.url);
+            break;
+
+          case 'vidara':
+            result = await extractVidaraM3u8(embed.url);
+            break;
+
           default:
             throw new Error(`Type d'embed non supporté: ${embed.type}`);
         }
@@ -1399,7 +1476,7 @@ export async function extractDoodStreamFile(
   if (!doodUrl) return null;
 
   // Try extension first (no VIP needed)
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return tryExtensionFirst('doodstream', doodUrl, () => extractDoodStreamFileServer(doodUrl));
   }
 
@@ -1452,7 +1529,7 @@ export async function extractSeekStreamingM3u8(
   if (!seekUrl) return null;
 
   // Try extension first (no VIP needed)
-  if (hasNexusExtractors()) {
+  if (hasNexusExtractors() || isMobileNativeApp()) {
     return tryExtensionFirst('seekstreaming', seekUrl, () => extractSeekStreamingM3u8Server(seekUrl));
   }
 
@@ -1583,6 +1660,22 @@ export async function extractM3u8RealTime(
             result = await extractSeekStreamingM3u8(embed.url);
             break;
 
+          case 'vidmoly':
+            result = await extractVidmolyM3u8(embed.url, MAIN_API);
+            break;
+
+          case 'lulustream':
+            result = await extractLuluStreamM3u8(embed.url);
+            break;
+
+          case 'veev':
+            result = await extractVeevM3u8(embed.url);
+            break;
+
+          case 'vidara':
+            result = await extractVidaraM3u8(embed.url);
+            break;
+
           default:
             throw new Error(`Type d'embed non supporté: ${embed.type}`);
         }
@@ -1634,4 +1727,20 @@ export async function extractM3u8RealTime(
   });
 
   console.log(`🎯 ${detectedEmbeds.length} extractions lancées en mode temps réel`);
+}
+
+
+export async function extractLuluStreamM3u8(url: string): Promise<M3u8Result | null> {
+  if (!isLuluStreamExtractionEnabled() || !url) return { success: false, error: 'LuluStream désactivé' };
+  return tryExtensionFirst('lulustream', url, async () => ({ success: false, error: 'LuluStream nécessite l\'extension' }));
+}
+
+export async function extractVeevM3u8(url: string): Promise<M3u8Result | null> {
+  if (!isVeevExtractionEnabled() || !url) return { success: false, error: 'Veev désactivé' };
+  return tryExtensionFirst('veev', url, async () => ({ success: false, error: 'Veev nécessite l\'extension' }));
+}
+
+export async function extractVidaraM3u8(url: string): Promise<M3u8Result | null> {
+  if (!isVidaraExtractionEnabled() || !url) return { success: false, error: 'Vidara désactivé' };
+  return tryExtensionFirst('vidara', url, async () => ({ success: false, error: 'Vidara nécessite l\'extension' }));
 }
