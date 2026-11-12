@@ -2092,3 +2092,56 @@ body,
     height: 180px;
   }
 }
+
+/* ─── Dawger HLSPlayer Emerald Bar & Center Controls ─────────────────────
+   Isole les barres du lecteur natif des règles génériques !important de
+   Prowler-theme.css ([class*="progress"], input[type="range"]::-webkit-*). */
+.dawger-player-bar .progress-bar {
+  background: transparent !important;
+}
+
+.dawger-player-bar input[type="range"].dawger-volume-input {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  accent-color: #10b981;
+}
+
+.dawger-player-bar input[type="range"].dawger-volume-input::-webkit-slider-runnable-track {
+  height: 3px !important;
+  border-radius: 9999px !important;
+  background: var(--dawger-vol-track, rgba(255, 255, 255, 0.28)) !important;
+}
+
+.dawger-player-bar input[type="range"].dawger-volume-input::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 9999px !important;
+  background: #10b981 !important;
+  margin-top: -3.5px !important;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.65) !important;
+  cursor: pointer;
+}
+
+.dawger-player-bar input[type="range"].dawger-volume-input::-moz-range-track {
+  height: 3px !important;
+  border-radius: 9999px !important;
+  background: var(--dawger-vol-track, rgba(255, 255, 255, 0.28)) !important;
+}
+
+.dawger-player-bar input[type="range"].dawger-volume-input::-moz-range-thumb {
+  width: 10px !important;
+  height: 10px !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+  background: #10b981 !important;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.65) !important;
+  cursor: pointer;
+}
+
+.video-container .dawger-center-btn:hover {
+  color: #ffffff !important;
+}

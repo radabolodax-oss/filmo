@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle, memo, useMemo } from 'react';
 import type HlsType from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock, Clock, SkipForward, ArrowLeft } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Rewind, FastForward, Volume1, ChevronRight, PictureInPicture, Users, Loader2, Repeat, Cast, Airplay, Info, X, Copy, Check, Lock, Clock, SkipForward, SkipBack, RotateCcw, RotateCw, ArrowLeft } from 'lucide-react';
 import { fetchIntroTimestamps, type MediaTimestamps } from '../services/introDbService';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -10231,43 +10231,77 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         )}
       </AnimatePresence>
 
-      {/* Nouveaux boutons de contrôle au centre */}
+      {/* Contrôles centraux : Précédent · -10s · Lecture/Pause · +10s · Suivant */}
       <AnimatePresence>
         {showControls && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.7, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9, y: 12 }}
             animate={{
               opacity: 1,
+              scale: 1,
               y: 0
             }}
-            exit={{ opacity: 0, scale: 0.7, y: 20 }}
+            exit={{ opacity: 0, scale: 0.9, y: 12 }}
             transition={{
-              duration: 0.2,
+              duration: 0.18,
               ease: "easeOut"
             }}
-            className="absolute inset-0 flex items-center justify-center gap-4 sm:gap-8 z-50 pointer-events-none"
+            className="absolute inset-0 flex items-center justify-center gap-2.5 sm:gap-5 md:gap-7 z-50 pointer-events-none px-3"
           >
+            {/* 1. Épisode précédent */}
             <motion.button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                skipTime(-10);
+                if (!isWatchPartyGuest && onPreviousEpisode) {
+                  onPreviousEpisode();
+                }
               }}
-              initial={{ rotate: 0 }}
-              whileHover={{
-                scale: 1.18,
-                backgroundColor: "rgba(0, 0, 0, 0.85)",
-                rotate: -5
-              }}
-              whileTap={{
-                scale: 0.92,
-                rotate: -10
-              }}
-              transition={{ duration: 0.1 }}
-              className="bg-black/70 rounded-full p-3 sm:p-5 md:p-7 text-white transition-colors shadow-lg pointer-events-auto"
+              whileHover={!isWatchPartyGuest && onPreviousEpisode ? { scale: 1.1 } : undefined}
+              whileTap={!isWatchPartyGuest && onPreviousEpisode ? { scale: 0.92 } : undefined}
+              transition={{ duration: 0.12 }}
+              disabled={isWatchPartyGuest || !onPreviousEpisode}
+              className={`dawger-center-btn w-11 h-11 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full bg-black/35 backdrop-blur-md border border-white/15 text-white flex items-center justify-center shadow-lg transition-all pointer-events-auto ${
+                !isWatchPartyGuest && onPreviousEpisode
+                  ? 'hover:bg-black/50 hover:border-emerald-400/50 cursor-pointer'
+                  : 'opacity-35 cursor-default'
+              }`}
+              title={t('watch.previousEpisode') || 'Épisode précédent'}
+              aria-label={t('watch.previousEpisode') || 'Épisode précédent'}
             >
-              <Rewind size={isMobile && !isFullscreen ? 26 : isMobile ? 36 : 56} />
+              <SkipBack className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 fill-current" />
             </motion.button>
+
+            {/* 2. Reculer de 10 secondes */}
             <motion.button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isWatchPartyGuest) {
+                  skipTime(-10);
+                }
+              }}
+              whileHover={!isWatchPartyGuest ? { scale: 1.1 } : undefined}
+              whileTap={!isWatchPartyGuest ? { scale: 0.92 } : undefined}
+              transition={{ duration: 0.12 }}
+              disabled={isWatchPartyGuest}
+              className={`dawger-center-btn relative w-12 h-12 sm:w-15 sm:h-15 md:w-[70px] md:h-[70px] rounded-full bg-black/35 backdrop-blur-md border border-white/15 text-white flex items-center justify-center shadow-lg transition-all pointer-events-auto ${
+                !isWatchPartyGuest
+                  ? 'hover:bg-black/50 hover:border-emerald-400/50 cursor-pointer'
+                  : 'opacity-35 cursor-not-allowed'
+              }`}
+              title="-10s"
+              aria-label="-10s"
+            >
+              <RotateCcw className="w-6 h-6 sm:w-8 sm:h-8 md:w-9 md:h-9 stroke-[1.75]" />
+              <span className="absolute text-[9px] sm:text-[10px] md:text-[11px] font-bold leading-none mt-[2px] select-none">
+                10
+              </span>
+            </motion.button>
+
+            {/* 3. Lecture / Pause */}
+            <motion.button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 togglePlay();
@@ -10277,40 +10311,80 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                 e.stopPropagation();
                 togglePlay();
               }}
-              initial={{ scale: 1 }}
               whileHover={{
-                scale: 1.25,
-                backgroundColor: "rgba(0, 0, 0, 0.85)",
-                boxShadow: "0 0 32px rgba(255, 255, 255, 0.3)"
+                scale: 1.12,
+                boxShadow: "0 0 28px rgba(16, 185, 129, 0.25)"
               }}
-              whileTap={{
-                scale: 0.9,
-                rotate: 5
-              }}
-              transition={{ duration: 0.1 }}
-              className="bg-black/70 rounded-full p-3.5 sm:p-6 md:p-8 text-white transition-colors shadow-xl pointer-events-auto"
+              whileTap={{ scale: 0.92 }}
+              transition={{ duration: 0.12 }}
+              className="dawger-center-btn w-14 h-14 sm:w-[74px] sm:h-[74px] md:w-22 md:h-22 rounded-full bg-black/40 hover:bg-black/55 backdrop-blur-md border border-white/25 hover:border-emerald-400/60 text-white flex items-center justify-center shadow-xl transition-all pointer-events-auto cursor-pointer"
+              aria-label={isPlaying ? t('watch.pause') : t('watch.play')}
             >
-              {isPlaying ? <Pause size={isMobile && !isFullscreen ? 32 : isMobile ? 42 : 64} /> : <Play size={isMobile && !isFullscreen ? 32 : isMobile ? 42 : 64} />}
+              {isPlaying ? (
+                <Pause className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 fill-current" />
+              ) : (
+                <Play className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 fill-current ml-0.5" />
+              )}
             </motion.button>
+
+            {/* 4. Avancer de 10 secondes */}
             <motion.button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                skipTime(10);
+                if (!isWatchPartyGuest) {
+                  skipTime(10);
+                }
               }}
-              initial={{ rotate: 0 }}
-              whileHover={{
-                scale: 1.18,
-                backgroundColor: "rgba(0, 0, 0, 0.85)",
-                rotate: 5
-              }}
-              whileTap={{
-                scale: 0.92,
-                rotate: 10
-              }}
-              transition={{ duration: 0.1 }}
-              className="bg-black/70 rounded-full p-3 sm:p-5 md:p-7 text-white transition-colors shadow-lg pointer-events-auto"
+              whileHover={!isWatchPartyGuest ? { scale: 1.1 } : undefined}
+              whileTap={!isWatchPartyGuest ? { scale: 0.92 } : undefined}
+              transition={{ duration: 0.12 }}
+              disabled={isWatchPartyGuest}
+              className={`dawger-center-btn relative w-12 h-12 sm:w-15 sm:h-15 md:w-[70px] md:h-[70px] rounded-full bg-black/35 backdrop-blur-md border border-white/15 text-white flex items-center justify-center shadow-lg transition-all pointer-events-auto ${
+                !isWatchPartyGuest
+                  ? 'hover:bg-black/50 hover:border-emerald-400/50 cursor-pointer'
+                  : 'opacity-35 cursor-not-allowed'
+              }`}
+              title="+10s"
+              aria-label="+10s"
             >
-              <FastForward size={isMobile && !isFullscreen ? 26 : isMobile ? 36 : 56} />
+              <RotateCw className="w-6 h-6 sm:w-8 sm:h-8 md:w-9 md:h-9 stroke-[1.75]" />
+              <span className="absolute text-[9px] sm:text-[10px] md:text-[11px] font-bold leading-none mt-[2px] select-none">
+                10
+              </span>
+            </motion.button>
+
+            {/* 5. Épisode / Film suivant */}
+            <motion.button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isWatchPartyGuest) return;
+                if (onNextEpisode) {
+                  if (nextEpisode) {
+                    onNextEpisode(nextEpisode.seasonNumber, nextEpisode.episodeNumber);
+                  } else if (seasonNumber !== undefined && episodeNumber !== undefined) {
+                    onNextEpisode(seasonNumber, episodeNumber + 1);
+                  } else {
+                    onNextEpisode(1, 2);
+                  }
+                } else if (onNextMovie && nextMovie) {
+                  onNextMovie(nextMovie.id);
+                }
+              }}
+              whileHover={!isWatchPartyGuest && (onNextEpisode || (onNextMovie && nextMovie)) ? { scale: 1.1 } : undefined}
+              whileTap={!isWatchPartyGuest && (onNextEpisode || (onNextMovie && nextMovie)) ? { scale: 0.92 } : undefined}
+              transition={{ duration: 0.12 }}
+              disabled={isWatchPartyGuest || (!onNextEpisode && !(onNextMovie && nextMovie))}
+              className={`dawger-center-btn w-11 h-11 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full bg-black/35 backdrop-blur-md border border-white/15 text-white flex items-center justify-center shadow-lg transition-all pointer-events-auto ${
+                !isWatchPartyGuest && (onNextEpisode || (onNextMovie && nextMovie))
+                  ? 'hover:bg-black/50 hover:border-emerald-400/50 cursor-pointer'
+                  : 'opacity-35 cursor-default'
+              }`}
+              title={nextEpisode?.title ? `Épisode suivant : ${nextEpisode.title}` : nextMovie?.title ? `Film suivant : ${nextMovie.title}` : (t('watch.nextEpisode') || 'Suivant')}
+              aria-label={t('watch.nextEpisode') || 'Suivant'}
+            >
+              <SkipForward className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 fill-current" />
             </motion.button>
           </motion.div>
         )}
@@ -10460,289 +10534,174 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         </button>
       </div>
 
-      {/* Informations sur le contenu en haut à gauche (décalé à droite de la colonne de boutons) */}
-      <motion.div
-        className="hidden sm:flex absolute top-2.5 left-11 sm:left-13 p-2 items-center gap-3 z-40"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{
-          opacity: showControls ? 1 : 0,
-          y: showControls ? 0 : -20
-        }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        style={{ pointerEvents: showControls ? 'auto' : 'none' }}
-        aria-hidden={!showControls}
-      >
-        {poster && (
-          <div className="h-20 w-14 rounded overflow-hidden shadow-md">
-            <img
-              src={poster}
-              alt={t('common.poster')}
-              className="h-full w-full object-cover"
-            />
-          </div>
-        )}
-        <div className="flex flex-col text-white">
-          <h3 className="text-sm md:text-base font-bold line-clamp-1">
-            {title || tvShow?.name || (movieId ? t('watch.movie') : tvShowId ? t('watch.series') : "")}
-          </h3>
-          {tvShowId != null && seasonNumber != null && episodeNumber != null && (
-            // `!= null` au lieu de truthy : `{0 && <p/>}` rend le 0 brut dans le DOM
-            // (un littéral "0" apparaît entre le titre et la durée pour les Spéciaux S0).
-            <p className="text-xs text-gray-300">
-              {t('watch.seasonEpisodeLabel', { season: seasonNumber, episode: episodeNumber })}
-            </p>
-          )}
-          <p className="text-xs text-gray-300">
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </p>
-        </div>
-      </motion.div>
       {controls && !isCasting && (
         <motion.div
-          className="absolute bottom-0 left-0 right-0 p-2 sm:p-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] control-bar"
-          initial={{ opacity: 0, y: 20 }}
+          className="dawger-player-bar control-bar absolute bottom-0 left-0 right-0 px-3 sm:px-6 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col gap-1.5 z-40"
+          initial={{ opacity: 0, y: 16 }}
           animate={{
             opacity: showControls ? 1 : 0,
-            y: showControls ? 0 : 20
+            y: showControls ? 0 : 16
           }}
           transition={{ duration: 0.2, ease: "easeOut" }}
           style={{ pointerEvents: showControls || isDragging ? 'auto' : 'none' }}
           aria-hidden={!showControls}
         >
-          <div
-            ref={progressBarRef}
-            className={`relative h-4 md:h-3 bg-gray-600/50 rounded-full mb-2 md:mb-4 group progress-bar ${!isWatchPartyGuest ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
-            onClick={!isDragging && !isWatchPartyGuest ? handleProgressClick : undefined}
-            onMouseDown={!isWatchPartyGuest ? handleProgressDragStart : undefined}
-            onTouchStart={!isWatchPartyGuest ? (e) => {
-              handleProgressDragStart(e);
-              e.stopPropagation(); // Éviter le déclenchement du clic vidéo
-            } : undefined}
-            onMouseMove={!isWatchPartyGuest ? handleProgressHover : undefined}
-            onMouseLeave={!isWatchPartyGuest ? handleProgressLeave : undefined}
-          >
-            <div
-              className="absolute h-full bg-gray-600/50 rounded-full"
-              style={{ width: `${getBufferedWidth()}%` }}
-            />
-            <div
-              className="absolute h-full bg-red-600 rounded-full"
-              style={{ width: `${(currentTime / duration) * 100}%` }}
-            />
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-red-600 rounded-full -ml-2"
-              style={{ left: `${(currentTime / duration) * 100}%` }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between flex-nowrap gap-1.5 sm:gap-2">
-            <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
-              <div className="flex items-center gap-1 md:gap-2">
-                <button
-                  onClick={!isWatchPartyGuest ? togglePlay : undefined}
-                  onTouchEnd={!isWatchPartyGuest ? (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    togglePlay();
-                  } : undefined}
-                  className={`text-white transition-colors ${!isWatchPartyGuest ? 'hover:text-gray-300' : 'opacity-50 cursor-not-allowed'}`}
-                  disabled={isWatchPartyGuest}
-                  aria-disabled={isWatchPartyGuest}
-                >
-                  {isPlaying ? <Pause size={isMobile ? 20 : 24} /> : <Play size={isMobile ? 20 : 24} />}
-                </button>
-                <button
-                  onClick={!isWatchPartyGuest ? () => skipTime(-10) : undefined}
-                  className={`text-white transition-colors ${!isWatchPartyGuest ? 'hover:text-gray-300' : 'opacity-50 cursor-not-allowed'}`}
-                  disabled={isWatchPartyGuest}
-                  aria-disabled={isWatchPartyGuest}
-                >
-                  <Rewind size={isMobile ? 20 : 24} />
-                </button>
-                <button
-                  onClick={!isWatchPartyGuest ? () => skipTime(10) : undefined}
-                  className={`text-white transition-colors ${!isWatchPartyGuest ? 'hover:text-gray-300' : 'opacity-50 cursor-not-allowed'}`}
-                  disabled={isWatchPartyGuest}
-                  aria-disabled={isWatchPartyGuest}
-                >
-                  <FastForward size={isMobile ? 20 : 24} />
-                </button>
-                {onNextEpisode && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (nextEpisode) {
-                        onNextEpisode(nextEpisode.seasonNumber, nextEpisode.episodeNumber);
-                      } else if (seasonNumber !== undefined && episodeNumber !== undefined) {
-                        onNextEpisode(seasonNumber, episodeNumber + 1);
-                      } else {
-                        onNextEpisode(1, 2);
-                      }
-                    }}
-                    className="text-white hover:text-emerald-400 transition-colors"
-                    title={nextEpisode?.title ? `Épisode suivant : ${nextEpisode.title}` : (t('watch.nextEpisode') || 'Épisode suivant')}
-                    aria-label={t('watch.nextEpisode') || 'Épisode suivant'}
-                  >
-                    <SkipForward size={isMobile ? 20 : 24} />
-                  </button>
-                )}
-                {!onNextEpisode && onNextMovie && nextMovie && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onNextMovie(nextMovie.id);
-                    }}
-                    className="text-white hover:text-emerald-400 transition-colors"
-                    title={nextMovie?.title ? `Film suivant : ${nextMovie.title}` : 'Film suivant'}
-                    aria-label="Film suivant"
-                  >
-                    <SkipForward size={isMobile ? 20 : 24} />
-                  </button>
-                )}
-                <div className="relative group flex items-center h-[24px] mr-1 sm:mr-4">
-                  <div className="flex items-center group/volume h-full">
-                    <button
-                      onClick={handleMuteToggle} // Use the updated handler
-                      className="text-white hover:text-gray-300 transition-colors flex items-center justify-center h-full"
-                    >
-                      {/* Icon logic should check videoRef.current.muted */}
-                      {videoRef.current?.muted || volume === 0 ? (
-                        <VolumeX size={isMobile ? 20 : 24} />
-                      ) : volume < 0.5 ? (
-                        <Volume1 size={isMobile ? 20 : 24} />
-                      ) : (
-                        <Volume2 size={isMobile ? 20 : 24} />
-                      )}
-                    </button>
-
-                    <div className={`
-                      overflow-hidden transition-all duration-200 flex items-center h-full
-                      ${isMobile && !isFullscreen ? 'w-0' : 'ml-2 w-[112px]'}
-                      ${!isMobile && !isFullscreen ? 'w-0 group-hover/volume:w-[112px]' : ''}
-                    `}>
-                      <div className="w-[100px] mx-[6px] flex items-center h-full">
-                        <input
-                          type="range"
-                          min="0"
-                          max="1"
-                          step="0.01"
-                          value={volume} // Keep slider value controlled by state
-                          onChange={handleVolumeChange} // Use updated handler
-                          className="w-full accent-red-600 appearance-none h-1 rounded-full"
-                          style={{
-                            background: `linear-gradient(to right, #dc2626 ${volume * 100}%, rgba(255, 255, 255, 0.2) ${volume * 100}%)`
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="text-white text-[11px] sm:text-xs md:text-sm whitespace-nowrap min-w-0 sm:min-w-[85px] flex items-center gap-1 sm:gap-2">
-                <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-
-              </div>
+          {/* Ligne supérieure : Titre/Épisode à gauche · Pilule utilitaires + Timer à droite */}
+          <div className="flex items-end justify-between gap-2 sm:gap-4 min-w-0">
+            <div className="min-w-0 flex-1 pr-1">
+              {(title || showTitle || tvShow?.name || movieId || tvShowId) && (
+                <h3 className="text-sm sm:text-base md:text-lg font-semibold text-white truncate drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)] leading-tight">
+                  {title || showTitle || tvShow?.name || (movieId ? t('watch.movie') : tvShowId ? t('watch.series') : '')}
+                </h3>
+              )}
+              {tvShowId != null && seasonNumber != null && episodeNumber != null && (
+                <p className="text-[11px] sm:text-xs text-white/75 truncate leading-snug">
+                  {t('watch.seasonEpisodeLabel', { season: seasonNumber, episode: episodeNumber })}
+                  {currentEpisodeInfo?.name
+                    ? ` · ${shouldHide('episodeNames', episodeNumber)
+                        ? getMaskedContent(currentEpisodeInfo.name, 'episodeNames', undefined, episodeNumber)
+                        : currentEpisodeInfo.name}`
+                    : ''}
+                </p>
+              )}
             </div>
 
-            <div className="flex items-center gap-1.5 sm:gap-2 md:gap-4">
-              <div className="relative flex items-center h-[24px]">
-                <button
-                  onClick={toggleWatchParty}
-                  className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
-                  aria-label={t('watch.watchParty')}
-                >
-                  <motion.div
-                    animate={{
-                      scale: isWatchPartyActive ? 0.85 : 1,
-                      color: isWatchPartyActive ? '#dc2626' : '#ffffff'
-                    }}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{
-                      duration: 0.2,
-                      ease: "easeInOut"
-                    }}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* Petite pilule Émeraude : Volume · WatchParty · PiP · Repeat · Lock · Fullscreen · Cast */}
+              <div className="inline-flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 rounded-full bg-black/45 backdrop-blur-md border border-white/10 shadow-lg">
+                {/* Volume */}
+                <div className="relative flex items-center group/volume h-[20px]">
+                  <button
+                    type="button"
+                    onClick={handleMuteToggle}
+                    className="text-white/90 hover:text-emerald-400 transition-colors flex items-center justify-center h-full cursor-pointer"
+                    aria-label={t('watch.mute') || 'Volume'}
                   >
-                    <Users size={isMobile ? 20 : 24} />
-                  </motion.div>
-                </button>
-              </div>
-              <div className="relative flex items-center h-[24px]">
-                <button
-                  onClick={togglePip}
-                  className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
-                  aria-label={t('watch.pictureInPicture')}
-                >
-                  <motion.div
-                    animate={{
-                      scale: isPipActive ? 0.85 : 1,
-                      color: isPipActive ? '#dc2626' : '#ffffff'
-                    }}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{
-                      duration: 0.2,
-                      ease: "easeInOut"
-                    }}
-                  >
-                    <PictureInPicture size={isMobile ? 20 : 24} />
-                  </motion.div>
-                </button>
-              </div>
-              <div className="relative flex items-center h-[24px]">
-                <button
-                  onClick={toggleLoop}
-                  className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
-                  aria-label={t('watch.loopPlayback')}
-                >
-                  <motion.div
-                    animate={{
-                      scale: isLooping ? 0.85 : 1,
-                      color: isLooping ? '#dc2626' : '#ffffff'
-                    }}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{
-                      duration: 0.2,
-                      ease: "easeInOut"
-                    }}
-                  >
-                    <Repeat size={isMobile ? 20 : 24} />
-                  </motion.div>
-                </button>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  enterLockMode();
-                }}
-                className="text-white hover:text-red-600 transition-colors flex items-center justify-center h-[24px]"
-                aria-label={t('watch.lockControls')}
-                title={t('watch.lockControls')}
-              >
-                <Lock size={isMobile ? 20 : 24} />
-              </button>
+                    {videoRef.current?.muted || volume === 0 ? (
+                      <VolumeX size={isMobile ? 16 : 18} />
+                    ) : volume < 0.5 ? (
+                      <Volume1 size={isMobile ? 16 : 18} />
+                    ) : (
+                      <Volume2 size={isMobile ? 16 : 18} />
+                    )}
+                  </button>
 
-              <button
-                onClick={toggleFullscreen}
-                className="text-white hover:text-red-600 transition-colors flex items-center justify-center h-[24px]"
-              >
-                {isFullscreen ?
-                  <Minimize size={isMobile ? 20 : 24} /> :
-                  <Maximize size={isMobile ? 20 : 24} />
-                }
-              </button>
-              {/* Smart Cast/AirPlay Button - Always visible */}
-              <div className="relative flex items-center h-[24px]">
+                  <div className={`
+                    overflow-hidden transition-all duration-200 flex items-center h-full
+                    ${isMobile && !isFullscreen ? 'w-0' : 'w-0 group-hover/volume:w-[76px] group-hover/volume:ml-1.5'}
+                    ${isFullscreen && !isMobile ? '!w-[76px] !ml-1.5' : ''}
+                  `}>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={volume}
+                      onChange={handleVolumeChange}
+                      className="dawger-volume-input w-full h-3 cursor-pointer"
+                      style={{
+                        ['--dawger-vol-track' as any]: `linear-gradient(to right, #10b981 ${volume * 100}%, rgba(255, 255, 255, 0.25) ${volume * 100}%)`
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* WatchParty */}
+                <button
+                  type="button"
+                  onClick={toggleWatchParty}
+                  className="text-white/90 hover:text-emerald-400 transition-colors flex items-center justify-center h-[20px] cursor-pointer"
+                  aria-label={t('watch.watchParty')}
+                  title={t('watch.watchParty')}
+                >
+                  <motion.div
+                    animate={{
+                      scale: isWatchPartyActive ? 0.9 : 1,
+                      color: isWatchPartyActive ? '#10b981' : '#ffffff'
+                    }}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <Users size={isMobile ? 15 : 17} />
+                  </motion.div>
+                </button>
+
+                {/* Picture-in-Picture */}
+                <button
+                  type="button"
+                  onClick={togglePip}
+                  className="text-white/90 hover:text-emerald-400 transition-colors flex items-center justify-center h-[20px] cursor-pointer"
+                  aria-label={t('watch.pictureInPicture')}
+                  title={t('watch.pictureInPicture')}
+                >
+                  <motion.div
+                    animate={{
+                      scale: isPipActive ? 0.9 : 1,
+                      color: isPipActive ? '#10b981' : '#ffffff'
+                    }}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <PictureInPicture size={isMobile ? 15 : 17} />
+                  </motion.div>
+                </button>
+
+                {/* Boucle / Repeat */}
+                <button
+                  type="button"
+                  onClick={toggleLoop}
+                  className="text-white/90 hover:text-emerald-400 transition-colors flex items-center justify-center h-[20px] cursor-pointer"
+                  aria-label={t('watch.loopPlayback')}
+                  title={t('watch.loopPlayback')}
+                >
+                  <motion.div
+                    animate={{
+                      scale: isLooping ? 0.9 : 1,
+                      color: isLooping ? '#10b981' : '#ffffff'
+                    }}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <Repeat size={isMobile ? 15 : 17} />
+                  </motion.div>
+                </button>
+
+                {/* Verrouillage tactile */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    enterLockMode();
+                  }}
+                  className="text-white/90 hover:text-emerald-400 transition-colors flex items-center justify-center h-[20px] cursor-pointer"
+                  aria-label={t('watch.lockControls')}
+                  title={t('watch.lockControls')}
+                >
+                  <Lock size={isMobile ? 15 : 17} />
+                </button>
+
+                {/* Plein écran */}
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="text-white/90 hover:text-emerald-400 transition-colors flex items-center justify-center h-[20px] cursor-pointer"
+                  aria-label={isFullscreen ? t('watch.exitFullscreen') : t('watch.fullscreen')}
+                  title={isFullscreen ? t('watch.exitFullscreen') : t('watch.fullscreen')}
+                >
+                  {isFullscreen ? <Minimize size={isMobile ? 15 : 17} /> : <Maximize size={isMobile ? 15 : 17} />}
+                </button>
+
+                {/* Cast / AirPlay */}
+                <div className="relative flex items-center h-[20px]">
                   {castAvailable && !isTouchDevice && !airPlayAvailable && !isCasting ? (
                     <motion.div
                       animate={{ scale: 1, color: '#ffffff' }}
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
-                      transition={{
-                        duration: 0.2,
-                        ease: "easeInOut"
-                      }}
+                      transition={{ duration: 0.15 }}
                     >
                       <google-cast-launcher
                         ref={(node) => {
@@ -10757,18 +10716,19 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                         title={t('watch.cast')}
                         style={{
                           display: 'inline-flex',
-                          width: `${isMobile ? 20 : 24}px`,
-                          height: `${isMobile ? 20 : 24}px`,
-                          maxWidth: `${isMobile ? 20 : 24}px`,
-                          maxHeight: `${isMobile ? 20 : 24}px`,
+                          width: `${isMobile ? 16 : 18}px`,
+                          height: `${isMobile ? 16 : 18}px`,
+                          maxWidth: `${isMobile ? 16 : 18}px`,
+                          maxHeight: `${isMobile ? 16 : 18}px`,
                           overflow: 'hidden',
-                          ['--connected-color' as any]: '#dc2626',
+                          ['--connected-color' as any]: '#10b981',
                           ['--disconnected-color' as any]: '#ffffff'
                         }}
                       />
                     </motion.div>
                   ) : (
                     <button
+                      type="button"
                       ref={(node) => {
                         castButtonRef.current = node;
                       }}
@@ -10788,9 +10748,6 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                           return;
                         }
 
-                        // Neither target detected — open the menu so the user
-                        // gets feedback (status, tips, error) instead of a
-                        // silent no-op.
                         if (!castAvailable && !airPlayAvailable) {
                           setCastError(null);
                           setAirPlayError(null);
@@ -10806,26 +10763,22 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
                         setShowCastMenu(false);
                       }}
-                      className="text-white hover:text-red-600 transition-colors flex items-center justify-center"
+                      className="text-white/90 hover:text-emerald-400 transition-colors flex items-center justify-center cursor-pointer"
                       aria-label={airPlayAvailable && !castAvailable ? t('watch.airplay') : castAvailable && !airPlayAvailable ? t('watch.cast') : t('watch.streamTo')}
                     >
                       <motion.div
                         animate={{
-                          scale: (isAirPlaying || isCasting) ? 0.85 : 1,
-                          color: (isAirPlaying || isCasting) ? '#dc2626' : '#ffffff'
+                          scale: (isAirPlaying || isCasting) ? 0.9 : 1,
+                          color: (isAirPlaying || isCasting) ? '#10b981' : '#ffffff'
                         }}
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        transition={{
-                          duration: 0.2,
-                          ease: "easeInOut"
-                        }}
+                        transition={{ duration: 0.15 }}
                       >
-                        {/* Show AirPlay icon if only AirPlay is available, Cast if only Cast is available, or Cast if both are available */}
                         {airPlayAvailable && !castAvailable ? (
-                          <Airplay size={isMobile ? 20 : 24} />
+                          <Airplay size={isMobile ? 15 : 17} />
                         ) : (
-                          <Cast size={isMobile ? 20 : 24} />
+                          <Cast size={isMobile ? 15 : 17} />
                         )}
                       </motion.div>
                     </button>
@@ -11008,6 +10961,41 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
                     </motion.div>
                   )}
                 </div>
+              </div>
+
+              {/* Timer compact */}
+              <div className="text-white/90 text-[11px] sm:text-xs md:text-sm font-medium tabular-nums whitespace-nowrap drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </div>
+            </div>
+          </div>
+
+          {/* Barre de progression ultra-fine Émeraude (zone tactile confortable h-5, piste visuelle 3.5px -> 5px) */}
+          <div
+            ref={progressBarRef}
+            className={`relative w-full h-5 flex items-center group/seek progress-bar ${!isWatchPartyGuest ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
+            onClick={!isDragging && !isWatchPartyGuest ? handleProgressClick : undefined}
+            onMouseDown={!isWatchPartyGuest ? handleProgressDragStart : undefined}
+            onTouchStart={!isWatchPartyGuest ? (e) => {
+              handleProgressDragStart(e);
+              e.stopPropagation();
+            } : undefined}
+            onMouseMove={!isWatchPartyGuest ? handleProgressHover : undefined}
+            onMouseLeave={!isWatchPartyGuest ? handleProgressLeave : undefined}
+          >
+            <div className="relative w-full h-[3.5px] group-hover/seek:h-[5px] transition-all bg-white/25 rounded-full dawger-seek-track">
+              <div
+                className="dawger-seek-buffer absolute left-0 top-0 bottom-0 bg-white/20 rounded-full"
+                style={{ width: `${getBufferedWidth()}%` }}
+              />
+              <div
+                className="dawger-seek-fill absolute left-0 top-0 bottom-0 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.55)]"
+                style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+              />
+              <div
+                className="dawger-seek-thumb absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 group-hover/seek:w-3.5 group-hover/seek:h-3.5 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.75)] transition-all"
+                style={{ left: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+              />
             </div>
           </div>
         </motion.div>
