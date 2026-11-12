@@ -16,6 +16,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const https = require('https');
+const { getAmbilightEmbedScript } = require('../utils/ambilightEmbedScript');
 
 const MIAW_BASE = 'https://miaw.tv';
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes (tokens blink miaw.tv)
@@ -611,6 +612,7 @@ router.get('/miaw-embed', (req, res) => {
         v.play().catch(function() {});
       });
     })();
+    ${getAmbilightEmbedScript('player')}
   </script>
 </body>
 </html>`);

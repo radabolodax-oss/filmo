@@ -20,6 +20,7 @@ const corsMiddleware = cors({
     "sentry-trace",
     "x-profile-id",
     "x-access-key",
+    "x-vip-access",
   ],
   credentials: true,
   optionsSuccessStatus: 204,

@@ -15,6 +15,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const https = require('https');
+const { getAmbilightEmbedScript } = require('../utils/ambilightEmbedScript');
 
 const WEBFLIX_BASE = 'https://webflix.bio';
 const VIDZY_BASE = 'https://vidzy.org';
@@ -196,6 +197,7 @@ router.get('/embed', (req, res) => {
         v.play().catch(function() {});
       });
     })();
+    ${getAmbilightEmbedScript('v')}
   </script>
 </body>
 </html>`);
@@ -228,7 +230,8 @@ router.get('/movie/:tmdbId', async (req, res) => {
       const proxyUrl = `${baseApiUrl}/api/webflix/video?url=${encodeURIComponent(d.url)}`;
       const rawSize = d.size || '';
       const is4K = isTrue4KStream(rawSize, d.url, d.quality);
-      const quality = is4K ? '4K Ultra HD' : (d.quality || '1080p FHD');
+      const rawQuality = d.quality && !/^unknown$/i.test(String(d.quality).trim()) ? d.quality : '1080p FHD';
+      const quality = is4K ? '4K Ultra HD' : rawQuality;
       const name = is4K
         ? `👑 FastFlux 4K Ultra HD (VF)${rawSize ? ` (${rawSize})` : ''}`
         : `FastFlux 1080p FHD (VF)${rawSize ? ` (${rawSize})` : ''}`;
@@ -345,7 +348,8 @@ async function handleTv(tmdbId, season, episode, req, res) {
       const proxyUrl = `${baseApiUrl}/api/webflix/video?url=${encodeURIComponent(d.url)}`;
       const rawSize = d.size || '';
       const is4K = isTrue4KStream(rawSize, d.url, d.quality);
-      const quality = is4K ? '4K Ultra HD' : (d.quality || '1080p FHD');
+      const rawQuality = d.quality && !/^unknown$/i.test(String(d.quality).trim()) ? d.quality : '1080p FHD';
+      const quality = is4K ? '4K Ultra HD' : rawQuality;
       const name = is4K
         ? `👑 FastFlux 4K Ultra HD (VF)${rawSize ? ` (${rawSize})` : ''}`
         : `FastFlux 1080p FHD (VF)${rawSize ? ` (${rawSize})` : ''}`;
