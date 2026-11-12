@@ -137,11 +137,11 @@ index eca8141..06ee3bb 100644
  }
  
  export interface WebViewError extends WebViewNativeEvent {
-
 diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 0000000..1111111 100644
 --- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
 +++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
-@@ -260,9 +260,18 @@ public class RNCWebViewClient extends WebViewClient {
+@@ -260,11 +260,21 @@ public class RNCWebViewClient extends WebViewClient {
          // This is desired behavior. We later use these values to determine whether the request is a top-level navigation or a subresource request.
          String topWindowUrl = webView.getUrl();
 -        String failingUrl = error.getUrl();
@@ -165,3 +165,6 @@ diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactna
 +        }
 +
 +        handler.cancel();
+ 
+         int code = error.getPrimaryError();
+         String description = "";
