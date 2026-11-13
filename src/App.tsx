@@ -6,6 +6,7 @@ import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
+import VisualEffectsLayer from './components/VisualEffectsLayer';
 import Home from './pages/Home';
 // import { useTVMode } from './hooks/useTVMode';
 import { useSpaceToPlayIframe } from './hooks/useSpaceToPlayIframe';
@@ -1676,7 +1677,7 @@ const AppWithIntro: React.FC = () => {
   // Idle prefetch (Milestone 6): preload high-traffic route chunks shortly
   // after mount via requestIdleCallback (setTimeout fallback for Safari/FF).
   useEffect(() => {
-    const IDLE_PREFETCH = ['/movies', '/tv-shows', '/anime', '/search'];
+    const IDLE_PREFETCH = ['/movies', '/tv-shows', '/anime', '/categories', '/search'];
     // @ts-expect-error - requestIdleCallback not in all TS DOM lib versions
     const ric = window.requestIdleCallback || ((cb: () => void) => setTimeout(cb, 1500));
     ric(() => {
@@ -1706,6 +1707,8 @@ const AppWithIntro: React.FC = () => {
           }
         `}
       </style>
+      {/* Effets visuels globaux (Neige avec accumulation + Chauve-souris Halloween) */}
+      <VisualEffectsLayer />
       {/* Composant pour faire défiler vers le haut lors des changements de route */}
       <ScrollToTop />
       {/* Animation de scroll fluide globale (Lenis) */}

@@ -7062,7 +7062,7 @@ const WatchMovie: React.FC = () => {
 
   return (
 
-    <div className="w-full max-w-4xl mx-auto mt-16 sm:mt-20 mb-6 px-3 sm:px-6 pb-20">
+    <div className="w-full max-w-4xl lg:max-w-6xl xl:max-w-[1380px] 2xl:max-w-[1500px] mx-auto mt-16 sm:mt-20 mb-6 px-3 sm:px-6 pb-20">
 
       {/* En-tête — titre + métadonnées, au-dessus de l'encadré du player */}
 
@@ -8422,9 +8422,9 @@ const WatchMovie: React.FC = () => {
 
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
 
-            {recommendations.slice(0, 4).map((rec: any) => (
+            {recommendations.slice(0, 6).map((rec: any) => (
 
               <Link
 

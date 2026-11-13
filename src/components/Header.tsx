@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import Snowfall from 'react-snowfall';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
-import { Film, Search, X, Star, Tv2, Users, Clapperboard, Bell, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github, ArrowLeft } from 'lucide-react';
+import { Film, Search, X, Star, Tv2, Users, Clapperboard, Bell, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github, ArrowLeft, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NotificationsPopup from './NotificationsPopup';
 import HeaderSettingsModal from './HeaderSettingsModal';
@@ -92,12 +91,13 @@ const Header: React.FC = () => {
     clearAutocompleteSuggestions
   } = useSearch();
 
-  // 4 items principaux visibles dans le header
+  // 5 items principaux visibles dans le header
   const mainNavItems = useMemo(() => [
     { name: t('nav.movies'), path: '/movies', icon: <Clapperboard size={16} />, isActive: location.pathname === '/movies' },
     { name: t('nav.tvShows'), path: '/tv-shows', icon: <Tv2 size={16} />, isActive: location.pathname === '/tv-shows' },
-    { name: t('nav.anime'), path: '/anime', icon: <Sparkles size={16} />, isActive: location.pathname === '/anime' },
     { name: 'Sagas', path: '/collections', icon: <LayoutGrid size={16} />, isActive: location.pathname === '/collections' },
+    { name: 'Catégories', path: '/categories', icon: <Layers size={16} />, isActive: location.pathname === '/categories' },
+    { name: t('nav.anime'), path: '/anime', icon: <Sparkles size={16} />, isActive: location.pathname === '/anime' },
   ], [t, location.pathname]);
 
   // Pages de détails film/série/anime : on remplace la nav par une flèche retour
@@ -822,18 +822,6 @@ const Header: React.FC = () => {
 
       {/* Spacer */}
       <div className="w-full h-0" aria-hidden="true" />
-
-      {isSnowfallActive && (
-        <Snowfall
-          style={{
-            position: 'fixed',
-            width: '100vw',
-            height: '100vh',
-            zIndex: 2147483647,
-            pointerEvents: 'none',
-          }}
-        />
-      )}
     </>
   );
 };

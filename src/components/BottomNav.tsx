@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
-import { Clapperboard, Tv2, Sparkles, LayoutGrid, Search } from 'lucide-react';
+import { Clapperboard, Tv2, Sparkles, LayoutGrid, Search, Layers } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const HIDDEN_PREFIXES = [
@@ -23,9 +23,9 @@ const BottomNav: React.FC = () => {
   const tabs = [
     { label: t('nav.movies'), path: '/movies', Icon: Clapperboard },
     { label: t('nav.tvShows'), path: '/tv-shows', Icon: Tv2 },
-    { label: t('nav.anime'), path: '/anime', Icon: Sparkles },
     { label: 'Sagas', path: '/collections', Icon: LayoutGrid },
-    { label: 'Chercher', path: '/search', Icon: Search },
+    { label: 'Catégories', path: '/categories', Icon: Layers },
+    { label: t('nav.anime'), path: '/anime', Icon: Sparkles },
   ];
 
   return (

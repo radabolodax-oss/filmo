@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import {
   ArrowLeft, Settings, Shield, Monitor, Smartphone, Tablet,
-  Copy, X, Snowflake, Activity, Trash2, Crown, Volume2,
+  Copy, X, Snowflake, Skull, Activity, Trash2, Crown, Volume2,
   Database, Key, Lock, Palette, Eye, Download, Upload, Globe, AlertTriangle, History, CalendarClock, FlaskConical, Link2, MessageCircle, BellOff, Sparkles,
   Zap, RefreshCw, ChevronDown, ListOrdered, Gauge, Film, FastForward, Clock
 } from 'lucide-react';
@@ -298,6 +298,11 @@ const SettingsPage: React.FC = () => {
 
   const [isSnowfallActive, setIsSnowfallActive] = useState(() => {
     return sessionStorage.getItem('snowfall_active') === 'true';
+  });
+
+  const [batEnabled, setBatEnabled] = useState(() => {
+    const val = localStorage.getItem('dawger_bat_enabled');
+    return val === null ? true : val === 'true';
   });
 
   
@@ -735,6 +740,17 @@ const SettingsPage: React.FC = () => {
     setIsSnowfallActive(newValue);
     sessionStorage.setItem('snowfall_active', String(newValue));
     window.dispatchEvent(new CustomEvent('snowfall_toggled'));
+  };
+
+  const handleBatToggle = () => {
+    const newValue = !batEnabled;
+    setBatEnabled(newValue);
+    localStorage.setItem('dawger_bat_enabled', String(newValue));
+    window.dispatchEvent(new CustomEvent('dawger_bat_toggle_changed'));
+  };
+
+  const handleTestBat = () => {
+    window.dispatchEvent(new CustomEvent('dawger_trigger_bat_test'));
   };
 
   
@@ -1505,6 +1521,39 @@ const SettingsPage: React.FC = () => {
                     </p>
                   </div>
                   {renderToggle(isSnowfallActive, handleSnowfallToggle, 'blue')}
+                </motion.div>
+
+                {/* Halloween Bat Effect */}
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="p-4 bg-gray-800/30 rounded-xl border border-gray-700/40 hover:border-gray-600/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 mr-4">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Skull className="w-3.5 h-3.5 text-purple-400" />
+                        <h4 className="font-medium text-white text-sm">Effet Halloween (Chauve-souris surprise)</h4>
+                      </div>
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        Une chauve-souris traverse l'écran et frappe la vitre de temps en temps (~1x par heure à heure aléatoire, jamais pendant un film).
+                      </p>
+                    </div>
+                    {renderToggle(batEnabled, handleBatToggle, 'purple')}
+                  </div>
+                  {batEnabled && (
+                    <div className="mt-3 pt-3 border-t border-gray-700/30 flex items-center justify-between">
+                      <span className="text-xs text-gray-400">Tester l'animation sans attendre :</span>
+                      <button
+                        type="button"
+                        onClick={handleTestBat}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 active:scale-95 transition-all flex items-center gap-1.5"
+                      >
+                        <span>🦇</span> Tester l'impact
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
 
                 {/* Screensaver */}

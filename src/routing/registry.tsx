@@ -20,6 +20,7 @@ export const ROUTES: RouteEntry[] = [
   { path: '/anime',                   loader: lz(() => import('../pages/Anime')),                   fallback: <GridSkeleton /> },
   { path: '/tv-shows',                loader: lz(() => import('../pages/TVShows')),                 fallback: <GridSkeleton /> },
   { path: '/collections',             loader: lz(() => import('../pages/Collections')),             fallback: <GridSkeleton /> },
+  { path: '/categories',              loader: lz(() => import('../pages/Categories')),              fallback: <GridSkeleton /> },
   { path: '/list-catalog',            loader: lz(() => import('../pages/SharedListsCatalogPage')),  fallback: <GridSkeleton /> },
   { path: '/watchparty/list',         loader: lz(() => import('../pages/WatchPartyList')),          fallback: <GridSkeleton /> },
   { path: '/wishboard',               loader: lz(() => import('../pages/Greenlight/WishboardPage')), fallback: <GridSkeleton /> },
