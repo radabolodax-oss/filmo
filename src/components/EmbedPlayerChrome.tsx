@@ -199,7 +199,8 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
       const active = !!document.fullscreenElement;
       if (active) {
         setIsFullscreen(true);
-      } else if (!manualFullscreenRef.current) {
+      } else {
+        manualFullscreenRef.current = false;
         setIsFullscreen(false);
         try {
           (window.screen?.orientation as any)?.unlock?.();
@@ -209,6 +210,20 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Escape key to exit fullscreen (for CSS-only fallback or Electron)
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        void toggleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isFullscreen]);
 
   const gearLabel = `${t('watch.sources')} & ${t('watch.settingsTitle')}`;
 

@@ -4617,7 +4617,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
                       referrerPolicy="no-referrer"
 
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
 
                     ></iframe>
 

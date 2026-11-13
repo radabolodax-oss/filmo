@@ -490,6 +490,7 @@ video {
   background: black;
   width: 100vw;
   height: 100vh;
+  aspect-ratio: auto !important;
 }
 
 .video-container:fullscreen video {

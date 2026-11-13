@@ -4736,7 +4736,12 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         }
       };
 
-      await tryRequestFullscreen(playerElement);
+      const ok = await tryRequestFullscreen(playerElement);
+      if (!ok && videoElement && typeof videoElement.webkitEnterFullscreen === 'function') {
+        try {
+          videoElement.webkitEnterFullscreen();
+        } catch {}
+      }
       try {
         await (window.screen?.orientation as any)?.lock?.('landscape');
       } catch {}
@@ -4787,7 +4792,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       );
       if (active) {
         setIsFullscreen(true);
-      } else if (!manualFullscreenRef.current) {
+      } else {
+        manualFullscreenRef.current = false;
         setIsFullscreen(false);
         try {
           (window.screen?.orientation as any)?.unlock?.();
@@ -4803,6 +4809,20 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
   }, []);
+
+  // Escape key listener to exit fullscreen mode (covers native fullscreen, CSS overlay & Electron)
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        void toggleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handleEscapeKey, true);
+    return () => window.removeEventListener('keydown', handleEscapeKey, true);
+  }, [isFullscreen]);
 
   // Add state for PiP error message display
   const [pipError, setPipError] = useState<string | null>(null);
@@ -9447,14 +9467,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
     // On mobile, don't use double click; it's handled by touch logic
     if (isTouchDevice) return;
-    const touch = e as unknown as React.TouchEvent;
-    const containerWidth = containerRef.current?.clientWidth || 0;
-    const isLeft = ((touch.touches[0] as any)?.clientX || 0) < containerWidth / 2;
-    if (isLeft) {
-      skipTime(-10);
-    } else {
-      skipTime(10);
-    }
+    e.preventDefault();
+    e.stopPropagation();
+    void toggleFullscreen();
   };
 
   // Resolve a backdrop/poster URL: supports full URL or TMDB poster_path starting with '/'
