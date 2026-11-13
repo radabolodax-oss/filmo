@@ -173,8 +173,18 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
       if (wantFullscreen) {
         manualFullscreenRef.current = true;
         setIsFullscreen(true);
+        try {
+          window.history.pushState({ dawgerFs: true }, '');
+        } catch {}
+        (window as any).__DAWGER_EXIT_FULLSCREEN__ = () => {
+          void toggleFullscreen();
+        };
         if (containerRef.current) {
-          await containerRef.current.requestFullscreen?.().catch(() => {});
+          const el = containerRef.current as any;
+          const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+          if (typeof req === 'function') {
+            await Promise.resolve(req.call(el)).catch(() => {});
+          }
         }
         try {
           await (window.screen?.orientation as any)?.lock?.('landscape');
@@ -182,12 +192,20 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
       } else {
         manualFullscreenRef.current = false;
         setIsFullscreen(false);
-        if (document.fullscreenElement) {
-          await document.exitFullscreen?.().catch(() => {});
+        (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+        const doc = document as any;
+        const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+        if (typeof exit === 'function' && (doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement)) {
+          await Promise.resolve(exit.call(doc)).catch(() => {});
         }
         try {
           (window.screen?.orientation as any)?.unlock?.();
         } catch {}
+        if (window.history.state?.dawgerFs) {
+          try {
+            window.history.back();
+          } catch {}
+        }
       }
     } catch (err) {
       console.warn('[EmbedPlayerChrome] Fullscreen error:', err);
@@ -196,20 +214,50 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const active = !!document.fullscreenElement;
+      const doc = document as any;
+      const active = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement);
       if (active) {
         setIsFullscreen(true);
-      } else {
-        manualFullscreenRef.current = false;
+      } else if (!manualFullscreenRef.current) {
         setIsFullscreen(false);
+        (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
         try {
           (window.screen?.orientation as any)?.unlock?.();
         } catch {}
       }
     };
+
+    const handlePopState = () => {
+      if (manualFullscreenRef.current || isFullscreen) {
+        manualFullscreenRef.current = false;
+        setIsFullscreen(false);
+        (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+        const doc = document as any;
+        const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+        if (typeof exit === 'function' && (doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement)) {
+          Promise.resolve(exit.call(doc)).catch(() => {});
+        }
+        try {
+          (window.screen?.orientation as any)?.unlock?.();
+        } catch {}
+      }
+    };
+
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+      window.removeEventListener('popstate', handlePopState);
+      (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+    };
+  }, [isFullscreen]);
 
   // Escape key to exit fullscreen (for CSS-only fallback or Electron)
   useEffect(() => {

@@ -4710,6 +4710,12 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     if (!isFullscreenNow) {
       manualFullscreenRef.current = true;
       setIsFullscreen(true);
+      try {
+        window.history.pushState({ dawgerHlsFs: true }, '');
+      } catch {}
+      (window as any).__DAWGER_EXIT_FULLSCREEN__ = () => {
+        void toggleFullscreen();
+      };
 
       const tryRequestFullscreen = async (element: HTMLElement | HTMLVideoElementWithWebkit) => {
         const extendedElement = element as typeof element & {
@@ -4748,9 +4754,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     } else {
       manualFullscreenRef.current = false;
       setIsFullscreen(false);
+      (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
       try {
         (window.screen?.orientation as any)?.unlock?.();
       } catch {}
+
+      if (window.history.state?.dawgerHlsFs) {
+        try {
+          window.history.back();
+        } catch {}
+      }
 
       if (typeof doc.exitFullscreen === 'function' && doc.fullscreenElement) {
         try {
@@ -4792,9 +4805,25 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       );
       if (active) {
         setIsFullscreen(true);
-      } else {
+      } else if (!manualFullscreenRef.current) {
+        setIsFullscreen(false);
+        (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+        try {
+          (window.screen?.orientation as any)?.unlock?.();
+        } catch {}
+      }
+    };
+
+    const handlePopState = () => {
+      if (manualFullscreenRef.current || isFullscreen) {
         manualFullscreenRef.current = false;
         setIsFullscreen(false);
+        (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+        const doc = document as any;
+        const exit = doc.exitFullscreen || doc.webkitExitFullscreen;
+        if (typeof exit === 'function' && (doc.fullscreenElement || doc.webkitFullscreenElement)) {
+          exit.call(doc).catch(() => {});
+        }
         try {
           (window.screen?.orientation as any)?.unlock?.();
         } catch {}
@@ -4803,12 +4832,15 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    window.addEventListener('popstate', handlePopState);
 
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      window.removeEventListener('popstate', handlePopState);
+      (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
     };
-  }, []);
+  }, [isFullscreen]);
 
   // Escape key listener to exit fullscreen mode (covers native fullscreen, CSS overlay & Electron)
   useEffect(() => {

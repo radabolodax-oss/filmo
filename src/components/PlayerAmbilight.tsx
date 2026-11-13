@@ -316,7 +316,7 @@ export const PlayerStage: React.FC<PlayerStageProps> = ({
   const isReactingLive = hasLiveFrames || hasExternalGlow;
 
   return (
-    <div ref={stageRef} className="relative isolate">
+    <div ref={stageRef} className="relative">
       {enabled && (
         <div
           ref={glowLayerRef}
