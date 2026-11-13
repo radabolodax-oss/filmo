@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
-import { Film, Search, X, Star, Tv2, Users, Clapperboard, Bell, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github, ArrowLeft, Layers } from 'lucide-react';
+import { Film, Search, X, Star, Tv2, Users, Clapperboard, Bell, Lightbulb, Network, List, Radio, Unlock, ExternalLink, LayoutGrid, Settings, Dices, Sparkles, HelpCircle, Github, ArrowLeft, Layers, Compass } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import NotificationsPopup from './NotificationsPopup';
 import HeaderSettingsModal from './HeaderSettingsModal';
@@ -96,7 +96,7 @@ const Header: React.FC = () => {
     { name: t('nav.movies'), path: '/movies', icon: <Clapperboard size={16} />, isActive: location.pathname === '/movies' },
     { name: t('nav.tvShows'), path: '/tv-shows', icon: <Tv2 size={16} />, isActive: location.pathname === '/tv-shows' },
     { name: 'Sagas', path: '/collections', icon: <LayoutGrid size={16} />, isActive: location.pathname === '/collections' },
-    { name: 'Catégories', path: '/categories', icon: <Layers size={16} />, isActive: location.pathname === '/categories' },
+    { name: 'Découvrir', path: '/categories', icon: <Compass size={16} />, isActive: location.pathname === '/categories' },
     { name: t('nav.anime'), path: '/anime', icon: <Sparkles size={16} />, isActive: location.pathname === '/anime' },
   ], [t, location.pathname]);
 

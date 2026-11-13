@@ -1,13 +1,14 @@
 {
-  "version": "2.6.13",
-  "buildNumber": 50,
-  "apkUrl": "https://raw.githubusercontent.com/movixstream/MovixOpenSource/main/app/movix-android.apk",
-  "apkSizeBytes": 79465796,
-  "apkSha256": "220ea12763f3ed990688e2b14fdee0a4e3eda8420a13f536f3b151491d9e9773",
+  "version": "1.0.1",
+  "buildNumber": 2,
+  "apkUrl": "https://dawgerwebsite.vercel.app/downloads/Dawger-Autonome-v1.0.1.apk",
+  "apkSizeBytes": 32286661,
+  "apkSha256": "01b238f29f5152965f232ab0fa49594b3d82426c8c8383c4bc082d209f3cdb0c",
+  "iosUrl": "https://dawgerwebsite.vercel.app/ios",
   "mandatory": false,
-  "releasedAt": "2026-10-30T13:35:43.000Z",
+  "releasedAt": "2026-11-13T22:12:52.549Z",
   "releaseNotes": {
-    "fr": "Fsvid et Vidzy se lisent à nouveau. L'app se présente maintenant à ces sites comme un vrai navigateur Chrome, ce qui devrait tenir bien plus longtemps.",
-    "en": "Fsvid and Vidzy play again. The app now presents itself to these sites as a real Chrome browser, which should hold up much longer."
+    "fr": "Dawger Autonome v1.0.1 — Onglet Découvrir, Roulette Dawger Spin infinie, Ambilight & nouveau plein écran sans barres système sur Android et iOS.",
+    "en": "Dawger Standalone v1.0.1 — Discover tab, infinite Dawger Spin roulette, Ambilight & fullscreen fixes without system bars."
   }
 }

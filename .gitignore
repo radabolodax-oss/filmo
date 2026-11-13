@@ -98,3 +98,6 @@ scratch/
 app/build/
 app/android/app/src/main/assets/dist/
 scripts/start-mobile-tunnel.py
+
+app/movix-ios-unsigner.ipa
+*.ipa

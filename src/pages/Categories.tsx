@@ -288,7 +288,7 @@ export const Categories: React.FC = () => {
               <span>Exploration Immense</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-              Catalogue par <span className="text-white">Catégories</span>
+              Explorer & <span className="text-white">Découvrir</span>
             </h1>
             <p className="text-sm text-white/60 leading-relaxed">
               Stand-up, K-Drama, Cinéma Japonais, Hollywood, Nollywood, Français ou genres combinés : explorez des milliers de titres triés sur le volet.

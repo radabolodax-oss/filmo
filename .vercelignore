@@ -5,6 +5,9 @@ dist
 *.zip
 *.tar.gz
 *.dmg
+*.apk
+*.ipa
+app
 .git
 .github
 node_modules
