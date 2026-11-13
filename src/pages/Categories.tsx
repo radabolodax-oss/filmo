@@ -152,6 +152,9 @@ export const Categories: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Sentinel ref for infinite scroll
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
   // Roulette Modal state
   const [isRouletteOpen, setIsRouletteOpen] = useState(false);
 
@@ -249,12 +252,30 @@ export const Categories: React.FC = () => {
     fetchItems(1, false);
   }, [fetchItems]);
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (isLoading || !hasMore) return;
     const nextPage = page + 1;
     setPage(nextPage);
     fetchItems(nextPage, true);
-  };
+  }, [isLoading, hasMore, page, fetchItems]);
+
+  // Automatic Infinite Scroll Observer
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !isLoading && hasMore) {
+          handleLoadMore();
+        }
+      },
+      { rootMargin: '450px' }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [handleLoadMore, isLoading, hasMore]);
 
   return (
     <div className="min-h-screen bg-[#07070a] text-white pt-20 pb-24 px-3 sm:px-6 md:px-8 max-w-[1600px] mx-auto">
@@ -274,24 +295,34 @@ export const Categories: React.FC = () => {
             </p>
           </div>
 
-          {/* Roulette Button */}
+          {/* Roulette Button with genuine Liquid Glass */}
           <button
             type="button"
             onClick={() => setIsRouletteOpen(true)}
-            className="group relative px-6 py-4 rounded-2xl bg-gradient-to-r from-green-400 via-emerald-500 to-purple-600 text-black font-black text-sm tracking-wide uppercase flex items-center gap-3 shadow-[0_0_30px_rgba(74,222,128,0.4)] hover:shadow-[0_0_45px_rgba(74,222,128,0.6)] hover:scale-[1.02] active:scale-95 transition-all"
+            className="group relative px-6 py-3.5 rounded-2xl text-white flex items-center gap-3.5 transition-all duration-300 hover:scale-[1.03] active:scale-95 cursor-pointer shadow-lg shrink-0"
+            style={{
+              background: 'linear-gradient(160deg, rgba(255,255,255,0.14) 0%, rgba(0,230,118,0.18) 50%, rgba(168,85,247,0.18) 100%)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              borderTop: '1px solid rgba(255,255,255,0.35)',
+              borderLeft: '1px solid rgba(255,255,255,0.22)',
+              borderRight: '1px solid rgba(255,255,255,0.10)',
+              borderBottom: '1px solid rgba(0,0,0,0.25)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 30px rgba(74,222,128,0.25), 0 0 0 1px rgba(168,85,247,0.20)',
+            }}
           >
-            <div className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center text-lg">
-              <Dices size={20} className="text-black group-hover:rotate-45 transition-transform duration-300" />
+            <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shadow-inner">
+              <Dices size={22} className="text-green-400 group-hover:rotate-45 transition-transform duration-300" />
             </div>
             <div className="text-left">
-              <div className="text-[11px] font-bold text-black/70 leading-none">Pas d'idée ce soir ?</div>
-              <div className="text-sm font-black text-black">Dawger Spin (Roulette)</div>
+              <div className="text-[11px] font-medium text-white/60 leading-none">Pas d'idée ce soir ?</div>
+              <div className="text-sm font-black tracking-wide text-white">Dawger Spin (Roulette)</div>
             </div>
           </button>
         </div>
       </div>
 
-      {/* Categories Tabs Scrollable Bar */}
+      {/* Categories Tabs Scrollable Bar with pure Liquid Glass */}
       <div className="mb-6">
         <div className="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
           {CATEGORY_TABS.map((tab) => {
@@ -301,16 +332,26 @@ export const Categories: React.FC = () => {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTabId(tab.id)}
-                className={`flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all duration-200 border ${
-                  isActive
-                    ? 'bg-gradient-to-r from-white/15 to-white/5 border-green-400/60 text-white shadow-[0_0_18px_rgba(74,222,128,0.25)]'
-                    : 'bg-white/[0.03] border-white/10 text-white/60 hover:text-white hover:bg-white/[0.07]'
-                }`}
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium text-white transition-all duration-200 cursor-pointer active:scale-95"
+                style={{
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(0,230,118,0.18) 0%, rgba(168,85,247,0.18) 100%)'
+                    : 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
+                  backdropFilter: 'blur(20px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                  borderTop: isActive ? '1px solid rgba(74,222,128,0.6)' : '1px solid rgba(255,255,255,0.28)',
+                  borderLeft: isActive ? '1px solid rgba(74,222,128,0.4)' : '1px solid rgba(255,255,255,0.16)',
+                  borderRight: '1px solid rgba(255,255,255,0.07)',
+                  borderBottom: '1px solid rgba(0,0,0,0.22)',
+                  boxShadow: isActive
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.15), 0 0 0 1px rgba(168,85,247,0.20)'
+                    : 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
+                }}
               >
-                <span className={isActive ? 'text-green-400' : 'text-white/40'}>{tab.icon}</span>
+                <span className={isActive ? 'text-green-400' : 'text-white/50'}>{tab.icon}</span>
                 <span>{tab.label}</span>
                 {tab.badge && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-green-500 text-black text-[10px] font-extrabold uppercase tracking-wide">
+                  <span className="px-1.5 py-0.5 rounded-full bg-green-500 text-black text-[10px] font-extrabold uppercase tracking-wide">
                     {tab.badge}
                   </span>
                 )}
@@ -410,16 +451,15 @@ export const Categories: React.FC = () => {
         </div>
       )}
 
-      {/* Load More Button */}
-      {hasMore && !isLoading && items.length > 0 && (
-        <div className="mt-12 text-center">
-          <button
-            type="button"
-            onClick={handleLoadMore}
-            className="px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs uppercase tracking-wider border border-white/15 hover:border-white/30 active:scale-95 transition-all shadow-lg"
-          >
-            Afficher plus de titres
-          </button>
+      {/* Sentinel pour le scroll infini automatique (sans bouton) */}
+      {hasMore && (
+        <div ref={sentinelRef} className="w-full py-10 flex items-center justify-center">
+          {isLoading && (
+            <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white/60 text-xs font-semibold backdrop-blur-md">
+              <RefreshCw size={15} className="animate-spin text-green-400" />
+              <span>Chargement automatique de la suite...</span>
+            </div>
+          )}
         </div>
       )}
 

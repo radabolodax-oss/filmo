@@ -352,14 +352,14 @@ const HeroSliderInner: React.FC<HeroSliderProps> = ({ items }) => {
                                   to={`/${item.media_type}/${encodeId(item.id)}?autoplay=true`}
                                   className="inline-flex items-center gap-2 text-white px-5 sm:px-7 md:px-8 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl text-sm sm:text-base font-semibold transition-all"
                                   style={{
-                                    background: 'linear-gradient(135deg, rgba(0,230,118,0.35) 0%, rgba(168,85,247,0.35) 100%)',
+                                    background: 'linear-gradient(160deg, rgba(255,255,255,0.14) 0%, rgba(0,230,118,0.16) 50%, rgba(168,85,247,0.16) 100%)',
                                     backdropFilter: 'blur(20px) saturate(180%)',
                                     WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                                    borderTop: '1px solid rgba(255,255,255,0.28)',
-                                    borderLeft: '1px solid rgba(255,255,255,0.16)',
-                                    borderRight: '1px solid rgba(255,255,255,0.07)',
-                                    borderBottom: '1px solid rgba(0,0,0,0.22)',
-                                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.12), 0 0 0 1px rgba(168,85,247,0.18)',
+                                    borderTop: '1px solid rgba(255,255,255,0.35)',
+                                    borderLeft: '1px solid rgba(255,255,255,0.20)',
+                                    borderRight: '1px solid rgba(255,255,255,0.10)',
+                                    borderBottom: '1px solid rgba(0,0,0,0.25)',
+                                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.15), 0 0 0 1px rgba(168,85,247,0.20)',
                                   }}
                                 >
                                   <Play className="w-4 h-4 sm:w-5 sm:h-5 fill-current" />

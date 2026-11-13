@@ -172,9 +172,13 @@ const CrackedGlassOverlay: React.FC<{ x: number; y: number; opacity: number }> =
 );
 
 export const VisualEffectsLayer: React.FC = () => {
-  // --- Snow State ---
+  // --- Snow State (Activé par défaut sauf si coupé explicitement) ---
   const [isSnowActive, setIsSnowActive] = useState(() => {
-    return sessionStorage.getItem('snowfall_active') === 'true';
+    const sessionVal = sessionStorage.getItem('snowfall_active');
+    if (sessionVal !== null) return sessionVal === 'true';
+    const localVal = localStorage.getItem('snowfall_active');
+    if (localVal !== null) return localVal === 'true';
+    return true; // Activé par défaut pour voir la neige immédiatement
   });
   const snowCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -432,15 +436,21 @@ export const VisualEffectsLayer: React.FC = () => {
     return () => window.removeEventListener('dawger_trigger_bat_test', handleTest);
   }, [launchBatSequence]);
 
-  // Periodic random schedule (~1 hour on average, never fixed hour: 50 to 95 mins)
+  // Periodic random schedule (premier passage découverte à ~24s puis ~1h imprévisible: 50 à 95 mins)
   useEffect(() => {
     if (!batEnabled) return;
 
     // Check & initialize next trigger time in localStorage
     const now = Date.now();
+    const hasSeenFirst = localStorage.getItem('dawger_bat_seen_first') === 'true';
     let nextTime = Number(localStorage.getItem('dawger_bat_next_time'));
-    if (!nextTime || isNaN(nextTime) || nextTime < now - 3600000) {
-      // Pick random delay between 50 and 95 minutes
+
+    if (!hasSeenFirst) {
+      // Première apparition rapide au bout de 24 secondes de visite pour la découverte !
+      nextTime = now + 24000;
+      localStorage.setItem('dawger_bat_next_time', String(nextTime));
+    } else if (!nextTime || isNaN(nextTime) || nextTime < now - 3600000) {
+      // Rythme régulier : délai aléatoire entre 50 et 95 minutes
       const randomMinutes = 50 + Math.random() * 45;
       nextTime = now + randomMinutes * 60 * 1000;
       localStorage.setItem('dawger_bat_next_time', String(nextTime));
@@ -458,6 +468,9 @@ export const VisualEffectsLayer: React.FC = () => {
           return;
         }
 
+        // Marquer la première apparition comme vue
+        localStorage.setItem('dawger_bat_seen_first', 'true');
+
         // Safe to launch!
         launchBatSequence();
 
@@ -465,7 +478,7 @@ export const VisualEffectsLayer: React.FC = () => {
         const nextDelay = (50 + Math.random() * 45) * 60 * 1000;
         localStorage.setItem('dawger_bat_next_time', String(Date.now() + nextDelay));
       }
-    }, 12000); // Check every 12s
+    }, 3000); // Check every 3s
 
     return () => clearInterval(interval);
   }, [batEnabled, isVideoPlayingOrFullscreen, launchBatSequence]);

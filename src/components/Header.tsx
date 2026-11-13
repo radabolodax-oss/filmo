@@ -533,7 +533,17 @@ const Header: React.FC = () => {
                 onClick={() => setIsSettingsModalOpen(true)}
                 title="Paramètres & Aide"
                 aria-label="Paramètres & Aide"
-                className="hidden landscape:flex lg:flex items-center gap-1.5 px-3 phone-ls:px-2 py-2 phone-ls:py-1.5 rounded-xl text-xs font-semibold text-white/80 hover:text-white bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 hover:border-emerald-500/30 transition-all duration-200 shadow-sm shrink-0 group cursor-pointer"
+                className="hidden landscape:flex lg:flex items-center gap-1.5 px-3 phone-ls:px-2 py-1.5 phone-ls:py-1 rounded-xl text-sm phone-ls:text-xs font-medium text-white transition-all duration-200 shrink-0 group cursor-pointer hover:brightness-110 active:scale-95"
+                style={{
+                  background: 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
+                  backdropFilter: 'blur(20px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                  borderTop: '1px solid rgba(255,255,255,0.28)',
+                  borderLeft: '1px solid rgba(255,255,255,0.16)',
+                  borderRight: '1px solid rgba(255,255,255,0.07)',
+                  borderBottom: '1px solid rgba(0,0,0,0.22)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
+                }}
               >
                 <Settings size={15} className="text-emerald-400 group-hover:rotate-45 transition-transform duration-300" />
                 <span className="phone-ls:hidden">Paramètres</span>
@@ -547,9 +557,19 @@ const Header: React.FC = () => {
                   onClick={() => setIsSettingsModalOpen(true)}
                   aria-label="Paramètres & Aide"
                   title="Paramètres & Aide"
-                  className="landscape:hidden lg:hidden flex items-center justify-center p-2 text-gray-400 hover:text-white transition-colors"
+                  className="landscape:hidden lg:hidden flex items-center justify-center w-10 h-10 rounded-xl text-white transition-all duration-200 active:scale-95"
+                  style={{
+                    background: 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
+                    backdropFilter: 'blur(20px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                    borderTop: '1px solid rgba(255,255,255,0.28)',
+                    borderLeft: '1px solid rgba(255,255,255,0.16)',
+                    borderRight: '1px solid rgba(255,255,255,0.07)',
+                    borderBottom: '1px solid rgba(0,0,0,0.22)',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
+                  }}
                 >
-                  <Settings size={20} className="text-emerald-400" />
+                  <Settings size={18} className="text-emerald-400" />
                 </button>
                 {/* Mobile Search Button */}
                 <button
