@@ -32,41 +32,12 @@
 
 /* ── Remplace le rouge Movix (#e50914, #f40612, #b81d24) ── */
 
-/* Boutons principaux */
-button[class*="play"],
-button[class*="watch"],
-a[class*="play"],
-[class*="btn-primary"],
-[class*="button-primary"] {
-  background: var(--gradient-main) !important;
-  border-color: transparent !important;
-  box-shadow: var(--glow-primary) !important;
-}
-
-/* Liens actifs / sélectionnés */
-[class*="active"],
-[class*="selected"],
-nav a.active,
-nav [class*="active"] {
-  color: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-}
-
 /* Progress bars / sliders */
 [class*="progress"],
 [class*="slider"],
 input[type="range"]::-webkit-slider-thumb,
 input[type="range"]::-webkit-slider-runnable-track {
   background: var(--gradient-main) !important;
-}
-
-/* Logo texte */
-[class*="logo"],
-[class*="brand"] {
-  background: var(--gradient-main);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 /* Badges / tags */
@@ -76,33 +47,6 @@ input[type="range"]::-webkit-slider-runnable-track {
   background: rgba(0,0,0,0) !important;
   border-color: transparent !important;
   color: var(--color-secondary-bright) !important;
-}
-
-/* Icônes colorées */
-[class*="icon"][class*="red"],
-[class*="icon"][class*="primary"],
-svg[class*="red"] {
-  color: var(--color-primary) !important;
-  fill: var(--color-primary) !important;
-}
-
-/* Hover states */
-*:hover > [class*="icon"],
-a:hover,
-button:hover {
-  color: var(--color-primary) !important;
-}
-
-/* Background ambiance */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0, 230, 118, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 80% 110%, rgba(0,0,0,0) 0%, transparent 60%);
-  pointer-events: none;
-  z-index: 0;
 }
 
 /* ── Navbar ── */

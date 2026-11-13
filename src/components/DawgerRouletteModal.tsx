@@ -227,13 +227,13 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-white/10 bg-white/[0.02]">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-green-400 flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.4)]">
+            <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center shadow-inner">
               <Dices size={22} className="text-white" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <span>Dawger Spin</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 font-semibold border border-green-500/30">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white font-semibold border border-white/20">
                   Roulette
                 </span>
               </h2>
@@ -258,7 +258,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
 
             {isSpinning ? (
               <div className="flex flex-col items-center text-center space-y-4">
-                <div className="relative w-36 h-52 sm:w-40 sm:h-60 rounded-xl overflow-hidden border-2 border-green-400 shadow-[0_0_30px_rgba(74,222,128,0.5)] transform scale-105 transition-all">
+                <div className="relative w-36 h-52 sm:w-40 sm:h-60 rounded-xl overflow-hidden border-2 border-white/40 shadow-[0_0_25px_rgba(255,255,255,0.2)] transform scale-105 transition-all">
                   {spinCandidates[currentCandidateIdx]?.poster_path ? (
                     <img
                       src={`https://image.tmdb.org/t/p/w342${spinCandidates[currentCandidateIdx].poster_path}`}
@@ -271,8 +271,8 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-green-400 text-sm font-semibold animate-pulse">
-                  <RefreshCw size={16} className="animate-spin" />
+                <div className="flex items-center gap-2 text-white/80 text-sm font-semibold animate-pulse">
+                  <RefreshCw size={16} className="animate-spin text-white" />
                   <span>Tirage en cours...</span>
                 </div>
               </div>
@@ -282,7 +282,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
                 animate={{ opacity: 1, scale: 1 }}
                 className="w-full flex flex-col sm:flex-row items-center sm:items-start gap-5 z-10"
               >
-                <div className="relative w-32 sm:w-40 flex-shrink-0 aspect-[2/3] rounded-xl overflow-hidden border-2 border-green-400 shadow-[0_0_25px_rgba(74,222,128,0.4)]">
+                <div className="relative w-32 sm:w-40 flex-shrink-0 aspect-[2/3] rounded-xl overflow-hidden border-2 border-white/40 shadow-[0_0_20px_rgba(255,255,255,0.2)]">
                   <img
                     src={`https://image.tmdb.org/t/p/w342${winner.poster_path}`}
                     alt={winner.title || winner.name}
@@ -295,7 +295,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
                 </div>
 
                 <div className="flex-1 min-w-0 text-center sm:text-left space-y-2.5">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-green-500/20 to-purple-500/20 text-green-300 text-xs font-bold border border-green-500/30">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-white text-xs font-bold border border-white/20">
                     <Sparkles size={12} />
                     <span>PÉPITE TROUVÉE</span>
                   </div>
@@ -322,7 +322,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
                     <button
                       type="button"
                       onClick={() => handleWatch(winner)}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-black font-extrabold text-sm flex items-center gap-2 shadow-[0_0_20px_rgba(34,197,94,0.4)] hover:brightness-110 active:scale-95 transition-all"
+                      className="px-5 py-2.5 rounded-xl bg-white hover:bg-white/90 text-black font-extrabold text-sm flex items-center gap-2 shadow-lg active:scale-95 transition-all"
                     >
                       <Play size={16} fill="currentColor" />
                       <span>Regarder maintenant</span>
@@ -350,7 +350,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
                 <button
                   type="button"
                   onClick={handleStartSpin}
-                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-green-400 via-emerald-500 to-purple-600 text-black font-black text-sm tracking-wide uppercase flex items-center gap-2 shadow-[0_0_25px_rgba(74,222,128,0.45)] hover:scale-105 active:scale-95 transition-all"
+                  className="px-6 py-3 rounded-2xl bg-white hover:bg-white/90 text-black font-black text-sm tracking-wide uppercase flex items-center gap-2 shadow-[0_0_25px_rgba(255,255,255,0.25)] hover:scale-105 active:scale-95 transition-all"
                 >
                   <Dices size={18} />
                   <span>LANCER LE SPIN</span>
@@ -368,7 +368,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
           {/* Filters Section */}
           <div className="space-y-4 pt-1 border-t border-white/10">
             <div className="flex items-center gap-2 text-xs font-semibold text-white/70">
-              <SlidersHorizontal size={14} className="text-green-400" />
+              <SlidersHorizontal size={14} className="text-white/70" />
               <span>Ajuster les critères</span>
             </div>
 
@@ -381,7 +381,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
                   onClick={() => setMediaType('movie')}
                   className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
                     mediaType === 'movie'
-                      ? 'bg-gradient-to-r from-green-500/30 to-emerald-500/20 text-green-400 border border-green-500/40 shadow-[0_0_12px_rgba(74,222,128,0.2)]'
+                      ? 'bg-white/20 text-white border border-white/40 shadow-sm'
                       : 'bg-white/5 text-white/60 hover:text-white border border-white/5'
                   }`}
                 >
@@ -393,7 +393,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
                   onClick={() => setMediaType('tv')}
                   className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
                     mediaType === 'tv'
-                      ? 'bg-gradient-to-r from-green-500/30 to-emerald-500/20 text-green-400 border border-green-500/40 shadow-[0_0_12px_rgba(74,222,128,0.2)]'
+                      ? 'bg-white/20 text-white border border-white/40 shadow-sm'
                       : 'bg-white/5 text-white/60 hover:text-white border border-white/5'
                   }`}
                 >
@@ -450,7 +450,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
                     onClick={() => setSelectedYearIdx(idx)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                       selectedYearIdx === idx
-                        ? 'bg-green-500/25 text-green-300 border border-green-500/40'
+                        ? 'bg-white/20 text-white border border-white/30'
                         : 'bg-white/5 text-white/60 hover:text-white'
                     }`}
                   >
@@ -521,7 +521,7 @@ export const DawgerRouletteModal: React.FC<DawgerRouletteModalProps> = ({ isOpen
             type="button"
             disabled={isSpinning}
             onClick={handleStartSpin}
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-green-400 via-emerald-500 to-purple-600 text-black font-black text-sm flex items-center gap-2 shadow-[0_0_20px_rgba(74,222,128,0.35)] hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+            className="px-6 py-2.5 rounded-xl bg-white hover:bg-white/90 text-black font-black text-sm flex items-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.25)] hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
           >
             <Dices size={16} />
             <span>{winner ? 'Relancer le Spin' : 'Lancer le Spin'}</span>

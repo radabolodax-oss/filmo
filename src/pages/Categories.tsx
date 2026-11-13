@@ -280,39 +280,39 @@ export const Categories: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#07070a] text-white pt-20 pb-24 px-3 sm:px-6 md:px-8 max-w-[1600px] mx-auto">
       {/* Hero Banner with Dawger Roulette CTA */}
-      <div className="relative mb-8 rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-r from-purple-900/40 via-zinc-900/60 to-emerald-950/40 p-6 sm:p-8 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+      <div className="relative mb-8 rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-r from-purple-900/30 via-zinc-900/60 to-zinc-900/40 p-6 sm:p-8 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-semibold text-green-300">
-              <Sparkles size={13} />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs font-semibold text-white/80">
+              <Sparkles size={13} className="text-white/70" />
               <span>Exploration Immense</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-              Catalogue par <span className="bg-gradient-to-r from-green-400 to-purple-400 bg-clip-text text-transparent">Catégories</span>
+              Catalogue par <span className="text-white">Catégories</span>
             </h1>
             <p className="text-sm text-white/60 leading-relaxed">
               Stand-up, K-Drama, Cinéma Japonais, Hollywood, Nollywood, Français ou genres combinés : explorez des milliers de titres triés sur le volet.
             </p>
           </div>
 
-          {/* Roulette Button with genuine Liquid Glass */}
+          {/* Roulette Button with genuine Liquid Glass - Pure White */}
           <button
             type="button"
             onClick={() => setIsRouletteOpen(true)}
             className="group relative px-6 py-3.5 rounded-2xl text-white flex items-center gap-3.5 transition-all duration-300 hover:scale-[1.03] active:scale-95 cursor-pointer shadow-lg shrink-0"
             style={{
-              background: 'linear-gradient(160deg, rgba(255,255,255,0.14) 0%, rgba(0,230,118,0.18) 50%, rgba(168,85,247,0.18) 100%)',
+              background: 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
               backdropFilter: 'blur(20px) saturate(180%)',
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              borderTop: '1px solid rgba(255,255,255,0.35)',
-              borderLeft: '1px solid rgba(255,255,255,0.22)',
-              borderRight: '1px solid rgba(255,255,255,0.10)',
-              borderBottom: '1px solid rgba(0,0,0,0.25)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 30px rgba(74,222,128,0.25), 0 0 0 1px rgba(168,85,247,0.20)',
+              borderTop: '1px solid rgba(255,255,255,0.28)',
+              borderLeft: '1px solid rgba(255,255,255,0.16)',
+              borderRight: '1px solid rgba(255,255,255,0.07)',
+              borderBottom: '1px solid rgba(0,0,0,0.22)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
             }}
           >
             <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center shadow-inner">
-              <Dices size={22} className="text-green-400 group-hover:rotate-45 transition-transform duration-300" />
+              <Dices size={22} className="text-white group-hover:rotate-45 transition-transform duration-300" />
             </div>
             <div className="text-left">
               <div className="text-[11px] font-medium text-white/60 leading-none">Pas d'idée ce soir ?</div>
@@ -322,7 +322,7 @@ export const Categories: React.FC = () => {
         </div>
       </div>
 
-      {/* Categories Tabs Scrollable Bar with pure Liquid Glass */}
+      {/* Categories Tabs Scrollable Bar with pure Liquid Glass - Pure White */}
       <div className="mb-6">
         <div className="flex items-center gap-2 overflow-x-auto pb-3 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
           {CATEGORY_TABS.map((tab) => {
@@ -332,26 +332,28 @@ export const Categories: React.FC = () => {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTabId(tab.id)}
-                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium text-white transition-all duration-200 cursor-pointer active:scale-95"
+                className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 cursor-pointer active:scale-95 ${
+                  isActive ? 'text-white' : 'text-white/70 hover:text-white'
+                }`}
                 style={{
                   background: isActive
-                    ? 'linear-gradient(135deg, rgba(0,230,118,0.18) 0%, rgba(168,85,247,0.18) 100%)'
+                    ? 'linear-gradient(160deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 60%, rgba(0,0,0,0.06) 100%)'
                     : 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
                   backdropFilter: 'blur(20px) saturate(180%)',
                   WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                  borderTop: isActive ? '1px solid rgba(74,222,128,0.6)' : '1px solid rgba(255,255,255,0.28)',
-                  borderLeft: isActive ? '1px solid rgba(74,222,128,0.4)' : '1px solid rgba(255,255,255,0.16)',
+                  borderTop: isActive ? '1px solid rgba(255,255,255,0.40)' : '1px solid rgba(255,255,255,0.28)',
+                  borderLeft: isActive ? '1px solid rgba(255,255,255,0.22)' : '1px solid rgba(255,255,255,0.16)',
                   borderRight: '1px solid rgba(255,255,255,0.07)',
                   borderBottom: '1px solid rgba(0,0,0,0.22)',
                   boxShadow: isActive
-                    ? 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.15), 0 0 0 1px rgba(168,85,247,0.20)'
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.40)'
                     : 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
                 }}
               >
-                <span className={isActive ? 'text-green-400' : 'text-white/50'}>{tab.icon}</span>
-                <span>{tab.label}</span>
+                <span className={isActive ? 'text-white' : 'text-white/60'}>{tab.icon}</span>
+                <span className={isActive ? 'text-white font-semibold' : 'text-white/80'}>{tab.label}</span>
                 {tab.badge && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-green-500 text-black text-[10px] font-extrabold uppercase tracking-wide">
+                  <span className="px-1.5 py-0.5 rounded-full bg-white/20 border border-white/25 text-white text-[10px] font-bold uppercase tracking-wide">
                     {tab.badge}
                   </span>
                 )}
@@ -391,7 +393,7 @@ export const Categories: React.FC = () => {
           <select
             value={selectedPeriodIdx}
             onChange={(e) => setSelectedPeriodIdx(Number(e.target.value))}
-            className="bg-black/60 text-white text-xs font-medium px-3 py-1.5 rounded-xl border border-white/10 focus:border-green-400 outline-none cursor-pointer"
+            className="bg-black/60 text-white text-xs font-medium px-3 py-1.5 rounded-xl border border-white/10 focus:border-white/30 outline-none cursor-pointer"
           >
             {PERIODS.map((period, idx) => (
               <option key={period.label} value={idx} className="bg-zinc-900 text-white">
@@ -407,7 +409,7 @@ export const Categories: React.FC = () => {
           <select
             value={selectedSort}
             onChange={(e) => setSelectedSort(e.target.value)}
-            className="bg-black/60 text-white text-xs font-medium px-3 py-1.5 rounded-xl border border-white/10 focus:border-green-400 outline-none cursor-pointer"
+            className="bg-black/60 text-white text-xs font-medium px-3 py-1.5 rounded-xl border border-white/10 focus:border-white/30 outline-none cursor-pointer"
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id} className="bg-zinc-900 text-white">
@@ -456,7 +458,7 @@ export const Categories: React.FC = () => {
         <div ref={sentinelRef} className="w-full py-10 flex items-center justify-center">
           {isLoading && (
             <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-white/60 text-xs font-semibold backdrop-blur-md">
-              <RefreshCw size={15} className="animate-spin text-green-400" />
+              <RefreshCw size={15} className="animate-spin text-white/70" />
               <span>Chargement automatique de la suite...</span>
             </div>
           )}

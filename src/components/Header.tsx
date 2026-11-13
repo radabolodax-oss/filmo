@@ -432,16 +432,16 @@ const Header: React.FC = () => {
                         className="flex items-center gap-1.5 phone-ls:gap-1 px-3 phone-ls:px-2 py-1.5 phone-ls:py-1 text-sm phone-ls:text-xs font-medium text-white rounded-xl transition-all duration-200"
                         style={{
                           background: active
-                            ? 'linear-gradient(135deg, rgba(0,230,118,0.16) 0%, rgba(168,85,247,0.16) 100%)'
+                            ? 'linear-gradient(160deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.07) 60%, rgba(0,0,0,0.06) 100%)'
                             : 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
                           backdropFilter: 'blur(20px) saturate(180%)',
                           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                          borderTop: '1px solid rgba(255,255,255,0.28)',
-                          borderLeft: '1px solid rgba(255,255,255,0.16)',
+                          borderTop: active ? '1px solid rgba(255,255,255,0.40)' : '1px solid rgba(255,255,255,0.28)',
+                          borderLeft: active ? '1px solid rgba(255,255,255,0.22)' : '1px solid rgba(255,255,255,0.16)',
                           borderRight: '1px solid rgba(255,255,255,0.07)',
                           borderBottom: '1px solid rgba(0,0,0,0.22)',
                           boxShadow: active
-                            ? 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 8px 24px rgba(0,230,118,0.12), 0 0 0 1px rgba(168,85,247,0.18)'
+                            ? 'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.40)'
                             : 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
                         }}
                         onMouseEnter={() => setHoveredNav(item.path)}
@@ -493,20 +493,20 @@ const Header: React.FC = () => {
                   className="relative flex items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200"
                   style={{
                     background: searchFocused
-                      ? 'linear-gradient(135deg, rgba(0,230,118,0.14) 0%, rgba(168,85,247,0.14) 100%)'
+                      ? 'linear-gradient(160deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 60%, rgba(0,0,0,0.06) 100%)'
                       : 'linear-gradient(160deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.06) 100%)',
                     backdropFilter: 'blur(20px) saturate(180%)',
                     WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-                    borderTop: searchFocused ? '1px solid rgba(0,230,118,0.35)' : '1px solid rgba(255,255,255,0.28)',
-                    borderLeft: '1px solid rgba(255,255,255,0.16)',
+                    borderTop: searchFocused ? '1px solid rgba(255,255,255,0.40)' : '1px solid rgba(255,255,255,0.28)',
+                    borderLeft: searchFocused ? '1px solid rgba(255,255,255,0.25)' : '1px solid rgba(255,255,255,0.16)',
                     borderRight: '1px solid rgba(255,255,255,0.07)',
                     borderBottom: '1px solid rgba(0,0,0,0.22)',
                     boxShadow: searchFocused
-                      ? 'inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.14), 0 0 0 1px rgba(168,85,247,0.25), 0 8px 24px rgba(0,230,118,0.12)'
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 18px rgba(0,0,0,0.35)'
                       : 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
                   }}
                 >
-                  <Search size={15} className="shrink-0 text-gray-400/70" />
+                  <Search size={15} className={`shrink-0 transition-colors ${searchFocused ? 'text-white' : 'text-gray-400/70'}`} />
                   <input
                     ref={searchInputRef}
                     type="text"
@@ -545,8 +545,8 @@ const Header: React.FC = () => {
                   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
                 }}
               >
-                <Settings size={15} className="text-emerald-400 group-hover:rotate-45 transition-transform duration-300" />
-                <span className="phone-ls:hidden">Paramètres</span>
+                <Settings size={15} className="text-white/80 group-hover:text-white group-hover:rotate-45 transition-transform duration-300" />
+                <span className="phone-ls:hidden text-white">Paramètres</span>
               </button>
 
               {/* Right section */}
@@ -569,7 +569,7 @@ const Header: React.FC = () => {
                     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.28)',
                   }}
                 >
-                  <Settings size={18} className="text-emerald-400" />
+                  <Settings size={18} className="text-white/80" />
                 </button>
                 {/* Mobile Search Button */}
                 <button

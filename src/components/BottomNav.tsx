@@ -60,25 +60,19 @@ const BottomNav: React.FC = () => {
               className="flex flex-1 min-w-0 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] leading-tight font-medium rounded-xl transition-all duration-200"
               style={{
                 background: isActive
-                  ? 'linear-gradient(135deg, rgba(0,230,118,0.20) 0%, rgba(168,85,247,0.20) 100%)'
+                  ? 'linear-gradient(160deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.06) 100%)'
                   : 'transparent',
                 boxShadow: isActive
-                  ? 'inset 0 1px 0 rgba(255,255,255,0.20), 0 0 0 1px rgba(168,85,247,0.15)'
+                  ? 'inset 0 1px 0 rgba(255,255,255,0.30), 0 2px 8px rgba(0,0,0,0.3)'
                   : 'none',
               }}
             >
-              <Icon size={18} strokeWidth={isActive ? 2.5 : 1.75} className="shrink-0" />
+              <Icon size={18} strokeWidth={isActive ? 2.5 : 1.75} className={`shrink-0 ${isActive ? 'text-white' : 'text-white/60'}`} />
               <span
                 className="truncate"
-                style={isActive ? {
-                  backgroundImage: 'linear-gradient(135deg,#00e676,#a855f7)',
-                  WebkitBackgroundClip: 'text',
-                  backgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  color: 'transparent',
-                } : {
-                  color: 'white',
-                  WebkitTextFillColor: 'white',
+                style={{
+                  color: isActive ? 'white' : 'rgba(255,255,255,0.7)',
+                  WebkitTextFillColor: isActive ? 'white' : 'rgba(255,255,255,0.7)',
                 }}
               >{label}</span>
             </Link>
