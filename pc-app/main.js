@@ -248,8 +248,12 @@ async function startFrontend() {
 
   staticServer = http.createServer((req, res) => {
     let reqPath = decodeURIComponent(req.url.split('?')[0]);
-    let filePath = path.join(distDir, reqPath === '/' ? 'index.html' : reqPath);
-    if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    const normalizedReqPath = path.posix.normalize(reqPath).replace(/^(\.\.[\/\\])+/, '');
+    const cleanRelative = normalizedReqPath === '/' ? 'index.html' : normalizedReqPath.replace(/^\/+/, '');
+    let filePath = path.resolve(distDir, cleanRelative);
+
+    // Confinement strict dans distDir : bloque toute traversee de repertoire (Path Traversal)
+    if (!filePath.startsWith(path.resolve(distDir)) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
       filePath = path.join(distDir, 'index.html');
     }
     const ext = path.extname(filePath).toLowerCase();
@@ -553,7 +557,37 @@ async function checkUpdates(win) {
 }
 
 // IPC Handlers pour la mise a jour
+const ALLOWED_UPDATE_DOMAINS = ['dawgerwebsite.vercel.app', 'github.com', 'raw.githubusercontent.com'];
+
 ipcMain.handle('dawger:start-update', async (event, downloadUrl) => {
+  // Validation stricte de l'URL pour bloquer toute injection RCE
+  try {
+    const parsed = new URL(downloadUrl);
+    if (parsed.protocol !== 'https:') {
+      throw new Error('Protocole non sécurisé (HTTPS requis)');
+    }
+    const isDomainAllowed = ALLOWED_UPDATE_DOMAINS.some(
+      (d) => parsed.hostname === d || parsed.hostname.endsWith('.' + d)
+    );
+    if (!isDomainAllowed) {
+      throw new Error(`Domaine de téléchargement rejeté: ${parsed.hostname}`);
+    }
+  } catch (urlErr) {
+    log('ERROR', '[UPDATER] URL de mise à jour non autorisée:', urlErr.message);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(`
+        (function() {
+          const st = document.getElementById('dawger-up-status-text');
+          if (st) {
+            st.innerText = 'Échec de sécurité : source de mise à jour invalide.';
+            st.style.color = '#ef4444';
+          }
+        })();
+      `).catch(() => {});
+    }
+    return;
+  }
+
   log('INFO', '[UPDATER] Lancement du telechargement depuis:', downloadUrl);
   const tempExe = path.join(app.getPath('temp'), 'PCDawger-Setup-update.exe');
 
@@ -616,6 +650,10 @@ ipcMain.handle('dawger:start-update', async (event, downloadUrl) => {
 
 ipcMain.handle('dawger:install-update', () => {
   const tempExe = path.join(app.getPath('temp'), 'PCDawger-Setup-update.exe');
+  if (!fs.existsSync(tempExe) || fs.statSync(tempExe).size < 1024 * 1024) {
+    log('ERROR', '[UPDATER] Fichier exécutable de mise à jour introuvable ou taille suspecte, exécution annulée.');
+    return;
+  }
   log('INFO', '[UPDATER] Execution de l\'installateur et arret de Dawger...');
   stopServers();
   const child = spawn(tempExe, [], {

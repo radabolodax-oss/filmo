@@ -8,6 +8,7 @@ import asyncio
 import aiohttp
 import json
 import base64
+import ipaddress
 import re
 import urllib.parse
 from urllib.parse import urlparse, urljoin
@@ -1403,6 +1404,22 @@ class ProxyServer:
         self.app.router.add_get('/health', self.health_handler)
         self.app.router.add_get('/stats', self.stats_handler)
     
+    def _is_blocked_ssrf_host(self, hostname: Optional[str]) -> bool:
+        """Protect against SSRF by blocking private, loopback, and cloud metadata addresses."""
+        if not hostname:
+            return True
+        host = hostname.strip().lower()
+        if host in ('localhost', '127.0.0.1', '0.0.0.0', '::1', '169.254.169.254'):
+            return True
+        try:
+            ip = ipaddress.ip_address(host)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                return True
+        except ValueError:
+            if host.endswith(('.local', '.localhost', '.internal', '.lan', '.home', '.corp')):
+                return True
+        return False
+    
     def _extract_debrid_error_message(self, payload: Dict[str, Any], fallback: str) -> str:
         """Normalize provider-specific error payloads."""
         error = payload.get('error')
@@ -1791,6 +1808,11 @@ class ProxyServer:
                 
                 # Test IDNA encoding to catch issues early
                 validated_parsed.netloc.encode('idna')
+
+                # Bloquage SSRF : interdiction stricte des adresses locales, privees et metadata
+                if self._is_blocked_ssrf_host(validated_parsed.hostname):
+                    logger.warning(f"[SECURITY] SSRF bloque pour la cible: {validated_parsed.hostname}")
+                    return web.json_response({'error': 'Access to private or local network resources is forbidden'}, status=403, headers=CORS_HEADERS)
             except UnicodeError as e:
                 logger.warning(f'Invalid URL encoding rejected: {e}')
                 return web.json_response({'error': f'Invalid URL encoding: {str(e)}'}, status=400, headers=CORS_HEADERS)
