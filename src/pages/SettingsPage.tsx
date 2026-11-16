@@ -297,12 +297,13 @@ const SettingsPage: React.FC = () => {
   });
 
   const [isSnowfallActive, setIsSnowfallActive] = useState(() => {
+    const localVal = localStorage.getItem('snowfall_active');
+    if (localVal !== null) return localVal === 'true';
     return sessionStorage.getItem('snowfall_active') === 'true';
   });
 
   const [batEnabled, setBatEnabled] = useState(() => {
-    const val = localStorage.getItem('dawger_bat_enabled');
-    return val === null ? true : val === 'true';
+    return localStorage.getItem('dawger_bat_enabled') === 'true';
   });
 
   
@@ -738,6 +739,7 @@ const SettingsPage: React.FC = () => {
   const handleSnowfallToggle = () => {
     const newValue = !isSnowfallActive;
     setIsSnowfallActive(newValue);
+    localStorage.setItem('snowfall_active', String(newValue));
     sessionStorage.setItem('snowfall_active', String(newValue));
     window.dispatchEvent(new CustomEvent('snowfall_toggled'));
   };
@@ -747,6 +749,11 @@ const SettingsPage: React.FC = () => {
     setBatEnabled(newValue);
     localStorage.setItem('dawger_bat_enabled', String(newValue));
     window.dispatchEvent(new CustomEvent('dawger_bat_toggle_changed'));
+    if (newValue) {
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('dawger_trigger_bat_test'));
+      }, 150);
+    }
   };
 
   const handleTestBat = () => {

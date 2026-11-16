@@ -23,13 +23,21 @@ interface CategoryTab {
 
 const CATEGORY_TABS: CategoryTab[] = [
   {
+    id: 'all',
+    label: 'Tout (En vrac)',
+    icon: <Sparkles size={15} />,
+    color: 'from-white to-zinc-400',
+    movieParams: { sort_by: 'popularity.desc' },
+    tvParams: { sort_by: 'popularity.desc' },
+  },
+  {
     id: 'standup',
-    label: 'Stand-up & Humoristes',
+    label: 'Stand-up & Humoristes (FR)',
     icon: <Mic size={15} />,
     color: 'from-amber-500 to-orange-600',
-    badge: 'Nouveau',
-    movieParams: { with_keywords: '9716', sort_by: 'popularity.desc' },
-    tvParams: { with_keywords: '9716', sort_by: 'popularity.desc' },
+    badge: 'FR',
+    movieParams: { with_keywords: '9716', with_original_language: 'fr', sort_by: 'popularity.desc' },
+    tvParams: { with_keywords: '9716', with_original_language: 'fr', sort_by: 'popularity.desc' },
   },
   {
     id: 'korean',
@@ -140,7 +148,7 @@ export const Categories: React.FC = () => {
   const { t } = useTranslation();
 
   // Selection state
-  const [activeTabId, setActiveTabId] = useState<string>('standup');
+  const [activeTabId, setActiveTabId] = useState<string>('all');
   const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'movie' | 'tv'>('all');
   const [selectedPeriodIdx, setSelectedPeriodIdx] = useState(0);
   const [selectedSort, setSelectedSort] = useState('popularity.desc');

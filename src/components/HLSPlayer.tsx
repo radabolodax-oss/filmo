@@ -10573,6 +10573,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
             e.preventDefault();
             e.stopPropagation();
           }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+          }}
           className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group ${
             showSettings
               ? 'border-emerald-400 text-emerald-400 shadow-emerald-500/20'

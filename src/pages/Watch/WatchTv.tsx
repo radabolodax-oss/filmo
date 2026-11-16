@@ -6852,7 +6852,7 @@ const WatchTv: React.FC = () => {
           if (!applied) {
             // Au lieu d'un écran noir sans vidéo, auto-select clean VOSTFR embed (Peachify ou Videasy)
             const cleanVostfrUrl = wavewatchUrlResult || (id != null && seasonNumber != null && episodeNumber != null
-              ? `https://player.videasy.to/tv/${id}/${seasonNumber}/${episodeNumber}`
+              ? `https://vidsrc.su/embed/tv/${id}/${seasonNumber}/${episodeNumber}`
               : `https://peachify.top/embed/tv/${id}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626`);
 
             console.log('⚡ [WatchTv] Fallback VOSTFR direct playback:', cleanVostfrUrl);
@@ -7026,7 +7026,7 @@ const WatchTv: React.FC = () => {
       candidates.push({
         type: 'vostfr',
         id: 'videasy',
-        url: `https://player.videasy.to/tv/${id}/${seasonNumber}/${episodeNumber}`
+        url: `https://vidsrc.su/embed/tv/${id}/${seasonNumber}/${episodeNumber}`
       });
     }
 

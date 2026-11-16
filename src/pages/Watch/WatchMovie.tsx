@@ -5381,7 +5381,7 @@ const WatchMovie: React.FC = () => {
 
         if (!applied) {
           // Au lieu d'un écran noir sans vidéo, auto-select clean VOSTFR embed (Peachify ou Videasy)
-          const cleanVostfrUrl = wavewatchUrlResult || (id ? `https://player.videasy.to/movie/${id}` : `https://peachify.top/embed/movie/${id}?sub=French&accent=dc2626`);
+          const cleanVostfrUrl = wavewatchUrlResult || (id ? `https://vidsrc.su/embed/movie/${id}` : `https://peachify.top/embed/movie/${id}?sub=French&accent=dc2626`);
           console.log('⚡ [WatchMovie] Fallback VOSTFR direct playback:', cleanVostfrUrl);
           setSelectedSource('vostfr');
           setEmbedUrl(cleanVostfrUrl);
@@ -5927,7 +5927,7 @@ const WatchMovie: React.FC = () => {
       candidates.push({
         type: 'vostfr',
         id: 'videasy',
-        url: `https://player.videasy.to/movie/${id}`
+        url: `https://vidsrc.su/embed/movie/${id}`
       });
     }
 
@@ -7524,7 +7524,7 @@ const WatchMovie: React.FC = () => {
 
                       setSelectedSource('vostfr');
 
-                      setEmbedUrl(`https://player.videasy.to/movie/${id}`);
+                      setEmbedUrl(`https://vidsrc.su/embed/movie/${id}`);
 
                       setEmbedType('vostfr');
 
@@ -8336,7 +8336,7 @@ const WatchMovie: React.FC = () => {
 
           <iframe
 
-            src={selectedSource === 'vostfr' ? `https://player.videasy.to/movie/${id}` : `${FREMBED_BASE}/embed/movie/${id}`}
+            src={selectedSource === 'vostfr' ? `https://vidsrc.su/embed/movie/${id}` : `${FREMBED_BASE}/embed/movie/${id}`}
 
             className="w-full h-full border-0"
 

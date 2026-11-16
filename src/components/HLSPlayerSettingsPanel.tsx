@@ -342,24 +342,22 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
       key="settings-panel"
       initial={{
         opacity: 0,
-        x: -300,
-        width: 0
+        x: -320
       }}
       animate={{
         opacity: 1,
-        x: 0,
-        width: settingsMenuWidth || (audioTracks.length > 0 || subtitles.length > 0 ? 480 : 400)
+        x: 0
       }}
       exit={{
         opacity: 0,
-        x: -300,
-        width: 0
+        x: -320
       }}
       transition={{
-        duration: 0.3,
+        duration: 0.25,
         ease: [0.25, 1, 0.5, 1]
       }}
       style={{
+        width: settingsMenuWidth || (audioTracks.length > 0 || subtitles.length > 0 ? 480 : 400),
         height: '100%',
         position: 'absolute',
         top: 0,
@@ -1411,10 +1409,10 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                       className="ml-4 pl-2 border-l-2 border-gray-700 mb-2"
                                     >
                                       {[
-                                        { id: 'vidlink', label: 'Vidlink (VOSTFR)' },
-                                        { id: 'vostfr', label: 'Videasy (VOSTFR)' },
+                                        { id: 'vostfr', label: 'Vidsrc.su (VOSTFR)' },
                                         { id: 'vidsrcwtf1', label: 'Viduki (VOSTFR)' },
                                         { id: 'vidsrccc', label: 'Vidsrc.io (VOSTFR)' },
+                                        { id: 'vidlink', label: 'Vidlink (VOSTFR - Miroir)' },
                                         { id: 'peachify', label: 'Peachify (VOSTFR - Secours)' }
                                       ].map((vostfrSource, index) => {
                                         // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
@@ -1424,13 +1422,13 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                           vostfrSource.id === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
                                             vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
                                               vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/movie?tmdb=${movieId}` :
-                                                vostfrSource.id === 'vostfr' ? `https://player.videasy.to/movie/${movieId}` :
+                                                vostfrSource.id === 'vostfr' ? `https://vidsrc.su/embed/movie/${movieId}` :
                                                   `https://viduki.net/api/1/movie/?id=${movieId}` :
                                           (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
                                             vostfrSource.id === 'peachify' ? `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626` :
                                               vostfrSource.id === 'vidlink' ? `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                                 vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}` :
-                                                  vostfrSource.id === 'vostfr' ? `https://player.videasy.to/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                                  vostfrSource.id === 'vostfr' ? `https://vidsrc.su/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                                     `https://viduki.net/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
                                             '#'; // Fallback if neither movie nor TV info is present
 

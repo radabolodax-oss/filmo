@@ -172,20 +172,19 @@ const CrackedGlassOverlay: React.FC<{ x: number; y: number; opacity: number }> =
 );
 
 export const VisualEffectsLayer: React.FC = () => {
-  // --- Snow State (Activé par défaut sauf si coupé explicitement) ---
+  // --- Snow State (Désactivé par défaut tant que non activé dans les paramètres) ---
   const [isSnowActive, setIsSnowActive] = useState(() => {
-    const sessionVal = sessionStorage.getItem('snowfall_active');
-    if (sessionVal !== null) return sessionVal === 'true';
     const localVal = localStorage.getItem('snowfall_active');
     if (localVal !== null) return localVal === 'true';
-    return true; // Activé par défaut pour voir la neige immédiatement
+    const sessionVal = sessionStorage.getItem('snowfall_active');
+    if (sessionVal !== null) return sessionVal === 'true';
+    return false;
   });
   const snowCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // --- Halloween Bat State ---
+  // --- Halloween Bat State (Désactivé par défaut tant que non activé dans les paramètres) ---
   const [batEnabled, setBatEnabled] = useState(() => {
-    const val = localStorage.getItem('dawger_bat_enabled');
-    return val === null ? true : val === 'true';
+    return localStorage.getItem('dawger_bat_enabled') === 'true';
   });
 
   // Stages: 'idle' | 'wandering' | 'dive' | 'impact' | 'fading'
@@ -210,11 +209,12 @@ export const VisualEffectsLayer: React.FC = () => {
   // Sync settings events
   useEffect(() => {
     const handleSnowToggle = () => {
-      setIsSnowActive(sessionStorage.getItem('snowfall_active') === 'true');
+      const localVal = localStorage.getItem('snowfall_active');
+      const sessionVal = sessionStorage.getItem('snowfall_active');
+      setIsSnowActive(localVal !== null ? localVal === 'true' : sessionVal === 'true');
     };
     const handleBatToggle = () => {
-      const val = localStorage.getItem('dawger_bat_enabled');
-      setBatEnabled(val === null ? true : val === 'true');
+      setBatEnabled(localStorage.getItem('dawger_bat_enabled') === 'true');
     };
 
     window.addEventListener('snowfall_toggled', handleSnowToggle);
