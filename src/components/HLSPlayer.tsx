@@ -959,8 +959,14 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   });
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number>(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const manualFullscreenRef = useRef<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    if (onlyQualityMenu || typeof document === 'undefined') return false;
+    const doc = document as Document & { webkitFullscreenElement?: Element | null };
+    return Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || (window as any).__DAWGER_CSS_FULLSCREEN__);
+  });
+  const manualFullscreenRef = useRef<boolean>(
+    !onlyQualityMenu && typeof window !== 'undefined' && Boolean((window as any).__DAWGER_CSS_FULLSCREEN__)
+  );
   const [showControls, setShowControls] = useState(true);
   const [buffered, setBuffered] = useState<TimeRanges | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -4721,6 +4727,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
     if (!isFullscreenNow) {
       manualFullscreenRef.current = true;
+      (window as any).__DAWGER_CSS_FULLSCREEN__ = true;
       setIsFullscreen(true);
       try {
         window.history.pushState({ dawgerHlsFs: true }, '');
@@ -4754,7 +4761,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         }
       };
 
-      const ok = await tryRequestFullscreen(playerElement);
+      const hostElement = playerElement.closest<HTMLElement>('[data-dawger-fullscreen-host="true"]') || playerElement;
+      const ok = await tryRequestFullscreen(hostElement);
       if (!ok && videoElement && typeof videoElement.webkitEnterFullscreen === 'function') {
         try {
           videoElement.webkitEnterFullscreen();
@@ -4765,6 +4773,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       } catch {}
     } else {
       manualFullscreenRef.current = false;
+      (window as any).__DAWGER_CSS_FULLSCREEN__ = false;
       setIsFullscreen(false);
       (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
       try {
@@ -4808,6 +4817,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
   useEffect(() => {
     if (onlyQualityMenu) return;
+    if (isFullscreen) {
+      (window as any).__DAWGER_EXIT_FULLSCREEN__ = () => {
+        void toggleFullscreen();
+      };
+    }
     const handleFullscreenChange = () => {
       const video = videoRef.current as HTMLVideoElementWithWebkit | null;
       const doc = document as Document & { webkitFullscreenElement?: Element | null };
@@ -4817,8 +4831,10 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         (video && video.webkitDisplayingFullscreen)
       );
       if (active) {
+        (window as any).__DAWGER_CSS_FULLSCREEN__ = true;
         setIsFullscreen(true);
       } else if (!manualFullscreenRef.current) {
+        (window as any).__DAWGER_CSS_FULLSCREEN__ = false;
         setIsFullscreen(false);
         (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
         try {
@@ -4830,6 +4846,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     const handlePopState = () => {
       if (manualFullscreenRef.current || isFullscreen) {
         manualFullscreenRef.current = false;
+        (window as any).__DAWGER_CSS_FULLSCREEN__ = false;
         setIsFullscreen(false);
         (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
         const doc = document as any;
@@ -4851,7 +4868,10 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       window.removeEventListener('popstate', handlePopState);
-      (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+      const doc = document as Document & { webkitFullscreenElement?: Element | null };
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !(window as any).__DAWGER_CSS_FULLSCREEN__) {
+        (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+      }
     };
   }, [isFullscreen, onlyQualityMenu]);
 

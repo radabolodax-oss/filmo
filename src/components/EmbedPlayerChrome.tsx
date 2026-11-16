@@ -51,7 +51,11 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
 }) => {
   const { t } = useTranslation();
   const [showControls, setShowControls] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(() => {
+    if (typeof document === 'undefined') return false;
+    const doc = document as any;
+    return Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || (window as any).__DAWGER_CSS_FULLSCREEN__);
+  });
   const [internalMenuOpen, setInternalMenuOpen] = useState(false);
   const isControlledMenu = isMenuOpen !== undefined;
   const menuOpen = isControlledMenu ? Boolean(isMenuOpen) : internalMenuOpen;
@@ -71,7 +75,9 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const manualFullscreenRef = useRef<boolean>(false);
+  const manualFullscreenRef = useRef<boolean>(
+    typeof window !== 'undefined' && Boolean((window as any).__DAWGER_CSS_FULLSCREEN__)
+  );
 
   // Sync preferences from other components/tabs
   useEffect(() => {
@@ -172,6 +178,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
       const wantFullscreen = !isFullscreen;
       if (wantFullscreen) {
         manualFullscreenRef.current = true;
+        (window as any).__DAWGER_CSS_FULLSCREEN__ = true;
         setIsFullscreen(true);
         try {
           window.history.pushState({ dawgerFs: true }, '');
@@ -179,8 +186,9 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
         (window as any).__DAWGER_EXIT_FULLSCREEN__ = () => {
           void toggleFullscreen();
         };
-        if (containerRef.current) {
-          const el = containerRef.current as any;
+        const hostEl = containerRef.current?.closest<HTMLElement>('[data-dawger-fullscreen-host="true"]') || containerRef.current;
+        if (hostEl) {
+          const el = hostEl as any;
           const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
           if (typeof req === 'function') {
             await Promise.resolve(req.call(el)).catch(() => {});
@@ -191,6 +199,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
         } catch {}
       } else {
         manualFullscreenRef.current = false;
+        (window as any).__DAWGER_CSS_FULLSCREEN__ = false;
         setIsFullscreen(false);
         (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
         const doc = document as any;
@@ -213,12 +222,19 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
   };
 
   useEffect(() => {
+    if (isFullscreen) {
+      (window as any).__DAWGER_EXIT_FULLSCREEN__ = () => {
+        void toggleFullscreen();
+      };
+    }
     const handleFullscreenChange = () => {
       const doc = document as any;
       const active = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement);
       if (active) {
+        (window as any).__DAWGER_CSS_FULLSCREEN__ = true;
         setIsFullscreen(true);
       } else if (!manualFullscreenRef.current) {
+        (window as any).__DAWGER_CSS_FULLSCREEN__ = false;
         setIsFullscreen(false);
         (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
         try {
@@ -230,6 +246,7 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
     const handlePopState = () => {
       if (manualFullscreenRef.current || isFullscreen) {
         manualFullscreenRef.current = false;
+        (window as any).__DAWGER_CSS_FULLSCREEN__ = false;
         setIsFullscreen(false);
         (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
         const doc = document as any;
@@ -255,7 +272,10 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
       document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
       window.removeEventListener('popstate', handlePopState);
-      (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+      const doc = document as any;
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !(window as any).__DAWGER_CSS_FULLSCREEN__) {
+        (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+      }
     };
   }, [isFullscreen]);
 

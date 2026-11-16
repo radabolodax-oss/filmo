@@ -363,7 +363,7 @@ export const PlayerStage: React.FC<PlayerStageProps> = ({
         </div>
       )}
 
-      <div className={`${className} z-10`}>
+      <div className={`${className} z-10`} data-dawger-fullscreen-host="true">
         {children}
       </div>
     </div>

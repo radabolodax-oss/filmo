@@ -4496,7 +4496,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
               </>
             );
             return (
-              <div className="relative w-full h-full">
+              <div className="relative w-full h-full" data-dawger-fullscreen-host="true">
                 {(() => {
             const miawPlayers = provider === 'miaw' && miawAnimeData
               ? (miawAnimeData.players?.[miawAnimeLang] || miawAnimeData.players?.vostfr || miawAnimeData.players?.vf || [])
