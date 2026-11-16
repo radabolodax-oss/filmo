@@ -363,8 +363,8 @@ const handle429Error = (hls: any, videoRef: React.RefObject<HTMLVideoElement>, d
   const isTopstrime = failedUrl.includes('pulse.topstrime.online');
 
   // Check for Rivestream proxy rotation
-  const isProxyUrl = failedUrl.includes('.workers.dev/proxy?url=');
-  const currentProxyIndex = RIVESTREAM_PROXIES.findIndex(proxy => failedUrl.includes(proxy));
+  const isProxyUrl = failedUrl.includes('.workers.dev/proxy?url=') || failedUrl.includes('/proxy/https') || failedUrl.includes('rivestream');
+  const currentProxyIndex = isProxyUrl ? RIVESTREAM_PROXIES.findIndex(proxy => failedUrl.includes(proxy)) : -1;
 
   if (currentProxyIndex !== -1 || isProxyUrl) {
     console.log('🚨 Rivestream Proxy 429 detected, switching proxy...');
@@ -770,13 +770,13 @@ const getCleanMainApi = (): string => {
     const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
     const custom = localStorage.getItem('custom_main_api');
     if (custom && custom.trim()) return custom.replace(/\/+$/, '');
-    if (isLocal) return 'http://localhost:25565';
+    if (isLocal) return 'http://127.0.0.1:25565';
   }
   const envApi = (import.meta.env.VITE_MAIN_API as string || '').replace(/\/+$/, '');
   if (envApi && !envApi.includes('pichunter-linda') && !envApi.includes('metropolitan-seat') && !envApi.includes('billy-affairs')) {
     return envApi;
   }
-  return 'http://localhost:25565';
+  return 'http://127.0.0.1:25565';
 };
 const MAIN_API = getCleanMainApi();
 
@@ -1064,18 +1064,25 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   const scrollSourceMenuTargetIntoView = useCallback((target: EventTarget | null) => {
     if (!(target instanceof HTMLElement)) return;
 
+    // En plein écran, forcer un scroll du document peut provoquer une sortie du plein écran.
+    if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+      return;
+    }
+
     const focusableTarget = target.closest<HTMLElement>(
       'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
     );
 
     if (!focusableTarget) return;
 
-    window.requestAnimationFrame(() => {
-      focusableTarget.scrollIntoView({
-        block: 'nearest',
-        inline: 'nearest'
+    try {
+      window.requestAnimationFrame(() => {
+        focusableTarget.scrollIntoView({
+          block: 'nearest',
+          inline: 'nearest'
+        });
       });
-    });
+    } catch {}
   }, []);
 
   const handleSourceMenuFocusCapture = useCallback((event: React.FocusEvent<HTMLElement>) => {
@@ -1845,8 +1852,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
       if (!firstFocusable) return;
 
-      firstFocusable.focus();
-      scrollSourceMenuTargetIntoView(firstFocusable);
+      try {
+        firstFocusable.focus({ preventScroll: true });
+      } catch {
+        firstFocusable.focus();
+      }
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -4602,14 +4612,16 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   }, [volumeBoost]);
 
   useEffect(() => {
+    if (onlyQualityMenu) return;
     void ensureAudioEnhancerReady();
-  }, [src, audioEnhancerMode, volumeBoost, customAudio]);
+  }, [src, audioEnhancerMode, volumeBoost, customAudio, onlyQualityMenu]);
 
   // Ensure the Web Audio graph resumes on the first real user gesture after
   // mount. Without this, a suspended AudioContext (created before any gesture)
   // routes video audio into silence — users had to wiggle the volume booster
   // slider to trigger a resume.
   useEffect(() => {
+    if (onlyQualityMenu) return;
     const resume = () => {
       const ctx = audioContextRef.current;
       if (ctx && ctx.state === 'suspended') {
@@ -4795,6 +4807,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
   };
 
   useEffect(() => {
+    if (onlyQualityMenu) return;
     const handleFullscreenChange = () => {
       const video = videoRef.current as HTMLVideoElementWithWebkit | null;
       const doc = document as Document & { webkitFullscreenElement?: Element | null };
@@ -4840,11 +4853,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       window.removeEventListener('popstate', handlePopState);
       (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, onlyQualityMenu]);
 
   // Escape key listener to exit fullscreen mode (covers native fullscreen, CSS overlay & Electron)
   useEffect(() => {
-    if (!isFullscreen) return;
+    if (onlyQualityMenu || !isFullscreen) return;
     const handleEscapeKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -4854,7 +4867,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     };
     window.addEventListener('keydown', handleEscapeKey, true);
     return () => window.removeEventListener('keydown', handleEscapeKey, true);
-  }, [isFullscreen]);
+  }, [isFullscreen, onlyQualityMenu]);
 
   // Add state for PiP error message display
   const [pipError, setPipError] = useState<string | null>(null);
@@ -6109,6 +6122,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
   // Initialiser la sauvegarde périodique + flush exact sur pause/seeked/ended/background/unmount
   useEffect(() => {
+    if (onlyQualityMenu) return;
     console.log("[Effect saveProgress Interval] Setting up interval.");
     if (!progressSaveInterval.current) {
       progressSaveInterval.current = setInterval(() => {
@@ -6165,7 +6179,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
       }
       saveProgress(true);
     };
-  }, [saveProgress, movieId, tvShowId, seasonNumber, episodeNumber, isAnime]);
+  }, [saveProgress, movieId, tvShowId, seasonNumber, episodeNumber, isAnime, onlyQualityMenu]);
 
   // Charger la progression au montage et après hydratation native
   useEffect(() => {
@@ -6694,6 +6708,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     const isMP4 = isMP4Source(src);
 
     if (isMP4) {
+      // Si on bascule d'une source HLS vers MP4 sur la même instance, détruire l'instance hls.js existante
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy(); } catch {}
+        hlsRef.current = null;
+      }
       // For MP4, directly set the source on the video element
       videoRef.current.src = src;
       setLoadingError(false);
@@ -6858,7 +6877,8 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
     // 0. Si c'est une source Rivestream (avec proxy), essayer de basculer vers un autre proxy
     const currentSrc = src || '';
-    const currentProxyIndex = RIVESTREAM_PROXIES.findIndex(proxy => currentSrc.includes(proxy));
+    const isRivestreamUrl = currentSrc.includes('/proxy/https') || currentSrc.includes('rivestream');
+    const currentProxyIndex = isRivestreamUrl ? RIVESTREAM_PROXIES.findIndex(proxy => currentSrc.includes(proxy)) : -1;
 
     if (currentProxyIndex !== -1) {
        // Check if we should stop purely on 403 (although this function shouldn't be called on 403, better safe)
@@ -7825,10 +7845,11 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
   // Update video source when episode or format change
   useEffect(() => {
+    if (onlyQualityMenu) return;
     if (src) {
       loadSource();
     }
-  }, [src]);
+  }, [src, onlyQualityMenu]);
 
   // Function to reset progress for the current item
   const resetCurrentProgress = () => {
@@ -9489,7 +9510,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     const target = e.target as HTMLElement;
     // Si clic sur bouton, icône, barre de contrôle, menu paramètres, barre de progression, poster, on ignore
     if (
-      target.closest('button, .control-bar, .settings-menu, .progress-bar, .poster, .volume-slider') ||
+      target.closest('button, .control-bar, .settings-menu, .progress-bar, .poster, .volume-slider, [data-source-menu], [role="dialog"]') ||
       target.tagName === 'BUTTON' ||
       target.getAttribute('role') === 'button' ||
       target.classList.contains('pointer-events-none')
@@ -10504,6 +10525,7 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         <button
           type="button"
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             if (onShowSources) {
               onShowSources();
@@ -10513,6 +10535,10 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
               }
               setShowSettings(!showSettings);
             }
+          }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
           className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group ${
             showSettings

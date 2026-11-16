@@ -4510,7 +4510,7 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
               const activeSrc = provider === 'miaw' ? miawDirectSrc : hlsPlayerSrc;
               return (
                 <HLSPlayer
-                  key={`${provider}-${season}-${episode}-${activeSrc}`}
+                  key={`hls-player-anime-${id}-${season}-${episode}`}
                   priorityCategory="anime"
                   src={activeSrc}
 

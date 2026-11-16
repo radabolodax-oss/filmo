@@ -129,6 +129,7 @@ export const EmbedSettingsDrawer: React.FC<EmbedSettingsDrawerProps> = ({
       {isOpen && (
         <div
           onClick={onClose}
+          onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           className="absolute inset-0 z-[20005] bg-black/60 flex justify-start pointer-events-auto"
         >
           <motion.div
@@ -138,7 +139,8 @@ export const EmbedSettingsDrawer: React.FC<EmbedSettingsDrawerProps> = ({
             exit={{ opacity: 0, x: -300 }}
             transition={{ duration: 0.25, ease: [0.25, 1, 0.5, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-black/95 border-r border-gray-800 shadow-2xl w-[90%] max-w-md h-full flex flex-col overflow-hidden pointer-events-auto"
+            onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            className="settings-menu bg-black/95 border-r border-gray-800 shadow-2xl w-[90%] max-w-md h-full flex flex-col overflow-hidden pointer-events-auto"
             data-lenis-prevent
           >
             {/* Header */}

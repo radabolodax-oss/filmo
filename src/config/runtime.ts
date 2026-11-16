@@ -39,7 +39,7 @@ const getDynamicApiUrl = (): string => {
 
     if (isLocal) {
 
-      return 'http://localhost:25565';
+      return 'http://127.0.0.1:25565';
 
     }
 
@@ -53,7 +53,7 @@ const getDynamicApiUrl = (): string => {
 
   }
 
-  return 'http://localhost:25565';
+  return 'http://127.0.0.1:25565';
 
 };
 

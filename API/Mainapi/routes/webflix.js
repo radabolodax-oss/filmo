@@ -75,17 +75,34 @@ const webflixClient = axios.create({
 
 function getBaseApiUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-  const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:25565';
+  const host = req.headers['x-forwarded-host'] || req.get('host') || '127.0.0.1:25565';
   return `${proto}://${host}`;
 }
 
-// ─── GET /api/webflix/video (Proxy streaming 206 Range avec Referer) ────────
-router.get('/video', (req, res) => {
-  const targetUrl = req.query.url;
-  if (!targetUrl || typeof targetUrl !== 'string' || !targetUrl.startsWith('https://')) {
-    return res.status(400).send('Invalid video URL');
-  }
+const CDN_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes de cache CDN
+const resolvedCdnCache = new Map();
 
+function getResolvedCdn(key) {
+  if (!key) return null;
+  const item = resolvedCdnCache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.time > CDN_CACHE_TTL_MS) {
+    resolvedCdnCache.delete(key);
+    return null;
+  }
+  return item.cdnUrl;
+}
+
+function setResolvedCdn(key, cdnUrl) {
+  if (!key || !cdnUrl) return;
+  if (resolvedCdnCache.size > 2000) {
+    const oldestKey = resolvedCdnCache.keys().next().value;
+    resolvedCdnCache.delete(oldestKey);
+  }
+  resolvedCdnCache.set(key, { cdnUrl, time: Date.now() });
+}
+
+function proxyWebflixVideoStream(targetUrl, originalKey, req, res, redirectsLeft = 5) {
   let parsed;
   try {
     parsed = new URL(targetUrl);
@@ -103,11 +120,17 @@ router.get('/video', (req, res) => {
 
   const upstreamReq = https.get(parsed.toString(), { headers }, (upstreamRes) => {
     const code = upstreamRes.statusCode || 200;
-    if ([301, 302, 303, 307, 308].includes(code) && upstreamRes.headers.location) {
+    if ([301, 302, 303, 307, 308].includes(code) && upstreamRes.headers.location && redirectsLeft > 0) {
       upstreamRes.resume();
       const nextUrl = new URL(upstreamRes.headers.location, parsed).toString();
-      req.query.url = nextUrl;
-      return router.handle(req, res);
+      if (originalKey && (nextUrl.includes('zen-blk.store') || nextUrl.includes('?ff='))) {
+        setResolvedCdn(originalKey, nextUrl);
+      }
+      return proxyWebflixVideoStream(nextUrl, originalKey, req, res, redirectsLeft - 1);
+    }
+
+    if (code === 401 || code === 403 || code === 404 || code === 410) {
+      if (originalKey) resolvedCdnCache.delete(originalKey);
     }
 
     res.status(code);
@@ -133,6 +156,21 @@ router.get('/video', (req, res) => {
   req.on('close', () => {
     upstreamReq.destroy();
   });
+}
+
+// ─── GET /api/webflix/video (Proxy streaming 206 Range avec Referer & Cache CDN) ────────
+router.get('/video', (req, res) => {
+  const targetUrl = req.query.url;
+  if (!targetUrl || typeof targetUrl !== 'string' || !targetUrl.startsWith('https://')) {
+    return res.status(400).send('Invalid video URL');
+  }
+
+  const cachedCdn = getResolvedCdn(targetUrl);
+  if (cachedCdn) {
+    return proxyWebflixVideoStream(cachedCdn, targetUrl, req, res);
+  }
+
+  return proxyWebflixVideoStream(targetUrl, targetUrl, req, res);
 });
 
 // ─── GET /api/webflix/embed (Lecteur HTML5 sans pub pour FastFlux) ───────────

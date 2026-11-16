@@ -9384,7 +9384,7 @@ const WatchTv: React.FC = () => {
   const renderTvSourcesOnlyMenu = () => (
     <HLSPlayer
       priorityCategory="moviesTv"
-      src={hlsSrc || ''}
+      src=""
       className="hidden"
       movieId={undefined}
       tvShowId={id ?? undefined}
@@ -10192,7 +10192,7 @@ const WatchTv: React.FC = () => {
 
             priorityCategory="moviesTv"
 
-            key={`${selectedSource}-${selectedMp4Source}-${hlsSrc}-${videoSource}`} // Updated key to include videoSource
+            key={`hls-player-tv-${id}-${seasonNumber}-${episodeNumber}`}
 
             src={hlsSrc}
 

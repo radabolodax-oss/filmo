@@ -316,12 +316,17 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
         <button
           type="button"
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             if (renderSourcesPanel) {
               setMenuOpen(!menuOpen);
             } else {
               onChangeSource?.();
             }
+          }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
           className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-black/80 hover:bg-black/95 border active:scale-95 text-white backdrop-blur-md shadow-xl transition-all group ${
             menuOpen

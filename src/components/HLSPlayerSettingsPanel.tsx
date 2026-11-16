@@ -367,7 +367,12 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
         bottom: 0,
         maxWidth: '90%'
       }}
-      className="bg-black/95 z-[20005] flex flex-col border-r border-gray-800 shadow-2xl overflow-hidden"
+      className="settings-menu bg-black/95 z-[20005] flex flex-col border-r border-gray-800 shadow-2xl overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
             <div className="flex flex-col border-b border-gray-800 mb-1 sm:mb-4 shrink-0">
               <div className="flex justify-between items-center mb-1 sm:mb-3 px-3 pt-2 sm:px-4 sm:pt-4">

@@ -7028,7 +7028,7 @@ const WatchMovie: React.FC = () => {
   const renderMovieSourcesOnlyMenu = () => (
     <HLSPlayer
       priorityCategory="moviesTv"
-      src={videoSource || ''}
+      src=""
       className="hidden"
       movieId={id || undefined}
       controls={false}
@@ -7414,7 +7414,7 @@ const WatchMovie: React.FC = () => {
 
             priorityCategory="moviesTv"
 
-            key={`darkino-${selectedDarkinoSource}-${id}`}
+            key={`hls-player-${id}`}
 
             src={darkinoSources[selectedDarkinoSource]?.m3u8 || darkinoSources[0]?.m3u8 || ""}
 
@@ -7609,7 +7609,7 @@ const WatchMovie: React.FC = () => {
 
             priorityCategory="moviesTv"
 
-            key={`mp4-${selectedMp4Source}-${id}-${videoSource}`}
+            key={`hls-player-${id}`}
 
             src={videoSource || mp4Sources[selectedMp4Source]?.url || ""}
 
@@ -7718,7 +7718,7 @@ const WatchMovie: React.FC = () => {
 
             priorityCategory="moviesTv"
 
-            key={`nexus_hls-${selectedNexusHlsSource}-${id}-${videoSource}`}
+            key={`hls-player-${id}`}
 
             src={videoSource || nexusHlsSources[selectedNexusHlsSource]?.url || ""}
 
@@ -7827,7 +7827,7 @@ const WatchMovie: React.FC = () => {
 
             priorityCategory="moviesTv"
 
-            key={`nexus_file-${selectedNexusFileSource}-${id}-${videoSource}`}
+            key={`hls-player-${id}`}
 
             src={videoSource || nexusFileSources[selectedNexusFileSource]?.url || ""}
 
@@ -7960,7 +7960,7 @@ const WatchMovie: React.FC = () => {
 
                 priorityCategory="moviesTv"
 
-                key={`rivestream-${selectedRivestreamSource}-${id}-${videoSource}`}
+                key={`hls-player-${id}`}
 
                 src={videoSource || rivestreamSources[selectedRivestreamSource]?.url || ""}
 
@@ -8085,7 +8085,7 @@ const WatchMovie: React.FC = () => {
 
             priorityCategory="moviesTv"
 
-            key={`darkino-${selectedDarkinoSource}-${id}`}
+            key={`hls-player-${id}`}
 
             src={darkinoSources[selectedDarkinoSource]?.m3u8 || darkinoSources[0]?.m3u8 || ""}
 
@@ -8199,7 +8199,7 @@ const WatchMovie: React.FC = () => {
         <div className="w-full h-full flex items-center justify-center">
           <HLSPlayer
             priorityCategory="moviesTv"
-            key={`${selectedSource}-${videoSource}-${id}`}
+            key={`hls-player-${id}`}
             src={videoSource}
             className="w-full h-full"
             autoPlay={true}
