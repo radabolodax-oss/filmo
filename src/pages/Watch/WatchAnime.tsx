@@ -1213,13 +1213,19 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
       const playersRes = await axios.get(`https://anicloud.top/api/anime-players?episodeId=${target.id}`);
       let rawPlayers: any[] = playersRes.data?.players ?? [];
 
-      const players = rawPlayers.map((p: any) => {
+      const DEAD_ANICLOUD_HOST_PATTERNS = ['luluvid.com', 'my.mail.ru', 'streamtape.', 'uqload.vc', 'smoothpre.com'];
+      const mappedPlayers = rawPlayers.map((p: any) => {
         let url = p.player_url || '';
         if (url.startsWith('/')) {
           url = `https://anicloud.top${url}`;
         }
         return { ...p, player_url: url };
       });
+      const alivePlayers = mappedPlayers.filter((p: any) => {
+        const lowerUrl = (p.player_url || '').toLowerCase();
+        return !DEAD_ANICLOUD_HOST_PATTERNS.some((pat) => lowerUrl.includes(pat));
+      });
+      const players = alivePlayers.length > 0 ? alivePlayers : mappedPlayers;
 
       if (!players.length) {
         setAnicloudError('Aucun lecteur disponible sur AniCloud');

@@ -83,10 +83,13 @@ const ProviderCatalogPage: React.FC = () => {
     const [totalPages, setTotalPages] = useState(1);
     const [totalResults, setTotalResults] = useState(0);
     const [sortBy, setSortBy] = useState('popularity.desc');
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [isFilterOpen, setIsFilterOpen] = useState(() => searchParams.get('filter') === '1');
     const [viewType, setViewType] = useState<'grid' | 'list'>('grid');
+    const sentinelRef = React.useRef<HTMLDivElement | null>(null);
 
     const providerName = PROVIDER_NAMES[Number(providerId)] || 'Provider';
+    const isAll = type === 'all';
+    const isAnime = type === 'anime';
     const isMovie = type === 'movies';
     const mediaType = isMovie ? 'movie' : 'tv';
     const genreName = genreId ? getGenreName(parseInt(genreId)) : null;
@@ -142,50 +145,106 @@ const ProviderCatalogPage: React.FC = () => {
         if (p !== currentPage) setCurrentPage(p);
     }, [searchParams]);
 
-    // Reset on route change
+    // Reset on route or sort change
     useEffect(() => {
         setCurrentPage(1);
-        setSearchParams({ page: '1' }, { replace: true });
+        setContent([]);
         setLoading(true);
         setInitialLoad(true);
-    }, [providerId, type, genreId]);
+    }, [providerId, type, genreId, sortBy]);
 
-    // Fetch content
+    // Fetch content (infinite scroll append for pages > 1)
     useEffect(() => {
         const fetchContent = async () => {
             if (!providerId || !type) return;
             setLoading(true);
             try {
                 const today = new Date().toISOString().split('T')[0];
-                const params: Record<string, any> = {
-                    api_key: TMDB_API_KEY,
-                    language: getTmdbLanguage(),
-                    page: currentPage,
-                    sort_by: sortBy,
-                    include_adult: false,
-                    'vote_count.gte': 5
+                const minVotes = sortBy.startsWith('vote_average') ? (isAnime ? 15 : 80) : 5;
+
+                const buildDiscoverParams = (targetMedia: 'movie' | 'tv') => {
+                    let effectiveSort = sortBy;
+                    if (sortBy === 'release_date.desc') {
+                        effectiveSort = targetMedia === 'movie' ? 'primary_release_date.desc' : 'first_air_date.desc';
+                    } else if (sortBy === 'release_date.asc') {
+                        effectiveSort = targetMedia === 'movie' ? 'primary_release_date.asc' : 'first_air_date.asc';
+                    }
+                    const params: Record<string, any> = {
+                        api_key: TMDB_API_KEY,
+                        language: getTmdbLanguage(),
+                        page: currentPage,
+                        sort_by: effectiveSort,
+                        include_adult: false,
+                        'vote_count.gte': minVotes,
+                    };
+                    if (targetMedia === 'movie') params['primary_release_date.lte'] = today;
+                    else params['first_air_date.lte'] = today;
+
+                    if (isAnime) {
+                        params.with_genres = genreId ? `${genreId},16` : '16';
+                        params.with_original_language = 'ja';
+                    } else if (genreId) {
+                        params.with_genres = genreId;
+                    }
+
+                    if (studio) {
+                        params.with_companies = studio.tmdbId;
+                    } else {
+                        params.with_watch_providers = providerId;
+                        params.watch_region = 'FR';
+                    }
+                    return params;
                 };
 
-                if (isMovie) params['primary_release_date.lte'] = today;
-                else params['first_air_date.lte'] = today;
-                if (genreId) params.with_genres = genreId;
+                let combined: ContentItem[] = [];
+                let maxTotalPages = 1;
+                let maxTotalResults = 0;
 
-                if (studio) {
-                    params.with_companies = studio.tmdbId;
-                } else {
-                    params.with_watch_providers = providerId;
-                    params.watch_region = 'FR';
+                if (isAll || isAnime || isMovie) {
+                    try {
+                        const resM = await axios.get('https://api.themoviedb.org/3/discover/movie', { params: buildDiscoverParams('movie') });
+                        const movies = (resM.data.results || [])
+                            .filter((item: ContentItem) => item.poster_path)
+                            .map((item: ContentItem) => ({ ...item, media_type: 'movie' }));
+                        combined.push(...movies);
+                        maxTotalPages = Math.max(maxTotalPages, resM.data.total_pages || 1);
+                        maxTotalResults += resM.data.total_results || 0;
+                    } catch {}
                 }
 
-                const response = await axios.get(`https://api.themoviedb.org/3/discover/${mediaType}`, { params });
+                if (isAll || isAnime || type === 'tv') {
+                    try {
+                        const resT = await axios.get('https://api.themoviedb.org/3/discover/tv', { params: buildDiscoverParams('tv') });
+                        const shows = (resT.data.results || [])
+                            .filter((item: ContentItem) => item.poster_path)
+                            .map((item: ContentItem) => ({ ...item, media_type: 'tv' }));
+                        combined.push(...shows);
+                        maxTotalPages = Math.max(maxTotalPages, resT.data.total_pages || 1);
+                        maxTotalResults += resT.data.total_results || 0;
+                    } catch {}
+                }
 
-                const filtered = response.data.results
-                    .filter((item: ContentItem) => item.overview && item.overview.trim() !== '' && item.poster_path)
-                    .map((item: ContentItem) => ({ ...item, media_type: mediaType }));
+                if (sortBy === 'popularity.desc') {
+                    combined.sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0));
+                } else if (sortBy === 'vote_average.desc') {
+                    combined.sort((a: any, b: any) => (b.vote_average || 0) - (a.vote_average || 0));
+                } else if (sortBy === 'release_date.desc') {
+                    combined.sort((a: any, b: any) => (b.release_date || b.first_air_date || '').localeCompare(a.release_date || a.first_air_date || ''));
+                } else if (sortBy === 'release_date.asc') {
+                    combined.sort((a: any, b: any) => (a.release_date || a.first_air_date || '').localeCompare(b.release_date || b.first_air_date || ''));
+                }
 
-                setContent(filtered);
-                setTotalPages(Math.min(response.data.total_pages, 500));
-                setTotalResults(response.data.total_results);
+                if (currentPage === 1) {
+                    setContent(combined);
+                } else {
+                    setContent((prev) => {
+                        const seen = new Set(prev.map((p: any) => `${p.media_type}-${p.id}`));
+                        const fresh = combined.filter((p: any) => !seen.has(`${p.media_type}-${p.id}`));
+                        return [...prev, ...fresh];
+                    });
+                }
+                setTotalPages(Math.min(maxTotalPages, 500));
+                setTotalResults(maxTotalResults);
             } catch {
                 setError(t('errors.contentLoadError'));
             } finally {
@@ -196,28 +255,32 @@ const ProviderCatalogPage: React.FC = () => {
         fetchContent();
     }, [providerId, type, genreId, currentPage, sortBy]);
 
-    const handlePageChange = useCallback((newPage: number) => {
-        if (newPage > 0 && newPage <= totalPages) {
-            setSearchParams({ page: newPage.toString() });
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-    }, [totalPages, setSearchParams]);
+    // Infinite scroll observer
+    useEffect(() => {
+        const el = sentinelRef.current;
+        if (!el || loading || currentPage >= totalPages) return;
+        const obs = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && !loading && currentPage < totalPages) {
+                    setCurrentPage((p) => p + 1);
+                }
+            },
+            { rootMargin: '400px' }
+        );
+        obs.observe(el);
+        return () => obs.disconnect();
+    }, [loading, currentPage, totalPages]);
 
     const handleSortChange = (val: string) => {
         setSortBy(val);
-        setSearchParams({ page: '1' }, { replace: true });
     };
 
-    // Memoized so SearchGridCard / SearchListCard (React.memo'd, shallow-equal
-    // on `item`) actually skip re-renders when the underlying content array
-    // is unchanged. The previous inline `toSearchResult(item)` call in the
-    // .map allocated a fresh object every render. — perf
     const searchResults = useMemo(
-        () => content.map((item: ContentItem) => ({
+        () => content.map((item: ContentItem & { media_type?: 'movie' | 'tv' }) => ({
             id: item.id,
             title: item.title,
             name: item.name,
-            media_type: mediaType as 'movie' | 'tv',
+            media_type: (item.media_type || (isMovie ? 'movie' : 'tv')) as 'movie' | 'tv',
             poster_path: item.poster_path,
             backdrop_path: item.backdrop_path,
             release_date: item.release_date,
@@ -225,7 +288,7 @@ const ProviderCatalogPage: React.FC = () => {
             vote_average: item.vote_average,
             overview: item.overview,
         })),
-        [content, mediaType]
+        [content, isMovie]
     );
 
     if (initialLoad) {
@@ -290,7 +353,11 @@ const ProviderCatalogPage: React.FC = () => {
                             </div>
 
                             {/* Type switcher */}
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2">
+                                <Link to={`/provider/${providerId}/all${genreId ? `/${genreId}` : ''}`}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all text-sm font-medium ${type === 'all' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'}`}>
+                                    Tous
+                                </Link>
                                 <Link to={`/provider/${providerId}/movies${genreId ? `/${genreId}` : ''}`}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all text-sm font-medium ${type === 'movies' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'}`}>
                                     <Film className="w-4 h-4" /> {t('providerCatalog.films')}
@@ -298,6 +365,10 @@ const ProviderCatalogPage: React.FC = () => {
                                 <Link to={`/provider/${providerId}/tv${genreId ? `/${genreId}` : ''}`}
                                     className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all text-sm font-medium ${type === 'tv' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'}`}>
                                     <Tv className="w-4 h-4" /> {t('providerCatalog.series')}
+                                </Link>
+                                <Link to={`/provider/${providerId}/anime${genreId ? `/${genreId}` : ''}`}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all text-sm font-medium ${type === 'anime' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'}`}>
+                                    Animés
                                 </Link>
                             </div>
                         </div>
@@ -380,9 +451,9 @@ const ProviderCatalogPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {totalPages > 1 && (
-                                <PaginationBar currentPage={currentPage} maxPages={Math.min(totalPages, 500)} onSelect={handlePageChange} />
-                            )}
+                            <div ref={sentinelRef} className="h-12 flex items-center justify-center mt-6">
+                                {loading && currentPage > 1 && <Loader2 className="w-6 h-6 text-white/60 animate-spin" />}
+                            </div>
                         </>
                     )}
                 </div>

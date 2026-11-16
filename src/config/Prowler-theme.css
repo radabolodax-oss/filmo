@@ -91,3 +91,22 @@ header {
   background: linear-gradient(var(--color-primary), var(--color-secondary-bright));
   border-radius: 999px;
 }
+
+/* ── Thème Halloween (style Movix) ── */
+html.theme-halloween {
+  --color-primary: #f97316;
+  --color-secondary-bright: #9333ea;
+  --color-border-hover: rgba(249, 115, 22, 0.55);
+}
+
+html.theme-halloween [class*="card"]:hover,
+html.theme-halloween [class*="movie"]:hover,
+html.theme-halloween [class*="serie"]:hover {
+  border-color: rgba(249, 115, 22, 0.55) !important;
+  box-shadow: 0 8px 28px rgba(249, 115, 22, 0.22), 0 0 16px rgba(147, 51, 234, 0.18) !important;
+}
+
+html.theme-halloween header,
+html.theme-halloween nav {
+  border-bottom-color: rgba(249, 115, 22, 0.22);
+}

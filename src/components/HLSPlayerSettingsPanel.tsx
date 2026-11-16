@@ -1410,26 +1410,26 @@ const HLSPlayerSettingsPanel = (props: HLSPlayerSettingsPanelProps) => {
                                     >
                                       {[
                                         { id: 'vostfr', label: 'Vidsrc.su (VOSTFR)' },
-                                        { id: 'vidsrcwtf1', label: 'Viduki (VOSTFR)' },
-                                        { id: 'vidsrccc', label: 'Vidsrc.io (VOSTFR)' },
-                                        { id: 'vidlink', label: 'Vidlink (VOSTFR - Miroir)' },
-                                        { id: 'peachify', label: 'Peachify (VOSTFR - Secours)' }
+                                        { id: 'vidfast', label: 'VidFast (VOSTFR)' },
+                                        { id: 'vidsrcnl', label: 'Vidsrc.nl (VOSTFR)' },
+                                        { id: '2embed', label: '2Embed (VOSTFR)' },
+                                        { id: 'multiembed', label: 'MultiEmbed (VOSTFR)' }
                                       ].map((vostfrSource, index) => {
                                         // IMPORTANT: `!= null` au lieu de truthy check — sinon seasonNumber=0
                                         // (épisode spécial / Spéciaux TMDB) tombe dans le fallback '#' qui fait
                                         // charger la page courante en boucle dans l'iframe.
                                         const sourceUrl = movieId ?
-                                          vostfrSource.id === 'peachify' ? `https://peachify.top/embed/movie/${movieId}?sub=French&accent=dc2626` :
-                                            vostfrSource.id === 'vidlink' ? `https://vidlink.pro/movie/${movieId}` :
-                                              vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/movie?tmdb=${movieId}` :
-                                                vostfrSource.id === 'vostfr' ? `https://vidsrc.su/embed/movie/${movieId}` :
-                                                  `https://viduki.net/api/1/movie/?id=${movieId}` :
+                                          vostfrSource.id === 'vidfast' ? `https://vidfast.pro/movie/${movieId}` :
+                                            vostfrSource.id === 'vidsrcnl' ? `https://vidsrc.nl/embed/movie/${movieId}` :
+                                              vostfrSource.id === '2embed' ? `https://www.2embed.cc/embed/${movieId}` :
+                                                vostfrSource.id === 'multiembed' ? `https://multiembed.mov/?video_id=${movieId}&tmdb=1` :
+                                                  `https://vidsrc.su/embed/movie/${movieId}` :
                                           (tvShowId != null && seasonNumber != null && episodeNumber != null) ?
-                                            vostfrSource.id === 'peachify' ? `https://peachify.top/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}?sub=French&accent=dc2626` :
-                                              vostfrSource.id === 'vidlink' ? `https://vidlink.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                                vostfrSource.id === 'vidsrccc' ? `https://vidsrc.io/embed/tv?tmdb=${tvShowId}&season=${seasonNumber}&episode=${episodeNumber}` :
-                                                  vostfrSource.id === 'vostfr' ? `https://vidsrc.su/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
-                                                    `https://viduki.net/api/1/tv/?id=${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
+                                            vostfrSource.id === 'vidfast' ? `https://vidfast.pro/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                              vostfrSource.id === 'vidsrcnl' ? `https://vidsrc.nl/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
+                                                vostfrSource.id === '2embed' ? `https://www.2embed.cc/embedtv/${tvShowId}&s=${seasonNumber}&e=${episodeNumber}` :
+                                                  vostfrSource.id === 'multiembed' ? `https://multiembed.mov/?video_id=${tvShowId}&tmdb=1&s=${seasonNumber}&e=${episodeNumber}` :
+                                                    `https://vidsrc.su/embed/tv/${tvShowId}/${seasonNumber}/${episodeNumber}` :
                                             '#'; // Fallback if neither movie nor TV info is present
 
                                         // Active state check for VOSTFR sources in main menu

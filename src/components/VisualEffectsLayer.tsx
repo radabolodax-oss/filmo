@@ -225,6 +225,13 @@ export const VisualEffectsLayer: React.FC = () => {
     };
   }, []);
 
+  // Sync Halloween theme class on <html>
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('theme-halloween', batEnabled);
+    }
+  }, [batEnabled]);
+
   // --- Snow Accumulation Engine ---
   useEffect(() => {
     if (!isSnowActive) return;
@@ -491,6 +498,41 @@ export const VisualEffectsLayer: React.FC = () => {
           ref={snowCanvasRef}
           className="fixed inset-0 pointer-events-none z-[999990] select-none"
         />
+      )}
+
+      {/* Halloween Theme Overlay (Movix style: ambient purple/orange aura + subtle corner cobwebs) */}
+      {batEnabled && !isVideoPlayingOrFullscreen() && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 pointer-events-none z-[1] overflow-hidden select-none"
+        >
+          <div
+            className="absolute inset-x-0 top-0 h-64 opacity-40"
+            style={{
+              background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(249,115,22,0.22) 0%, rgba(147,51,234,0.16) 45%, transparent 80%)',
+            }}
+          />
+          <svg
+            viewBox="0 0 120 120"
+            className="absolute top-0 left-0 w-24 h-24 sm:w-32 sm:h-32 text-orange-400/20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          >
+            <path d="M0,0 L110,15 M0,0 L95,55 M0,0 L65,95 M0,0 L20,115" />
+            <path d="M25,4 Q20,18 5,26 M50,7 Q40,32 10,48 M78,11 Q62,48 14,72 M102,14 Q82,66 18,98" />
+          </svg>
+          <svg
+            viewBox="0 0 120 120"
+            className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 text-purple-400/20 -scale-x-100"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+          >
+            <path d="M0,0 L110,15 M0,0 L95,55 M0,0 L65,95 M0,0 L20,115" />
+            <path d="M25,4 Q20,18 5,26 M50,7 Q40,32 10,48 M78,11 Q62,48 14,72 M102,14 Q82,66 18,98" />
+          </svg>
+        </div>
       )}
 
       {/* Cracked glass impact overlay */}

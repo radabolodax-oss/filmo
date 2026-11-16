@@ -831,8 +831,8 @@ async function createWindow() {
     }
   });
 
-  // BLOQUAGE TOTAL DES POPUPS ET REDIRECTIONS VERS LE NAVIGATEUR EXTERNE
-  const ALLOWED_EXTERNAL_DOMAINS = ['t.me', 'telegram.me', 'github.com', 'dawgerwebsite.vercel.app', 'instagram.com'];
+  // BLOQUAGE TOTAL DES POPUPS ET REDIRECTIONS : SEUL INSTAGRAM EST AUTORISE VERS LE NAVIGATEUR EXTERNE
+  const ALLOWED_EXTERNAL_DOMAINS = ['instagram.com'];
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {

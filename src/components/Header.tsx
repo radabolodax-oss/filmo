@@ -358,9 +358,13 @@ const Header: React.FC = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (headerQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(headerQuery)}`);
+      const q = headerQuery.trim();
+      clearAutocompleteSuggestions();
+      setShowAutocomplete(false);
       setHeaderQuery('');
       setIsMobileSearchOpen(false);
+      searchInputRef.current?.blur();
+      navigate(`/search?q=${encodeURIComponent(q)}`);
     }
   };
 
@@ -488,6 +492,10 @@ const Header: React.FC = () => {
               <div className="hidden landscape:block lg:block relative w-[14rem] phone-ls:w-[7.5rem] lg:w-[15rem] xl:w-[20rem] 2xl:w-[22rem]">
                 <form
                   onSubmit={handleSearchSubmit}
+                  onClick={() => {
+                    try { window.focus(); } catch {}
+                    searchInputRef.current?.focus();
+                  }}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
                   className="relative flex items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200"

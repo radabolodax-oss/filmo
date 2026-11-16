@@ -405,7 +405,7 @@ const EmblaCarousel: React.FC<EmblaCarouselProps> = ({
   const { t } = useTranslation();
   // Autorise jusqu'à 120 cartes chargées dynamiquement tout en gardant un DOM raisonnable
   const limitedItems = useMemo(() => items.slice(0, 120), [items]);
-  const shouldLoop = !disableLoop && !isHistory && limitedItems.length >= 6;
+  const shouldLoop = !disableLoop && !isHistory && limitedItems.length >= 3;
 
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: 'start',

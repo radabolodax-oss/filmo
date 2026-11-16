@@ -1219,8 +1219,15 @@ const ProviderContent: React.FC = () => {
             {!showSearch && (
               <>
                 {/* Provider Navigation Tabs */}
-                <div className="provider-nav mt-4 mb-6">
-                  <span className="text-white font-semibold text-lg mr-4">{PROVIDER_NAMES[Number(providerId)] || 'Provider'}</span>
+                <div className="provider-nav mt-4 mb-6 flex flex-wrap items-center gap-2">
+                  <span className="text-white font-semibold text-lg mr-2">{PROVIDER_NAMES[Number(providerId)] || 'Provider'}</span>
+                  <Link
+                    to={`/provider/${providerId}/all`}
+                    className="provider-tab"
+                  >
+                    Tous
+                    <ChevronRight size={16} />
+                  </Link>
                   <Link
                     to={`/provider/${providerId}/movies`}
                     className="provider-tab"
@@ -1235,6 +1242,20 @@ const ProviderContent: React.FC = () => {
                   >
                     <Tv size={18} />
                     {t('providerCatalog.series')}
+                    <ChevronRight size={16} />
+                  </Link>
+                  <Link
+                    to={`/provider/${providerId}/anime`}
+                    className="provider-tab"
+                  >
+                    Animés
+                    <ChevronRight size={16} />
+                  </Link>
+                  <Link
+                    to={`/provider/${providerId}/all?filter=1`}
+                    className="provider-tab ml-auto"
+                  >
+                    Filtrer
                     <ChevronRight size={16} />
                   </Link>
                 </div>

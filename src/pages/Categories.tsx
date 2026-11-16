@@ -21,6 +21,17 @@ interface CategoryTab {
   tvParams: Record<string, any>;
 }
 
+const STREAMING_PLATFORMS = [
+  { id: '8', label: 'Netflix' },
+  { id: '119', label: 'Prime Video' },
+  { id: '337', label: 'Disney+' },
+  { id: '1899', label: 'HBO Max' },
+  { id: '350', label: 'Apple TV+' },
+  { id: '531', label: 'Paramount+' },
+  { id: '381', label: 'Canal+' },
+  { id: '283', label: 'Crunchyroll' },
+];
+
 const CATEGORY_TABS: CategoryTab[] = [
   {
     id: 'all',
@@ -31,13 +42,21 @@ const CATEGORY_TABS: CategoryTab[] = [
     tvParams: { sort_by: 'popularity.desc' },
   },
   {
+    id: 'platforms',
+    label: 'Plateformes',
+    icon: <Tv2 size={15} />,
+    color: 'from-cyan-500 to-indigo-600',
+    movieParams: { watch_region: 'FR', sort_by: 'popularity.desc' },
+    tvParams: { watch_region: 'FR', sort_by: 'popularity.desc' },
+  },
+  {
     id: 'standup',
     label: 'Stand-up & Humoristes (FR)',
     icon: <Mic size={15} />,
     color: 'from-amber-500 to-orange-600',
     badge: 'FR',
-    movieParams: { with_keywords: '9716', with_original_language: 'fr', sort_by: 'popularity.desc' },
-    tvParams: { with_keywords: '9716', with_original_language: 'fr', sort_by: 'popularity.desc' },
+    movieParams: { with_keywords: '9716|272876', with_original_language: 'fr', sort_by: 'popularity.desc' },
+    tvParams: { with_keywords: '9716|272876', with_original_language: 'fr', sort_by: 'popularity.desc' },
   },
   {
     id: 'korean',
@@ -149,7 +168,8 @@ export const Categories: React.FC = () => {
 
   // Selection state
   const [activeTabId, setActiveTabId] = useState<string>('all');
-  const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'movie' | 'tv'>('all');
+  const [selectedPlatformId, setSelectedPlatformId] = useState<string>('8');
+  const [mediaTypeFilter, setMediaTypeFilter] = useState<'all' | 'movie' | 'tv' | 'anime'>('all');
   const [selectedPeriodIdx, setSelectedPeriodIdx] = useState(0);
   const [selectedSort, setSelectedSort] = useState('popularity.desc');
 
@@ -177,23 +197,45 @@ export const Categories: React.FC = () => {
       try {
         const period = PERIODS[selectedPeriodIdx];
         const lang = getTmdbLanguage();
+        const todayStr = new Date().toISOString().slice(0, 10);
 
         const buildParams = (baseParams: Record<string, any>, isMovie: boolean) => {
+          const isStandup = activeTab.id === 'standup';
+          const effectiveSort = !isMovie && selectedSort === 'primary_release_date.desc'
+            ? 'first_air_date.desc'
+            : selectedSort;
+
+          const minVotes = isStandup
+            ? (selectedSort === 'vote_average.desc' ? 3 : 0)
+            : (selectedSort === 'vote_average.desc' ? 150 : (selectedSort === 'primary_release_date.desc' ? 2 : 15));
+
           const p: Record<string, any> = {
             api_key: TMDB_API_KEY,
             language: lang,
             page: targetPage,
-            sort_by: selectedSort,
-            'vote_count.gte': selectedSort === 'vote_average.desc' ? 120 : 15,
             ...baseParams,
+            sort_by: effectiveSort,
+            'vote_count.gte': minVotes,
           };
+
+          if (activeTab.id === 'platforms') {
+            p.with_watch_providers = selectedPlatformId;
+            p.watch_region = 'FR';
+          }
+
+          if (mediaTypeFilter === 'anime') {
+            p.with_genres = p.with_genres ? `${p.with_genres},16` : '16';
+            p.with_original_language = 'ja';
+          }
 
           if (isMovie) {
             if (period.gte) p['primary_release_date.gte'] = period.gte;
             if (period.lte) p['primary_release_date.lte'] = period.lte;
+            else if (selectedSort === 'primary_release_date.desc') p['primary_release_date.lte'] = todayStr;
           } else {
             if (period.gte) p['first_air_date.gte'] = period.gte;
             if (period.lte) p['first_air_date.lte'] = period.lte;
+            else if (selectedSort === 'primary_release_date.desc') p['first_air_date.lte'] = todayStr;
           }
 
           return p;
@@ -201,7 +243,7 @@ export const Categories: React.FC = () => {
 
         let collected: any[] = [];
 
-        if (mediaTypeFilter === 'all' || mediaTypeFilter === 'movie') {
+        if (mediaTypeFilter === 'all' || mediaTypeFilter === 'movie' || mediaTypeFilter === 'anime') {
           const movieParams = buildParams(activeTab.movieParams, true);
           try {
             const res = await axios.get(`${TMDB_API_URL}/discover/movie`, { params: movieParams });
@@ -212,7 +254,7 @@ export const Categories: React.FC = () => {
           }
         }
 
-        if (mediaTypeFilter === 'all' || mediaTypeFilter === 'tv') {
+        if (mediaTypeFilter === 'all' || mediaTypeFilter === 'tv' || mediaTypeFilter === 'anime') {
           const tvParams = buildParams(activeTab.tvParams, false);
           try {
             const res = await axios.get(`${TMDB_API_URL}/discover/tv`, { params: tvParams });
@@ -223,14 +265,20 @@ export const Categories: React.FC = () => {
           }
         }
 
-        // Clean: require poster & overview
+        // Clean: require poster
         collected = collected.filter((item) => item.poster_path && item.id);
 
-        // Sort collected if mixed
+        // Sort collected consistently across Movies & TV
         if (selectedSort === 'popularity.desc') {
           collected.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
         } else if (selectedSort === 'vote_average.desc') {
           collected.sort((a, b) => (b.vote_average || 0) - (a.vote_average || 0));
+        } else if (selectedSort === 'primary_release_date.desc') {
+          collected.sort((a, b) => {
+            const da = a.release_date || a.first_air_date || '';
+            const db = b.release_date || b.first_air_date || '';
+            return db.localeCompare(da);
+          });
         }
 
         if (append) {
@@ -251,7 +299,7 @@ export const Categories: React.FC = () => {
         setIsLoading(false);
       }
     },
-    [activeTab, mediaTypeFilter, selectedPeriodIdx, selectedSort]
+    [activeTab, selectedPlatformId, mediaTypeFilter, selectedPeriodIdx, selectedSort]
   );
 
   // Trigger fetch on tab or filter change
@@ -369,6 +417,27 @@ export const Categories: React.FC = () => {
             );
           })}
         </div>
+        {activeTabId === 'platforms' && (
+          <div className="flex items-center gap-2 overflow-x-auto pt-2 pb-1 scrollbar-none -mx-3 px-3 sm:mx-0 sm:px-0">
+            {STREAMING_PLATFORMS.map((plat) => {
+              const activePlat = selectedPlatformId === plat.id;
+              return (
+                <button
+                  key={plat.id}
+                  type="button"
+                  onClick={() => setSelectedPlatformId(plat.id)}
+                  className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+                    activePlat
+                      ? 'bg-white text-black border-white shadow-md'
+                      : 'bg-white/5 text-white/75 border-white/15 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  {plat.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Filter Row: Type, Period, Sort */}
@@ -379,6 +448,7 @@ export const Categories: React.FC = () => {
             { id: 'all', label: 'Tous' },
             { id: 'movie', label: 'Films' },
             { id: 'tv', label: 'Séries' },
+            { id: 'anime', label: 'Animés' },
           ].map((type) => (
             <button
               key={type.id}

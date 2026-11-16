@@ -164,6 +164,8 @@ const Search: React.FC = () => {
         }
     }, [loading]);
 
+    const pendingUrlSearchRef = useRef<{ q: string; page: number } | null>(null);
+
     // Extract query and page from URL and trigger search
     useEffect(() => {
         const urlParams = new URLSearchParams(location.search);
@@ -173,19 +175,32 @@ const Search: React.FC = () => {
         if (queryParam) {
             const sig = `${queryParam}__${pageParam}`;
             if (queryParam !== query) {
+                pendingUrlSearchRef.current = { q: queryParam, page: pageParam };
                 setQuery(queryParam);
-            }
-            if (lastSearchSignatureRef.current !== sig) {
+            } else if (lastSearchSignatureRef.current !== sig) {
                 lastSearchSignatureRef.current = sig;
                 performSearch(pageParam, true);
             }
         } else {
             lastSearchSignatureRef.current = '';
+            pendingUrlSearchRef.current = null;
             if (query) {
                 setQuery('');
             }
         }
     }, [location.search]);
+
+    useEffect(() => {
+        const pending = pendingUrlSearchRef.current;
+        if (pending && query === pending.q) {
+            pendingUrlSearchRef.current = null;
+            const sig = `${pending.q}__${pending.page}`;
+            if (lastSearchSignatureRef.current !== sig) {
+                lastSearchSignatureRef.current = sig;
+                performSearch(pending.page, true);
+            }
+        }
+    }, [query, performSearch]);
 
     // Limit maximum pages to 500 (TMDB API limitation)
     const maxPages = useMemo(() => Math.min(totalPages, 500), [totalPages]);
