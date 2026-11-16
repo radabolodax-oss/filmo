@@ -116,7 +116,88 @@ function isSameOrigin(a: string, b: string): boolean {
   }
 }
 
-const MIRROR_DOWN_STATUSES = new Set(['instagram.com']),
+const MIRROR_DOWN_STATUSES = new Set([
+  500, 502, 504, 520, 521, 522, 523, 524, 525, 526, 530,
+]);
+
+const WebViewBrowser = forwardRef<WebViewBrowserRef, WebViewBrowserProps>(
+  ({ url, onNavigationStateChange, onError, onPictureInPictureModeChange }, ref) => {
+    const webViewRef = useRef<WebView>(null);
+    const topLevelUrlRef = useRef(url);
+    const navigationGenerationRef = useRef(0);
+
+    React.useEffect(() => {
+      topLevelUrlRef.current = url;
+    }, [url]);
+
+    React.useEffect(() => {
+      const stopCastStatusForwarding = startCastShimEventForwarding(webViewRef);
+      const stopPictureInPictureForwarding = startPictureInPictureEventForwarding(
+        webViewRef,
+        event => {
+          if (event.kind === 'state') onPictureInPictureModeChange?.(event.active);
+          if (event.kind === 'error') onPictureInPictureModeChange?.(false);
+        },
+      );
+      return () => {
+        clearBridgeCapabilities(webViewRef);
+        stopCastStatusForwarding();
+        stopPictureInPictureForwarding();
+        setPictureInPicturePlaybackActive(false);
+        setLocalPlaybackAwake(false);
+      };
+    }, [onPictureInPictureModeChange]);
+
+    useImperativeHandle(ref, () => ({
+      goBack: () => {
+        clearBridgeCapabilities(webViewRef);
+        webViewRef.current?.goBack();
+      },
+      goForward: () => {
+        clearBridgeCapabilities(webViewRef);
+        webViewRef.current?.goForward();
+      },
+      reload: () => {
+        clearBridgeCapabilities(webViewRef);
+        webViewRef.current?.reload();
+      },
+      loadUrl: (newUrl: string) => {
+        clearBridgeCapabilities(webViewRef);
+        webViewRef.current?.injectJavaScript(
+          `window.location.href = ${JSON.stringify(newUrl)}; true;`,
+        );
+      },
+      injectJavaScript: (script: string) => {
+        webViewRef.current?.injectJavaScript(script);
+      },
+      refreshCastShimStatus: () => {
+        void refreshCastShimStatus(webViewRef);
+      },
+    }));
+
+    const onMessage = useCallback((event: WebViewMessageEvent) => {
+      const isTopFrame = typeof event.nativeEvent.isTopFrame === 'boolean'
+        ? event.nativeEvent.isTopFrame
+        : undefined;
+      const reportedSourceUrl =
+        typeof event.nativeEvent.url === 'string' ? event.nativeEvent.url : '';
+      const hasUsableReportedOrigin = isUsableHttpUrl(reportedSourceUrl);
+      const sourceUrl = hasUsableReportedOrigin
+        ? reportedSourceUrl
+        : isTopFrame
+          ? topLevelUrlRef.current
+          : '';
+      handleBridgeMessage(event.nativeEvent.data, webViewRef, {
+        sourceUrl,
+        topLevelUrl: topLevelUrlRef.current,
+        trustedOrigins: [url],
+        isTopFrame: isTopFrame,
+        navigationGeneration: navigationGenerationRef.current,
+      });
+    }, [url]);
+
+    const ALLOWED_EXTERNAL_HOSTS = useMemo(
+      () => new Set(['instagram.com']),
       [],
     );
 
