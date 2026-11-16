@@ -250,7 +250,7 @@ const CarouselCard = React.memo<{
   const canPreview = item.media_type === 'movie' || item.media_type === 'tv';
 
   return (
-    <div className={`embla-slide flex-none relative w-[clamp(112px,29vw,156px)] sm:w-[160px] md:w-[192px] tv:w-[220px] ${previewActive ? 'z-30' : ''}`}>
+    <div className={`embla-slide flex-none relative w-[clamp(112px,29vw,156px)] sm:w-[160px] md:w-[192px] tv:w-[220px] ${previewActive ? 'z-40' : ''}`}>
       <div
         style={{ animationDelay: `${Math.min(index * 0.03, 0.5)}s` }}
         onMouseEnter={() => {
@@ -279,7 +279,7 @@ const CarouselCard = React.memo<{
           if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
           setPreviewActive(false);
         }}
-        className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'scale-110 shadow-2xl' : 'hover:scale-105'}`}
+        className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'scale-[1.22] shadow-2xl' : 'hover:scale-105'}`}
       >
         {/* Type badge */}
         <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/75 text-[10px] font-semibold uppercase tracking-wider text-white/80">

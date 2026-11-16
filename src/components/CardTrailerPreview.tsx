@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { TMDB_API_KEY, TMDB_API_URL } from '../config/config';
 import { getTmdbLanguage } from '../i18n';
@@ -90,17 +90,78 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   active,
 }) => {
   const [info, setInfo] = useState<TrailerInfo | null>(null);
+  const [isVideoVisible, setIsVideoVisible] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      setIsVideoVisible(false);
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      return;
+    }
     let cancelled = false;
     fetchTrailerAndOverview(mediaType, mediaId, initialOverview).then((res) => {
       if (!cancelled) setInfo(res);
     });
     return () => {
       cancelled = true;
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     };
   }, [active, mediaType, mediaId, initialOverview]);
+
+  const sendYtCommand = (func: string, args: any[] = []) => {
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'command', func, args }),
+        '*',
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    const handleMessage = (event: MessageEvent) => {
+      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
+      try {
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        // PlayerState 1 = playing -> wait slightly so pause icon/title fades out, then show
+        if (data?.event === 'onStateChange' && data?.info === 1) {
+          sendYtCommand('unMute');
+          sendYtCommand('setVolume', [100]);
+          if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+          revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 650);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [active]);
+
+  const handleIframeLoad = () => {
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        JSON.stringify({ event: 'listening' }),
+        '*',
+      );
+    } catch {
+      // ignore
+    }
+    sendYtCommand('unMute');
+    sendYtCommand('setVolume', [100]);
+    sendYtCommand('playVideo');
+    setTimeout(() => {
+      sendYtCommand('unMute');
+      sendYtCommand('setVolume', [100]);
+    }, 350);
+    // Fallback reveal after YouTube's initial title/pause button disappears (~1.4s)
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 1400);
+  };
 
   if (!active) return null;
 
@@ -108,18 +169,26 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const synopsisText = initialOverview || info?.overview || '';
 
   return (
-    <div className="absolute inset-0 z-20 bg-black overflow-hidden pointer-events-none">
+    <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
       {ytKey && (
-        <iframe
-          src={`https://www.youtube.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${ytKey}`}
-          title="Trailer preview"
-          allow="autoplay; encrypted-media"
-          className="w-full h-full border-0 scale-[1.35] pointer-events-none"
-        />
+        <div
+          className={`absolute inset-0 bg-black transition-opacity duration-500 ${
+            isVideoVisible ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <iframe
+            ref={iframeRef}
+            onLoad={handleIframeLoad}
+            src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
+            title="Trailer preview"
+            allow="autoplay; encrypted-media"
+            className="w-full h-full border-0 scale-[1.65] pointer-events-none"
+          />
+        </div>
       )}
       {synopsisText && (
-        <div className="absolute inset-x-0 bottom-0 p-2.5 pt-8 bg-gradient-to-t from-black via-black/85 to-transparent">
-          <p className="text-[11px] leading-snug text-white/90 line-clamp-4 drop-shadow">
+        <div className="absolute inset-x-0 bottom-0 max-h-[75%] overflow-hidden p-2.5 pt-10 bg-gradient-to-t from-black via-black/90 to-transparent">
+          <p className="text-[9.5px] sm:text-[10.5px] leading-tight text-white/95 drop-shadow">
             {synopsisText}
           </p>
         </div>
