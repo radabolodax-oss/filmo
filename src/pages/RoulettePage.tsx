@@ -527,8 +527,8 @@ const InlineSlotMachine: React.FC<{
             {t('roulette.roundProgress', { round })}
           </span>
           <div className="flex gap-1.5">
-            <div className={`w-2 h-2 rounded-full transition-colors ${isRound1Done ? 'bg-green-500' : 'bg-gradient-to-r from-green-400 to-purple-500 animate-pulse'}`} />
-            <div className={`w-2 h-2 rounded-full transition-colors ${round === 2 ? 'bg-gradient-to-r from-green-400 to-purple-500 animate-pulse' : 'bg-white/20'}`} />
+            <div className={`w-2 h-2 rounded-full transition-colors ${isRound1Done ? 'bg-green-500' : 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] animate-pulse'}`} />
+            <div className={`w-2 h-2 rounded-full transition-colors ${round === 2 ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] animate-pulse' : 'bg-white/20'}`} />
           </div>
         </div>
       )}
@@ -944,7 +944,7 @@ const RoulettePage: React.FC = () => {
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`mx-auto flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all ${showFilters
-                ? 'bg-gradient-to-r from-green-400 to-purple-500 border border-white/20 hover:bg-gradient-to-r hover:from-green-400 to-purple-500'
+                ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border border-white/20 hover:bg-gradient-to-r hover:from-green-400 to-purple-500'
                 : 'bg-white/5 backdrop-blur-md border border-white/10 hover:border-white/20 hover:bg-red-500/10'}`}
             >
               <Sparkles className="w-4 h-4" />
@@ -972,7 +972,7 @@ const RoulettePage: React.FC = () => {
                       whileTap={{ scale: 0.95 }}
                       onClick={() => setMediaFilter(type)}
                       className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${mediaFilter === type
-                        ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                        ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white'
                         : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'}`}
                     >
                       {type === 'all' ? t('roulette.all') : type === 'movie' ? t('filter.movies') : t('filter.series')}
@@ -1091,7 +1091,7 @@ const RoulettePage: React.FC = () => {
                     key={n}
                     onClick={() => setSpinCount(n)}
                     className={`px-3 py-2 text-sm font-medium transition-all ${spinCount === n
-                      ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                      ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white'
                       : 'text-white/50 hover:text-white hover:bg-white/10'}`}
                   >
                     {n}x
@@ -1221,7 +1221,7 @@ const RoulettePage: React.FC = () => {
                     <div className="flex items-center gap-3 mt-auto">
                       <Link to={`/${winner.media_type}/${encodeId(winner.id)}`}>
                         <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-green-400 to-purple-500 hover:bg-gradient-to-r hover:from-green-400 to-purple-500 text-white font-medium transition-colors">
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-gradient-to-r hover:from-green-400 to-purple-500 text-white font-medium transition-colors">
                           <Info className="w-4 h-4" /> {t('roulette.viewDetails')}
                         </motion.button>
                       </Link>

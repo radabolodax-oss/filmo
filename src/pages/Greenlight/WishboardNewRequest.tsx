@@ -756,7 +756,7 @@ const WishboardNewRequest: React.FC = () => {
                                                     className={`mb-4 p-4 rounded-xl border cursor-pointer transition-all ${selectedSeasons.includes(0) ? 'bg-red-500/20 border-white/20' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
                                                 >
                                                     <div className="flex items-center gap-3">
-                                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedSeasons.includes(0) ? 'bg-gradient-to-r from-green-400 to-purple-500 border-white/20' : 'border-white/30'}`}>
+                                                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${selectedSeasons.includes(0) ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border-white/20' : 'border-white/30'}`}>
                                                             {selectedSeasons.includes(0) && <Check className="w-3 h-3 text-white" />}
                                                         </div>
                                                         <div>
@@ -780,7 +780,7 @@ const WishboardNewRequest: React.FC = () => {
                                                             onClick={() => handleSelectSeason(season)}
                                                             className={`p-4 rounded-xl border cursor-pointer transition-all text-center ${selectedSeasons.includes(season) ? 'bg-red-500/20 border-white/20' : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/10'}`}
                                                         >
-                                                            <div className={`w-5 h-5 mx-auto mb-2 rounded border-2 flex items-center justify-center ${selectedSeasons.includes(season) ? 'bg-gradient-to-r from-green-400 to-purple-500 border-white/20' : 'border-white/30'}`}>
+                                                            <div className={`w-5 h-5 mx-auto mb-2 rounded border-2 flex items-center justify-center ${selectedSeasons.includes(season) ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border-white/20' : 'border-white/30'}`}>
                                                                 {selectedSeasons.includes(season) && <Check className="w-3 h-3 text-white" />}
                                                             </div>
                                                             <p className="font-semibold text-white text-sm">{t('greenlight.seasonNum', { num: season })}</p>

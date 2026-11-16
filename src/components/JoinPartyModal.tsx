@@ -113,7 +113,7 @@ const JoinPartyModal: React.FC<JoinPartyModalProps> = ({ isOpen, onClose }) => {
                                 <Button
                                     type="submit"
                                     disabled={code.length < 3}
-                                    className="w-full h-12 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white font-medium text-lg"
+                                    className="w-full h-12 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 text-white font-medium text-lg"
                                 >
                                     {t('watchParty.join')}
                                     <ArrowRight className="ml-2 h-5 w-5" />

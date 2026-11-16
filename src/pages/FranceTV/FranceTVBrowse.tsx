@@ -46,8 +46,8 @@ interface SearchResult {
 // ─── Channel badge colors ───────────────────────────────────────────────────────
 
 const CHANNEL_COLORS: Record<string, string> = {
-  'france-2': 'bg-gradient-to-r from-green-400 to-purple-500',
-  'france_2': 'bg-gradient-to-r from-green-400 to-purple-500',
+  'france-2': 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]',
+  'france_2': 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]',
   'france-3': 'bg-blue-500',
   'france_3': 'bg-blue-500',
   'france-4': 'bg-white/10',
@@ -65,7 +65,7 @@ const CSA_BADGES: Record<string, { label: string; color: string }> = {
   'TP': { label: 'TP', color: 'bg-green-600' },
   '10': { label: '-10', color: 'bg-yellow-500' },
   '12': { label: '-12', color: 'bg-orange-500' },
-  '16': { label: '-16', color: 'bg-gradient-to-r from-green-400 to-purple-500' },
+  '16': { label: '-16', color: 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]' },
   '18': { label: '-18', color: 'bg-red-700' },
 };
 

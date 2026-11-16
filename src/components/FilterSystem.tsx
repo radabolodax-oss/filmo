@@ -286,7 +286,7 @@ const FilterSystem: React.FC<FilterSystemProps> = ({
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
-            className="px-3 py-2 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors flex items-center gap-1"
+            className="px-3 py-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors flex items-center gap-1"
           >
             <X className="w-4 h-4" />
             {t('filter.clear')}

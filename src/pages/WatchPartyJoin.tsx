@@ -197,7 +197,7 @@ const WatchPartyJoin: React.FC = () => {
                 disabled={isJoining || !roomCode || !nickname}
                 className={`
                   w-full h-12 text-base rounded-lg transition-all shadow-lg hover:shadow-red-600/20 hover:scale-[1.02]
-                  ${isJoining || !roomCode || !nickname ? 'bg-white/10 text-white/50 cursor-not-allowed' : 'bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white border-0'}
+                  ${isJoining || !roomCode || !nickname ? 'bg-white/10 text-white/50 cursor-not-allowed' : 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 text-white border-0'}
                 `}
               >
                 {isJoining ? (

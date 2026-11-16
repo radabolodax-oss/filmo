@@ -59,11 +59,11 @@ const statusLabels: Record<string, string> = {
 
 const statusColors: Record<string, string> = {
     pending: 'bg-yellow-500',
-    not_found: 'bg-gradient-to-r from-green-400 to-purple-500',
+    not_found: 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]',
     not_found_recent: 'bg-orange-500',
     searching: 'bg-blue-500',
     added: 'bg-green-500',
-    rejected: 'bg-gradient-to-r from-green-400 to-purple-500',
+    rejected: 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]',
 };
 
 // ReusableBadge to match user's custom style
@@ -292,7 +292,7 @@ const WishboardDetailsModal: React.FC<WishboardDetailsModalProps> = ({
                             request.statusHistory.map((step, idx) => (
                                 <div key={idx} className="relative flex items-start gap-3">
                                     <div className={`relative z-10 h-3 w-3 flex-shrink-0 rounded-full mt-1 ${step.status === 'pending' ? 'bg-amber-600' :
-                                        step.status === 'rejected' ? 'bg-gradient-to-r from-green-400 to-purple-500' :
+                                        step.status === 'rejected' ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]' :
                                             statusColors[step.status] || 'bg-pantone-100'
                                         }`}></div>
                                     <div className="flex-1 min-w-0">

@@ -49,7 +49,7 @@ interface LegalDocumentPageProps {
 const cardClass = 'rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md';
 
 const actionClassMap: Record<LegalActionVariant, string> = {
-  primary: 'bg-gradient-to-r from-green-400 to-purple-500 text-white hover:bg-red-700 shadow-lg shadow-red-600/20',
+  primary: 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white hover:bg-red-700 shadow-lg shadow-red-600/20',
   secondary: 'border border-white/15 bg-white/5 text-white hover:bg-white/10',
   ghost: 'text-white/70 hover:bg-white/5 hover:text-white',
 };
@@ -168,7 +168,7 @@ const LegalDocumentPage: React.FC<LegalDocumentPageProps> = ({
                   <ul className="mt-3 space-y-3 text-sm text-white/65">
                     {summaryItems.map((item) => (
                       <li key={item} className="flex items-start gap-3">
-                        <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-gradient-to-r from-green-400 to-purple-500" />
+                        <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]" />
                         <span>{item}</span>
                       </li>
                     ))}
@@ -218,7 +218,7 @@ const LegalDocumentPage: React.FC<LegalDocumentPageProps> = ({
                 >
                   <div className="flex items-start gap-4">
                     <div className="mt-1 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-red-500/10 text-green-400">
-                      {SectionIcon ? <SectionIcon className="h-5 w-5" /> : <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-green-400 to-purple-500" />}
+                      {SectionIcon ? <SectionIcon className="h-5 w-5" /> : <span className="h-2.5 w-2.5 rounded-full bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]" />}
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -236,7 +236,7 @@ const LegalDocumentPage: React.FC<LegalDocumentPageProps> = ({
                         <ul className="mt-5 space-y-3 text-sm sm:text-[15px] leading-relaxed text-white/70">
                           {section.bullets.map((bullet) => (
                             <li key={bullet} className="flex items-start gap-3">
-                              <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-gradient-to-r from-green-400 to-purple-500" />
+                              <span className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]" />
                               <span>{bullet}</span>
                             </li>
                           ))}

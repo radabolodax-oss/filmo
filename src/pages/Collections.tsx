@@ -233,7 +233,7 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({
             className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs rounded-lg transition-colors ${
               collectionsStatus[collection.id]?.favorites
                 ? 'bg-red-700 hover:bg-red-800'
-                : 'bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700'
+                : 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700'
             }`}
           >
             <Heart size={14} className={collectionsStatus[collection.id]?.favorites ? 'fill-current' : ''} />
@@ -490,7 +490,7 @@ const CollectionListItem: React.FC<CollectionListItemProps> = React.memo(({
                 className={`flex items-center gap-1 px-2 py-1 text-white text-xs rounded transition-colors ${
                   collectionsStatus[collection.id]?.favorites
                     ? 'bg-red-700 hover:bg-red-800'
-                    : 'bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700'
+                    : 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700'
                 }`}
               >
                 <Heart size={12} className={collectionsStatus[collection.id]?.favorites ? 'fill-current' : ''} />
@@ -1194,7 +1194,7 @@ const Collections: React.FC = () => {
                 onClick={() => setDisplayMode('cards')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
                   displayMode === 'cards'
-                    ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white shadow-lg'
+                    ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white shadow-lg'
                     : 'text-gray-400 hover:text-white hover:bg-white/10'
                 }`}
                 title={t('search.gridView')}
@@ -1206,7 +1206,7 @@ const Collections: React.FC = () => {
                 onClick={() => setDisplayMode('list')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
                   displayMode === 'list'
-                    ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white shadow-lg'
+                    ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white shadow-lg'
                     : 'text-gray-400 hover:text-white hover:bg-white/10'
                 }`}
                 title={t('collections.modeList')}

@@ -161,7 +161,7 @@ const AvatarSelector: React.FC<AvatarSelectorProps> = ({
                   key={platform}
                   onClick={() => setSelectedPlatform(platform)}
                   className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${selectedPlatform === platform
-                      ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white border-white/20'
+                      ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white border-white/20'
                       : 'bg-gray-800/60 text-gray-300 border-gray-700 hover:bg-gray-800'
                     }`}
                 >

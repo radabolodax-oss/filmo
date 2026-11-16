@@ -895,12 +895,12 @@ const FranceTVPlayer: React.FC = () => {
           >
             {/* Progress (red) */}
             <div
-              className="absolute inset-y-0 left-0 bg-gradient-to-r from-green-400 to-purple-500 rounded-full"
+              className="absolute inset-y-0 left-0 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] rounded-full"
               style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
             />
             {/* Handle */}
             <div
-              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-gradient-to-r from-green-400 to-purple-500 rounded-full -ml-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+              className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] rounded-full -ml-2 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
               style={{ left: duration ? `${(currentTime / duration) * 100}%` : '0' }}
             />
           </div>
@@ -1017,7 +1017,7 @@ const FranceTVPlayer: React.FC = () => {
                   whileTap={{ scale: 0.97 }}
                 >
                   {t('francetv.qualityTab')}
-                  {settingsTab === 'quality' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-400 to-purple-500" />}
+                  {settingsTab === 'quality' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]" />}
                 </motion.button>
               )}
               {audioTracks.length > 1 && (
@@ -1027,7 +1027,7 @@ const FranceTVPlayer: React.FC = () => {
                   whileTap={{ scale: 0.97 }}
                 >
                   Audio
-                  {settingsTab === 'audio' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-400 to-purple-500" />}
+                  {settingsTab === 'audio' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]" />}
                 </motion.button>
               )}
               {subtitles.length > 1 && (
@@ -1037,7 +1037,7 @@ const FranceTVPlayer: React.FC = () => {
                   whileTap={{ scale: 0.97 }}
                 >
                   {t('francetv.subtitlesTab')}
-                  {settingsTab === 'subtitles' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-400 to-purple-500" />}
+                  {settingsTab === 'subtitles' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]" />}
                 </motion.button>
               )}
               <motion.button
@@ -1046,7 +1046,7 @@ const FranceTVPlayer: React.FC = () => {
                 whileTap={{ scale: 0.97 }}
               >
                 {t('watch.speedTab', 'Vitesse')}
-                {settingsTab === 'speed' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-400 to-purple-500" />}
+                {settingsTab === 'speed' && <motion.div layoutId="activeSettingsTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]" />}
               </motion.button>
             </div>
 
@@ -1060,7 +1060,7 @@ const FranceTVPlayer: React.FC = () => {
                         key={q.value}
                         onClick={() => handleQualityChange(q.value)}
                         className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer ${
-                          selectedQuality === q.value ? 'bg-gradient-to-r from-green-400 to-purple-500 text-green-400' : 'text-gray-300 hover:bg-white/5'
+                          selectedQuality === q.value ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400' : 'text-gray-300 hover:bg-white/5'
                         }`}
                       >
                         {q.label}
@@ -1076,7 +1076,7 @@ const FranceTVPlayer: React.FC = () => {
                         key={a.value}
                         onClick={() => handleAudioChange(a.value)}
                         className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer ${
-                          selectedAudio === a.value ? 'bg-gradient-to-r from-green-400 to-purple-500 text-green-400' : 'text-gray-300 hover:bg-white/5'
+                          selectedAudio === a.value ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400' : 'text-gray-300 hover:bg-white/5'
                         }`}
                       >
                         {a.label}
@@ -1092,7 +1092,7 @@ const FranceTVPlayer: React.FC = () => {
                         key={s.value}
                         onClick={() => handleSubChange(s.value)}
                         className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer ${
-                          selectedSub === s.value ? 'bg-gradient-to-r from-green-400 to-purple-500 text-green-400' : 'text-gray-300 hover:bg-white/5'
+                          selectedSub === s.value ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400' : 'text-gray-300 hover:bg-white/5'
                         }`}
                       >
                         {s.label}
@@ -1108,7 +1108,7 @@ const FranceTVPlayer: React.FC = () => {
                         key={speed}
                         onClick={() => handleSpeedChange(speed)}
                         className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer ${
-                          playbackSpeed === speed ? 'bg-gradient-to-r from-green-400 to-purple-500 text-green-400' : 'text-gray-300 hover:bg-white/5'
+                          playbackSpeed === speed ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400' : 'text-gray-300 hover:bg-white/5'
                         }`}
                       >
                         {speed === 1 ? t('watch.normalLabel') : `${speed}x`}

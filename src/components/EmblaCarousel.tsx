@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { getSavedPosition } from '../utils/watchStateCache';
 import { encodeId } from '../utils/idEncoder';
+import { CardTrailerPreview } from './CardTrailerPreview';
 import { useTmdbImages, prefetchTmdbImages } from '../hooks/useTmdbImages';
 import { useEmblaScrollSuppress } from '../hooks/useEmblaScrollSuppress';
 import './EmblaCarousel.css';
@@ -235,11 +236,50 @@ const CarouselCard = React.memo<{
       ? t('common.saga')
       : t('common.movie');
 
+  const [previewActive, setPreviewActive] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+      if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    };
+  }, []);
+
+  const canPreview = item.media_type === 'movie' || item.media_type === 'tv';
+
   return (
-    <div className="embla-slide flex-none relative w-[clamp(112px,29vw,156px)] sm:w-[160px] md:w-[192px] tv:w-[220px]">
+    <div className={`embla-slide flex-none relative w-[clamp(112px,29vw,156px)] sm:w-[160px] md:w-[192px] tv:w-[220px] ${previewActive ? 'z-30' : ''}`}>
       <div
         style={{ animationDelay: `${Math.min(index * 0.03, 0.5)}s` }}
-        className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 hover:scale-105 transition-transform duration-200 ease-out animate-card-enter"
+        onMouseEnter={() => {
+          if (!canPreview) return;
+          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          hoverTimerRef.current = setTimeout(() => setPreviewActive(true), 1200);
+        }}
+        onMouseLeave={() => {
+          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          setPreviewActive(false);
+        }}
+        onTouchStart={() => {
+          if (!canPreview) return;
+          if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+          touchTimerRef.current = setTimeout(() => setPreviewActive(true), 700);
+        }}
+        onTouchMove={() => {
+          if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+          setPreviewActive(false);
+        }}
+        onTouchEnd={() => {
+          if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+          setPreviewActive(false);
+        }}
+        onTouchCancel={() => {
+          if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+          setPreviewActive(false);
+        }}
+        className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'scale-110 shadow-2xl' : 'hover:scale-105'}`}
       >
         {/* Type badge */}
         <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/75 text-[10px] font-semibold uppercase tracking-wider text-white/80">
@@ -304,6 +344,14 @@ const CarouselCard = React.memo<{
             placeholder={POSTER_FALLBACK}
             priority={priority}
           />
+          {canPreview && (
+            <CardTrailerPreview
+              mediaId={item.id}
+              mediaType={item.media_type as 'movie' | 'tv'}
+              overview={(item as any).overview}
+              active={previewActive}
+            />
+          )}
         </div>
 
         {/* Hover overlay */}

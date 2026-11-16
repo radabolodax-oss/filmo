@@ -67,7 +67,7 @@ const ErrorDisplay: React.FC<{ message: string | null; onRetry?: () => void }> =
       {onRetry && (
         <button
           onClick={onRetry}
-          className="px-6 py-3 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 rounded-lg font-medium mr-2"
+          className="px-6 py-3 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 rounded-lg font-medium mr-2"
         >
           {t('watchParty.retryBtn')}
         </button>
@@ -146,7 +146,7 @@ const ChatMessageItem = React.memo<ChatMessageItemProps>(
           className={`px-3 py-2 rounded-xl max-w-[85%] relative group ${message.type === 'system'
             ? 'bg-white/5 text-white/50 text-xs text-center border border-white/5'
             : isOwnMessage
-              ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white shadow-lg shadow-red-500/10'
+              ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white shadow-lg shadow-red-500/10'
               : 'bg-white/[0.08] text-white/90 border border-white/5'
             }`}
         >
@@ -1555,7 +1555,7 @@ const WatchPartyRoom: React.FC = () => {
           <button onClick={() => setShowParticipantsPanel(true)} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-md relative">
             <Users size={18} />
             {participants.length > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-green-400 to-purple-500 text-xs h-5 w-5 flex items-center justify-center rounded-full border-2 border-black">
+              <span className="absolute -top-1.5 -right-1.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-xs h-5 w-5 flex items-center justify-center rounded-full border-2 border-black">
                 {participants.length}
               </span>
             )}
@@ -1566,7 +1566,7 @@ const WatchPartyRoom: React.FC = () => {
           <button onClick={togglePageFullscreen} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-md" title={isPageFullscreen ? t('watchParty.exitFullscreen') : t('watchParty.fullscreen')}>
             {isPageFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
           </button>
-          <button onClick={leaveRoom} className="p-1.5 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 rounded-md" title={t('watchParty.quitLabel')}>
+          <button onClick={leaveRoom} className="p-1.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 rounded-md" title={t('watchParty.quitLabel')}>
             <X size={18} />
           </button>
         </div>
@@ -1650,7 +1650,7 @@ const WatchPartyRoom: React.FC = () => {
                     {canControlPlayback && (
                       <button
                         onClick={handleCancelPauseTimer}
-                        className="px-4 py-2 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 rounded-lg text-white"
+                        className="px-4 py-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 rounded-lg text-white"
                       >
                         {t('watchParty.cancelPause')}
                       </button>
@@ -1738,7 +1738,7 @@ const WatchPartyRoom: React.FC = () => {
                           style={{ width: `${activeVote.totalParticipants > 0 ? (voteProgress.yesVotes / activeVote.totalParticipants) * 100 : 0}%` }}
                         />
                         <div
-                          className="bg-gradient-to-r from-green-400 to-purple-500 transition-all duration-300"
+                          className="bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] transition-all duration-300"
                           style={{ width: `${activeVote.totalParticipants > 0 ? (voteProgress.noVotes / activeVote.totalParticipants) * 100 : 0}%` }}
                         />
                       </div>
@@ -1761,7 +1761,7 @@ const WatchPartyRoom: React.FC = () => {
                           </button>
                           <button
                             onClick={() => handleCastVote(false)}
-                            className="flex-1 py-2 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 rounded-lg font-semibold text-sm transition-colors"
+                            className="flex-1 py-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 rounded-lg font-semibold text-sm transition-colors"
                           >
                             ✗ {t('watchParty.voteNo')}
                           </button>
@@ -1894,7 +1894,7 @@ const WatchPartyRoom: React.FC = () => {
                     type="submit"
                     disabled={!newMessage.trim() || socketState !== SocketState.CONNECTED}
                     className={`p-2.5 rounded-xl transition-colors ${newMessage.trim() && socketState === SocketState.CONNECTED
-                      ? 'bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700'
+                      ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700'
                       : 'bg-white/5 text-white/20 cursor-not-allowed'
                       }`}
                   >
@@ -2012,7 +2012,7 @@ const WatchPartyRoom: React.FC = () => {
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           onClick={() => setShowChatPanel(true)}
-          className="fixed bottom-6 right-6 z-30 p-4 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 rounded-full shadow-lg transition-colors"
+          className="fixed bottom-6 right-6 z-30 p-4 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 rounded-full shadow-lg transition-colors"
           title={t('watchParty.openChat')}
         >
           <MessageSquare size={24} className="text-white" />
@@ -2022,7 +2022,7 @@ const WatchPartyRoom: React.FC = () => {
       {/* Mobile invite button - shown only when chat is hidden */}
       {roomInfo && !showChatPanel && (
         <div className="hidden bg-gray-800/90 backdrop-blur-sm border-t border-gray-700/60 py-2 px-4 shadow-top shrink-0">
-          <button onClick={handleCopyInviteLink} className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 py-2 rounded-lg font-medium text-sm transition-colors">
+          <button onClick={handleCopyInviteLink} className="w-full flex items-center justify-center gap-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 py-2 rounded-lg font-medium text-sm transition-colors">
             <Share2 size={18} />
             {linkCopied ? t('watchParty.linkCopiedSuccess') : t('watchParty.inviteFriends')}
           </button>
@@ -2105,7 +2105,7 @@ const WatchPartyRoom: React.FC = () => {
                     </button>
                     <button
                       onClick={() => handleDenyControl(request.participantId)}
-                      className="p-1.5 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 rounded-md"
+                      className="p-1.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 rounded-md"
                       title={t('watchParty.deny')}
                     >
                       <XCircle size={14} />
@@ -2175,7 +2175,7 @@ const WatchPartyRoom: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => { if (controlMode !== 'host-only') handleToggleControlMode(); }}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${controlMode === 'host-only' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${controlMode === 'host-only' ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
                         >
                           {t('watchParty.hostOnlyMode')}
                         </button>
@@ -2209,14 +2209,14 @@ const WatchPartyRoom: React.FC = () => {
                     <div className="grid gap-2 md:grid-cols-2">
                       <button
                         onClick={() => { if (syncMode !== 'classic') handleSetSyncMode('classic'); }}
-                        className={`rounded-lg px-3 py-3 text-left text-sm font-medium transition-all ${syncMode === 'classic' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
+                        className={`rounded-lg px-3 py-3 text-left text-sm font-medium transition-all ${syncMode === 'classic' ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
                       >
                         <p>{t('watchParty.syncModeClassic')}</p>
                         <p className="mt-1 text-xs text-current/80">{t('watchParty.syncModeClassicDesc')}</p>
                       </button>
                       <button
                         onClick={() => { if (syncMode !== 'pro') handleSetSyncMode('pro'); }}
-                        className={`rounded-lg px-3 py-3 text-left text-sm font-medium transition-all ${syncMode === 'pro' ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
+                        className={`rounded-lg px-3 py-3 text-left text-sm font-medium transition-all ${syncMode === 'pro' ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
                       >
                         <p>{t('watchParty.syncModePro')}</p>
                         <p className="mt-1 text-xs text-current/80">{t('watchParty.syncModeProDesc')}</p>
@@ -2250,7 +2250,7 @@ const WatchPartyRoom: React.FC = () => {
                     <div className="flex gap-2">
                       <button
                         onClick={() => socketRef.current?.emit('room:setVisibility', { isPublic: false })}
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${!roomInfo.isPublic ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${!roomInfo.isPublic ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
                       >
                         🔒 {t('watchParty.private')}
                       </button>
@@ -2325,7 +2325,7 @@ const WatchPartyRoom: React.FC = () => {
                 {/* Leave / End party */}
                 <button
                   onClick={() => { window.history.back(); }}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-green-400 to-purple-500 border border-white/20 hover:bg-gradient-to-r from-green-400 to-purple-500 text-green-400 text-sm font-medium transition-all"
+                  className="w-full py-3 rounded-xl bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border border-white/20 hover:bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400 text-sm font-medium transition-all"
                 >
                   {t('watchParty.quitLabel')}
                 </button>

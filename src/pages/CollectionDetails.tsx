@@ -472,7 +472,7 @@ const CollectionDetails: React.FC = () => {
             <p className="text-gray-400 mb-8">{t('collections.notAvailable')}</p>
             <Link
               to="/collections"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 px-6 py-3 rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 px-6 py-3 rounded-lg transition-colors"
             >
               <ArrowLeft size={20} />
               {t('collections.backToCollections')}
@@ -590,7 +590,7 @@ const CollectionDetails: React.FC = () => {
                     onClick={toggleFavorites}
                     className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors duration-200 ${
                       isInFavorites
-                        ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white hover:bg-red-700'
+                        ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white hover:bg-red-700'
                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
                     }`}
                   >
@@ -629,7 +629,7 @@ const CollectionDetails: React.FC = () => {
                       onClick={() => setShowMoviesWithoutImages(!showMoviesWithoutImages)}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
                         showMoviesWithoutImages 
-                          ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' 
+                          ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' 
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                       }`}
                     >
@@ -646,7 +646,7 @@ const CollectionDetails: React.FC = () => {
                       onClick={() => setViewMode('grid')}
                       className={`p-2 rounded transition-colors ${
                         viewMode === 'grid' 
-                          ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' 
+                          ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' 
                           : 'text-gray-400 hover:text-white'
                       }`}
                     >
@@ -656,7 +656,7 @@ const CollectionDetails: React.FC = () => {
                       onClick={() => setViewMode('list')}
                       className={`p-2 rounded transition-colors ${
                         viewMode === 'list' 
-                          ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' 
+                          ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' 
                           : 'text-gray-400 hover:text-white'
                       }`}
                     >
@@ -695,7 +695,7 @@ const CollectionDetails: React.FC = () => {
                           
                           {/* Overlay avec indicateur cliquable */}
                           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                            <div className="bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 rounded-full p-3 transition-colors">
+                            <div className="bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 rounded-full p-3 transition-colors">
                               <Info size={20} />
                             </div>
                           </div>
@@ -709,7 +709,7 @@ const CollectionDetails: React.FC = () => {
                           )}
 
                           {/* Numéro du film dans la série */}
-                          <div className="absolute top-4 left-4 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">
+                          <div className="absolute top-4 left-4 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">
                             {index + 1}
                           </div>
                         </div>
@@ -748,7 +748,7 @@ const CollectionDetails: React.FC = () => {
                       <Link to={`/movie/${encodeId(movie.id)}`} className="block">
                         <div className="flex gap-4 p-4">
                           {/* Numéro */}
-                          <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-green-400 to-purple-500 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                          <div className="flex-shrink-0 w-8 h-8 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white rounded-full flex items-center justify-center text-sm font-bold">
                             {index + 1}
                           </div>
 
@@ -800,7 +800,7 @@ const CollectionDetails: React.FC = () => {
 
                               {/* Indicateur cliquable */}
                               <div className="flex-shrink-0 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 rounded-full p-2 transition-colors">
+                                <div className="bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 rounded-full p-2 transition-colors">
                                   <Info size={16} />
                                 </div>
                               </div>
@@ -1154,7 +1154,7 @@ const CollectionDetails: React.FC = () => {
                               className={`flex items-center gap-1 px-3 py-1.5 text-white text-xs rounded-lg transition-colors ${
                                 similarCollectionsStatus[similarCollection.id]?.favorites
                                   ? 'bg-red-700 hover:bg-red-800'
-                                  : 'bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700'
+                                  : 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700'
                               }`}
                             >
                               <Heart size={14} className={similarCollectionsStatus[similarCollection.id]?.favorites ? 'fill-current' : ''} />

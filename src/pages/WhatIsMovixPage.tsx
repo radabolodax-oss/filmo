@@ -171,7 +171,7 @@ const WhatIsMovixPage: React.FC = () => {
             transition={{ delay: 1.1 }}
           >
             <Link to="/">
-              <Button className="bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white px-10 h-13 text-lg font-semibold gap-2 rounded-full shadow-lg shadow-red-600/25">
+              <Button className="bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 text-white px-10 h-13 text-lg font-semibold gap-2 rounded-full shadow-lg shadow-red-600/25">
                 <Tv className="w-5 h-5" />
                 {t('whatIsMovix.startWatching')}
               </Button>
@@ -323,7 +323,7 @@ const WhatIsMovixPage: React.FC = () => {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link to="/">
-                <Button className="bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white px-6 h-11 gap-2">
+                <Button className="bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 text-white px-6 h-11 gap-2">
                   <Tv className="w-4 h-4" />
                   {t('whatIsMovix.exploreMovix')}
                 </Button>

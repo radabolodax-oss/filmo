@@ -43,7 +43,7 @@ const PaginationBar = ({ currentPage, maxPages, onSelect }: { currentPage: numbe
     return (
         <div className="flex justify-center items-center gap-1.5 flex-wrap my-6">
             <motion.button whileTap={{ scale: 0.92 }} onClick={() => onSelect(1)} disabled={activePage <= 1}
-                className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${activePage === 1 ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'} disabled:opacity-30`}>
+                className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${activePage === 1 ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'} disabled:opacity-30`}>
                 1
             </motion.button>
             {activePage > 3 && <span className="text-white/20 px-1">...</span>}
@@ -51,7 +51,7 @@ const PaginationBar = ({ currentPage, maxPages, onSelect }: { currentPage: numbe
                 const p = Math.max(2, activePage - 2) + i;
                 return p > 1 && p < maxPages ? (
                     <motion.button key={p} whileTap={{ scale: 0.92 }} onClick={() => onSelect(p)}
-                        className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${p === activePage ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'}`}>
+                        className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${p === activePage ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'}`}>
                         {p}
                     </motion.button>
                 ) : null;
@@ -59,7 +59,7 @@ const PaginationBar = ({ currentPage, maxPages, onSelect }: { currentPage: numbe
             {activePage < maxPages - 3 && <span className="text-white/20 px-1">...</span>}
             {maxPages > 1 && (
                 <motion.button whileTap={{ scale: 0.92 }} onClick={() => onSelect(maxPages)} disabled={activePage >= maxPages}
-                    className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${activePage === maxPages ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'} disabled:opacity-30`}>
+                    className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${activePage === maxPages ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'} disabled:opacity-30`}>
                     {maxPages}
                 </motion.button>
             )}
@@ -645,7 +645,7 @@ const Search: React.FC = () => {
                                             onClick={() => setShowFilters(!showFilters)}
                                             aria-label="Filters"
                                             className={`px-4 transition-all border-l shrink-0 ${filtersActive
-                                                ? 'bg-gradient-to-r from-green-400 to-purple-500 border-white/20 text-white hover:bg-gradient-to-r hover:from-green-400 to-purple-500'
+                                                ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border-white/20 text-white hover:bg-gradient-to-r hover:from-green-400 to-purple-500'
                                                 : 'border-white/10 text-white/70 hover:text-white hover:bg-white/5'
                                                 }`}
                                         >
@@ -832,7 +832,7 @@ const Search: React.FC = () => {
                                                         type="button"
                                                         onClick={() => applyPreset(preset)}
                                                         className={`px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${activePreset === preset.id
-                                                            ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                                                            ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white'
                                                             : 'bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/30'
                                                             }`}
                                                     >
@@ -880,7 +880,7 @@ const Search: React.FC = () => {
                                                                     type="button"
                                                                     onClick={() => toggleProvider(provider.provider_id)}
                                                                     className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${selectedProviders.includes(provider.provider_id)
-                                                                        ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white ring-1 ring-red-500'
+                                                                        ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white ring-1 ring-red-500'
                                                                         : 'bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/30'
                                                                         }`}
                                                                 >
@@ -986,7 +986,7 @@ const Search: React.FC = () => {
                                                             key={keyword.id}
                                                             type="button"
                                                             onClick={() => removeKeyword(keyword.id)}
-                                                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-400 to-purple-500 border border-white/20 text-sm text-white hover:bg-gradient-to-r from-green-400 to-purple-500 transition-colors"
+                                                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border border-white/20 text-sm text-white hover:bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] transition-colors"
                                                         >
                                                             <span>{keyword.name}</span>
                                                             <X size={14} />
@@ -1210,7 +1210,7 @@ const Search: React.FC = () => {
                                                             type="button"
                                                             onClick={() => toggleGenre(genre.id)}
                                                             className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${selectedGenres.includes(genre.id)
-                                                                ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                                                                ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white'
                                                                 : 'bg-white/5 border border-white/10 text-white/60 hover:text-white hover:border-white/30'
                                                                 }`}
                                                         >
@@ -1227,7 +1227,7 @@ const Search: React.FC = () => {
                                                 type="submit"
                                                 whileHover={{ scale: 1.02 }}
                                                 whileTap={{ scale: 0.98 }}
-                                                className="w-full max-w-sm mx-auto py-3 rounded-2xl bg-gradient-to-r from-green-400 to-purple-500 hover:bg-gradient-to-r hover:from-green-400 to-purple-500 text-white font-semibold flex items-center justify-center gap-2 transition-colors"
+                                                className="w-full max-w-sm mx-auto py-3 rounded-2xl bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-gradient-to-r hover:from-green-400 to-purple-500 text-white font-semibold flex items-center justify-center gap-2 transition-colors"
                                             >
                                                 <SearchIcon size={20} />
                                                 <span>{t('search.applyCriteria')}</span>

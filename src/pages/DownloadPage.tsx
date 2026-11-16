@@ -341,8 +341,8 @@ const SeasonDropdown: React.FC<{
                 }}
                 className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 ${
                   isDarkiWorld 
-                    ? (selectedDarkiWorldSeason?.id === (season as DarkiWorldSeason).id ? 'bg-gradient-to-r from-green-400 to-purple-500 text-green-400' : 'text-gray-200 hover:bg-gray-700')
-                    : (selectedSeason === (season as Season).season_number ? 'bg-gradient-to-r from-green-400 to-purple-500 text-green-400' : 'text-gray-200 hover:bg-gray-700')
+                    ? (selectedDarkiWorldSeason?.id === (season as DarkiWorldSeason).id ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400' : 'text-gray-200 hover:bg-gray-700')
+                    : (selectedSeason === (season as Season).season_number ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400' : 'text-gray-200 hover:bg-gray-700')
                 }`}
               >
                 {isDarkiWorld
@@ -485,8 +485,8 @@ const EpisodeDropdown: React.FC<{
                 }}
                 className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 ${
                   isDarkiWorld 
-                    ? (selectedDarkiWorldEpisode?.id === (episode as DarkiWorldEpisode).id ? 'bg-gradient-to-r from-green-400 to-purple-500 text-green-400' : 'text-gray-200 hover:bg-gray-700')
-                    : (selectedEpisode === (episode as Episode).episode_number ? 'bg-gradient-to-r from-green-400 to-purple-500 text-green-400' : 'text-gray-200 hover:bg-gray-700')
+                    ? (selectedDarkiWorldEpisode?.id === (episode as DarkiWorldEpisode).id ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400' : 'text-gray-200 hover:bg-gray-700')
+                    : (selectedEpisode === (episode as Episode).episode_number ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-green-400' : 'text-gray-200 hover:bg-gray-700')
                 }`}
               >
                 {isDarkiWorld
@@ -1677,7 +1677,7 @@ const DownloadPage: React.FC = () => {
                   <button
                     onClick={handleGetLinks}
                     disabled={loadingLinks}
-                    className="w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-3 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 disabled:bg-gray-600 rounded-xl transition-colors text-sm sm:text-base"
+                    className="w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-3 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 disabled:bg-gray-600 rounded-xl transition-colors text-sm sm:text-base"
                   >
                     {loadingLinks ? (
                       <Loader className="w-5 h-5 animate-spin" />

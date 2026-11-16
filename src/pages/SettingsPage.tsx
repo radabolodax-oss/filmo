@@ -1184,7 +1184,7 @@ const SettingsPage: React.FC = () => {
   // ─── Render helpers ──────────────────────────────────────────────────────
 
   const renderToggle = (value: boolean, onToggle: () => void, color: string = 'red') => {
-    const bgActive = color === 'blue' ? 'bg-blue-500' : color === 'purple' ? 'bg-white/10' : color === 'green' ? 'bg-green-500' : color === 'indigo' ? 'bg-indigo-500' : 'bg-gradient-to-r from-green-400 to-purple-500';
+    const bgActive = color === 'blue' ? 'bg-blue-500' : color === 'purple' ? 'bg-white/10' : color === 'green' ? 'bg-green-500' : color === 'indigo' ? 'bg-indigo-500' : 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]';
     return (
       <button
         onClick={onToggle}
@@ -1297,7 +1297,7 @@ const SettingsPage: React.FC = () => {
                       {isActive && (
                         <motion.div
                           layoutId="settings-sidebar-indicator"
-                          className="absolute inset-0 bg-gradient-to-r from-green-400 to-purple-500 border border-white/20 rounded-xl shadow-sm shadow-red-600/5 pointer-events-none"
+                          className="absolute inset-0 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border border-white/20 rounded-xl shadow-sm shadow-red-600/5 pointer-events-none"
                           transition={{ type: 'spring', bounce: 0.18, duration: 0.45 }}
                         />
                       )}
@@ -1609,7 +1609,7 @@ const SettingsPage: React.FC = () => {
                                   key={opt.value}
                                   onClick={() => handleScreensaverTimeoutChange(opt.value)}
                                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${screensaverTimeout === opt.value
-                                    ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white shadow-lg shadow-red-600/20'
+                                    ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white shadow-lg shadow-red-600/20'
                                     : 'bg-gray-700/40 text-gray-400 hover:bg-gray-700 hover:text-white'
                                     }`}
                                 >
@@ -1631,7 +1631,7 @@ const SettingsPage: React.FC = () => {
                                   key={opt.value}
                                   onClick={() => handleScreensaverModeChange(opt.value)}
                                   className={`flex-1 min-w-[140px] p-3 rounded-xl text-left transition-colors border ${screensaverMode === opt.value
-                                    ? 'bg-gradient-to-r from-green-400 to-purple-500 border-white/20 text-white'
+                                    ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border-white/20 text-white'
                                     : 'bg-gray-700/20 border-gray-700/40 text-gray-400 hover:bg-gray-700/40 hover:text-white'
                                     }`}
                                 >
@@ -2282,7 +2282,7 @@ const SettingsPage: React.FC = () => {
                         </button>
                         <button
                           onClick={confirmDisableHistory}
-                          className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-green-400 to-purple-500 text-white hover:bg-gradient-to-r hover:from-green-400 to-purple-500 transition-colors text-sm font-medium"
+                          className="flex-1 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white hover:bg-gradient-to-r hover:from-green-400 to-purple-500 transition-colors text-sm font-medium"
                         >
                           {t('settings.disableHistoryConfirm')}
                         </button>
@@ -2328,7 +2328,7 @@ const SettingsPage: React.FC = () => {
                         </button>
                         <button
                           onClick={confirmDisableDataCollection}
-                          className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-green-400 to-purple-500 text-white hover:bg-gradient-to-r hover:from-green-400 to-purple-500 transition-colors text-sm font-medium"
+                          className="flex-1 px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white hover:bg-gradient-to-r hover:from-green-400 to-purple-500 transition-colors text-sm font-medium"
                         >
                           {t('settings.disableDataConfirm')}
                         </button>
@@ -2510,7 +2510,7 @@ const SettingsPage: React.FC = () => {
                     className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                       linkModal.action === 'link'
                         ? 'bg-indigo-600 text-white hover:bg-indigo-500'
-                        : 'bg-gradient-to-r from-green-400 to-purple-500 text-white hover:bg-gradient-to-r hover:from-green-400 to-purple-500'
+                        : 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white hover:bg-gradient-to-r hover:from-green-400 to-purple-500'
                     } ${isSubmittingLinkAction ? 'opacity-60 cursor-not-allowed' : ''}`}
                     disabled={isSubmittingLinkAction}
                   >
@@ -2578,7 +2578,7 @@ const SettingsPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex justify-end">
-                    <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white transition-colors" onClick={handleCloseIdPopup}>
+                    <button className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 text-white transition-colors" onClick={handleCloseIdPopup}>
                       {t('common.understood')}
                     </button>
                   </div>
@@ -2645,7 +2645,7 @@ const SettingsPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex justify-end">
-                    <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white transition-colors" onClick={handleCloseLocalStoragePopup}>
+                    <button className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 text-white transition-colors" onClick={handleCloseLocalStoragePopup}>
                       {t('common.close')}
                     </button>
                   </div>
@@ -2738,7 +2738,7 @@ const SettingsPage: React.FC = () => {
                   )}
 
                   <div className="mt-4 flex justify-end">
-                    <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white transition-colors" onClick={handleCloseNonSyncablePopup}>
+                    <button className="px-4 py-2 rounded-lg bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 text-white transition-colors" onClick={handleCloseNonSyncablePopup}>
                       {t('common.close')}
                     </button>
                   </div>

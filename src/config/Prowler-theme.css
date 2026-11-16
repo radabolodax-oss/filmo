@@ -92,21 +92,44 @@ header {
   border-radius: 999px;
 }
 
-/* ── Thème Halloween (style Movix) ── */
+@keyframes dawgerWitchFly {
+  0% { transform: translateX(-10vw) translateY(0px) rotate(-4deg); }
+  50% { transform: translateX(50vw) translateY(-14px) rotate(2deg); }
+  100% { transform: translateX(110vw) translateY(4px) rotate(-3deg); }
+}
+
+@keyframes dawgerGhostFloat {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.55; }
+  50% { transform: translateY(-18px) translateX(12px); opacity: 0.85; }
+}
+
+@keyframes dawgerCandyFall {
+  0% { transform: translateY(-40px) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.85; }
+  90% { opacity: 0.85; }
+  100% { transform: translateY(105vh) rotate(320deg); opacity: 0; }
+}
+
+/* ── Thème Halloween (fidèle à Movix) ── */
 html.theme-halloween {
   --color-primary: #f97316;
-  --color-secondary-bright: #9333ea;
-  --color-border-hover: rgba(249, 115, 22, 0.55);
+  --color-secondary-bright: #ea580c;
+  --color-border-hover: rgba(249, 115, 22, 0.65);
+}
+
+html.theme-halloween header form {
+  border-color: rgba(249, 115, 22, 0.45) !important;
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.18) !important;
 }
 
 html.theme-halloween [class*="card"]:hover,
 html.theme-halloween [class*="movie"]:hover,
 html.theme-halloween [class*="serie"]:hover {
-  border-color: rgba(249, 115, 22, 0.55) !important;
-  box-shadow: 0 8px 28px rgba(249, 115, 22, 0.22), 0 0 16px rgba(147, 51, 234, 0.18) !important;
+  border-color: rgba(249, 115, 22, 0.65) !important;
+  box-shadow: 0 8px 28px rgba(249, 115, 22, 0.28) !important;
 }
 
 html.theme-halloween header,
 html.theme-halloween nav {
-  border-bottom-color: rgba(249, 115, 22, 0.22);
+  border-bottom-color: rgba(249, 115, 22, 0.30);
 }

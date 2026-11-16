@@ -390,7 +390,7 @@ const WatchPartyCreate: React.FC = () => {
                           type="button"
                           onClick={() => setIsPublic(false)}
                           className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${!isPublic
-                            ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white shadow-lg shadow-red-500/20'
+                            ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white shadow-lg shadow-red-500/20'
                             : 'text-white/50 hover:text-white hover:bg-white/5'
                             }`}
                         >
@@ -400,7 +400,7 @@ const WatchPartyCreate: React.FC = () => {
                           type="button"
                           onClick={() => setIsPublic(true)}
                           className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-md text-sm font-medium transition-colors ${isPublic
-                            ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white shadow-lg shadow-red-500/20'
+                            ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white shadow-lg shadow-red-500/20'
                             : 'text-white/50 hover:text-white hover:bg-white/5'
                             }`}
                         >
@@ -537,7 +537,7 @@ const WatchPartyCreate: React.FC = () => {
                   <Button
                     type="submit"
                     disabled={isCreating || !nickname.trim()}
-                    className="w-full h-12 text-base bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700 text-white border-0 transition-all shadow-lg hover:shadow-red-600/20 hover:scale-[1.02]"
+                    className="w-full h-12 text-base bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700 text-white border-0 transition-all shadow-lg hover:shadow-red-600/20 hover:scale-[1.02]"
                   >
                     {isCreating ? (
                       <>{t('watchParty.creating')}</>

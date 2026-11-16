@@ -28,7 +28,7 @@ const WatchButton: React.FC<WatchButtonProps> = ({ type, isActive, onClick, labe
       onClick={onClick}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
         isActive 
-          ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' 
+          ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' 
           : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
       }`}
     >

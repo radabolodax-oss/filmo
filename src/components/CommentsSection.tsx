@@ -87,7 +87,7 @@ const SpoilerToggle: React.FC<SpoilerToggleProps> = ({ checked, onChange, size =
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          className="w-2 h-2 bg-gradient-to-r from-green-400 to-purple-500 rounded-full"
+          className="w-2 h-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] rounded-full"
         />
       )}
     </button>
@@ -345,7 +345,7 @@ const CommentItem = React.memo<CommentItemProps>((props) => {
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             <span className="font-semibold text-white text-sm sm:text-base truncate">{comment.username}</span>
             {comment.is_admin === 1 && (
-              <span className="px-1.5 sm:px-2 py-0.5 bg-gradient-to-r from-green-400 to-purple-500 text-white text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+              <span className="px-1.5 sm:px-2 py-0.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white text-[10px] sm:text-xs rounded-full whitespace-nowrap">
                 Admin
               </span>
             )}
@@ -664,7 +664,7 @@ const CommentItem = React.memo<CommentItemProps>((props) => {
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             <span className="font-semibold text-white text-xs sm:text-sm truncate">{reply.username}</span>
                             {reply.is_admin === 1 && (
-                              <span className="px-1.5 sm:px-2 py-0.5 bg-gradient-to-r from-green-400 to-purple-500 text-white text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                              <span className="px-1.5 sm:px-2 py-0.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white text-[10px] sm:text-xs rounded-full whitespace-nowrap">
                                 Admin
                               </span>
                             )}
@@ -2146,7 +2146,7 @@ const CommentsSection: React.FC<CommentsSectionProps> = ({ contentType, contentI
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={executeDelete}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-gradient-to-r hover:from-green-400 to-purple-500 text-white rounded-xl font-medium transition-colors text-sm flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-2.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-gradient-to-r hover:from-green-400 to-purple-500 text-white rounded-xl font-medium transition-colors text-sm flex items-center justify-center gap-2"
                 >
                   <Trash2 className="w-4 h-4" />
                   {t('common.delete')}

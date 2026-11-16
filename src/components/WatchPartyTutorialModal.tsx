@@ -160,13 +160,13 @@ const WatchPartyTutorialModal: React.FC<WatchPartyTutorialModalProps> = ({ isOpe
                                 {/* Navigation Buttons */}
                                 <button
                                     onClick={scrollPrev}
-                                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-black/50 hover:bg-gradient-to-r from-green-400 to-purple-500 rounded-full text-white transition-all backdrop-blur-sm z-10"
+                                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-black/50 hover:bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] rounded-full text-white transition-all backdrop-blur-sm z-10"
                                 >
                                     <ChevronLeft size={20} className="md:w-6 md:h-6" />
                                 </button>
                                 <button
                                     onClick={scrollNext}
-                                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-black/50 hover:bg-gradient-to-r from-green-400 to-purple-500 rounded-full text-white transition-all backdrop-blur-sm z-10"
+                                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 p-2 md:p-3 bg-black/50 hover:bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] rounded-full text-white transition-all backdrop-blur-sm z-10"
                                 >
                                     <ChevronRight size={20} className="md:w-6 md:h-6" />
                                 </button>
@@ -190,7 +190,7 @@ const WatchPartyTutorialModal: React.FC<WatchPartyTutorialModalProps> = ({ isOpe
                                     <button
                                         key={index}
                                         onClick={() => scrollTo(index)}
-                                        className={`h-1.5 md:h-2 rounded-full transition-all duration-300 ${index === currentSlide ? 'bg-gradient-to-r from-green-400 to-purple-500 w-6 md:w-8' : 'bg-white/20 w-1.5 md:w-2 hover:bg-white/40'
+                                        className={`h-1.5 md:h-2 rounded-full transition-all duration-300 ${index === currentSlide ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] w-6 md:w-8' : 'bg-white/20 w-1.5 md:w-2 hover:bg-white/40'
                                             }`}
                                     />
                                 ))}

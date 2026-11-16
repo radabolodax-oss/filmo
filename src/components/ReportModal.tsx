@@ -315,7 +315,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                                 onClick={() => setSelectedEpisode(episode.episode_number)}
                                 className={`p-2 rounded-lg text-center transition-colors ${
                                   selectedEpisode === episode.episode_number
-                                    ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                                    ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white'
                                     : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
                                 }`}
                               >
@@ -350,7 +350,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                         onClick={() => setSelectedOption(option.id)}
                         className={`flex items-start gap-3 p-3 rounded-lg text-left transition-colors ${
                           selectedOption === option.id
-                            ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                            ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white'
                             : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
                         }`}
                       >
@@ -426,7 +426,7 @@ const ReportModal: React.FC<ReportModalProps> = ({
                   className={`w-full py-3 rounded-lg font-medium transition-colors ${
                     isSubmitting
                       ? 'bg-gray-600 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-green-400 to-purple-500 hover:bg-red-700'
+                      : 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-red-700'
                   }`}
                 >
                   {isSubmitting ? (

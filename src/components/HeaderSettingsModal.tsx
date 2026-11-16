@@ -173,7 +173,12 @@ export const HeaderSettingsModal: React.FC<HeaderSettingsModalProps> = ({
                       href="https://www.instagram.com/cineviseur_dawger/"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-white bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:from-pink-600 hover:to-amber-600 shadow-md shadow-pink-500/20 hover:shadow-pink-500/40 transition-all duration-200 transform hover:-translate-y-0.5"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.open('https://www.instagram.com/cineviseur_dawger/', '_blank', 'noopener,noreferrer');
+                      }}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm text-white bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 hover:from-pink-600 hover:to-amber-600 shadow-md shadow-pink-500/20 hover:shadow-pink-500/40 transition-all duration-200 transform hover:-translate-y-0.5 cursor-pointer"
                     >
                       <Instagram className="w-4 h-4" />
                       <span>Ouvrir Instagram</span>

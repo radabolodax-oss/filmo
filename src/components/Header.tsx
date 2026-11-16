@@ -618,7 +618,7 @@ const Header: React.FC = () => {
                     >
                       <Bell size={20} />
                       {unreadCount > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 bg-gradient-to-r from-green-400 to-purple-500 text-white text-[10px] rounded-full h-4 min-w-4 flex items-center justify-center px-1 font-bold">
+                        <span className="absolute -top-0.5 -right-0.5 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white text-[10px] rounded-full h-4 min-w-4 flex items-center justify-center px-1 font-bold">
                           {unreadCount > 9 ? '9+' : unreadCount}
                         </span>
                       )}

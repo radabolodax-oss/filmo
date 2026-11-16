@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback } from 'react';
+﻿import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { PrefetchLink as Link } from '@/routing/PrefetchLink';
 import { useTranslation } from 'react-i18next';
 import { Star, Calendar } from 'lucide-react';
@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { encodeId } from '../utils/idEncoder';
+import { CardTrailerPreview } from './CardTrailerPreview';
 
 interface SearchResult {
     id: number;
@@ -76,6 +77,36 @@ interface GridCardProps {
 export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index, movieLabel, serieLabel }) => {
     const { t } = useTranslation();
     const [starred, setStarred] = useState(() => getWatchlistIds(item.media_type).has(item.id));
+    const [previewActive, setPreviewActive] = useState(false);
+    const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+            if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+        };
+    }, []);
+
+    const handleMouseEnter = useCallback(() => {
+        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = setTimeout(() => setPreviewActive(true), 1200);
+    }, []);
+
+    const handleMouseLeave = useCallback(() => {
+        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+        setPreviewActive(false);
+    }, []);
+
+    const handleTouchStart = useCallback(() => {
+        if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+        touchTimerRef.current = setTimeout(() => setPreviewActive(true), 700);
+    }, []);
+
+    const cancelTouchPreview = useCallback(() => {
+        if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+        setPreviewActive(false);
+    }, []);
 
     const title = item.title || item.name || '';
 
@@ -102,10 +133,16 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.5) }}
-            whileHover={{ scale: 1.05 }}
-            className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-colors"
+            animate={{ opacity: 1, y: 0, scale: previewActive ? 1.1 : 1 }}
+            transition={{ duration: 0.25, delay: previewActive ? 0 : Math.min(index * 0.03, 0.5) }}
+            whileHover={{ scale: previewActive ? 1.1 : 1.05 }}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            onTouchStart={handleTouchStart}
+            onTouchMove={cancelTouchPreview}
+            onTouchEnd={cancelTouchPreview}
+            onTouchCancel={cancelTouchPreview}
+            className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-colors ${previewActive ? 'z-30 shadow-2xl' : ''}`}
         >
             {/* Badge */}
             <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wider text-white/80">
@@ -144,6 +181,14 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
                 alt={item.title || item.name}
                 className="w-full aspect-[2/3] object-cover"
                 onError={(e) => { (e.target as HTMLImageElement).onerror = null; (e.target as HTMLImageElement).src = POSTER_FALLBACK; }}
+            />
+
+            {/* Trailer + Synopsis preview on hover (PC 1.2s) or long press (Mobile) */}
+            <CardTrailerPreview
+                mediaId={item.id}
+                mediaType={item.media_type}
+                overview={item.overview}
+                active={previewActive}
             />
 
             {/* Hover overlay */}

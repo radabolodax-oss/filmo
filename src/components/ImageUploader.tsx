@@ -123,7 +123,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, currentIma
                 initial={{ opacity: 0 }}
                 animate={{ opacity: isHovered ? 1 : 0 }}
               >
-                <label className="p-2 bg-gradient-to-r from-green-400 to-purple-500 rounded-full text-white hover:bg-red-700 transition-colors cursor-pointer">
+                <label className="p-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] rounded-full text-white hover:bg-red-700 transition-colors cursor-pointer">
                   <Camera className="w-5 h-5" />
                   <input
                     type="file"

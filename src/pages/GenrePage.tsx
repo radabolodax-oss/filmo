@@ -95,7 +95,7 @@ const PaginationBar = ({ currentPage, maxPages, onSelect }: { currentPage: numbe
   return (
     <div className="flex justify-center items-center gap-1.5 flex-wrap my-8">
       <motion.button whileTap={{ scale: 0.92 }} onClick={() => onSelect(1)} disabled={currentPage <= 1}
-        className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${currentPage === 1 ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'} disabled:opacity-30`}>
+        className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${currentPage === 1 ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'} disabled:opacity-30`}>
         1
       </motion.button>
       {currentPage > 4 && <span className="text-white/20 px-1">...</span>}
@@ -103,7 +103,7 @@ const PaginationBar = ({ currentPage, maxPages, onSelect }: { currentPage: numbe
         const p = Math.max(2, currentPage - 2) + i;
         return p > 1 && p < maxPages ? (
           <motion.button key={p} whileTap={{ scale: 0.92 }} onClick={() => onSelect(p)}
-            className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${p === currentPage ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'}`}>
+            className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${p === currentPage ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'}`}>
             {p}
           </motion.button>
         ) : null;
@@ -111,7 +111,7 @@ const PaginationBar = ({ currentPage, maxPages, onSelect }: { currentPage: numbe
       {currentPage < maxPages - 3 && <span className="text-white/20 px-1">...</span>}
       {maxPages > 1 && (
         <motion.button whileTap={{ scale: 0.92 }} onClick={() => onSelect(maxPages)} disabled={currentPage >= maxPages}
-          className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${currentPage === maxPages ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'} disabled:opacity-30`}>
+          className={`min-w-[40px] h-10 rounded-full text-sm font-medium transition-all ${currentPage === maxPages ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'} disabled:opacity-30`}>
           {maxPages}
         </motion.button>
       )}
@@ -307,7 +307,7 @@ const GenrePage: React.FC = () => {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => window.location.reload()}
-              className="mt-4 px-6 py-2 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-gradient-to-r hover:from-green-400 to-purple-500 rounded-full text-white font-medium transition-colors"
+              className="mt-4 px-6 py-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-gradient-to-r hover:from-green-400 to-purple-500 rounded-full text-white font-medium transition-colors"
             >
               {t('common.retry')}
             </motion.button>
@@ -358,7 +358,7 @@ const GenrePage: React.FC = () => {
 
             <motion.button
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl transition-all ${isFilterOpen
-                ? 'bg-gradient-to-r from-green-400 to-purple-500 border border-white/20 hover:bg-gradient-to-r hover:from-green-400 to-purple-500'
+                ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border border-white/20 hover:bg-gradient-to-r hover:from-green-400 to-purple-500'
                 : 'bg-white/5 backdrop-blur-md border border-white/10 hover:border-white/20 hover:bg-red-500/10'
                 }`}
               onClick={() => setIsFilterOpen(!isFilterOpen)}
@@ -410,7 +410,7 @@ const GenrePage: React.FC = () => {
                       whileTap={{ scale: 0.95 }}
                       onClick={() => setViewType('grid')}
                       className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewType === 'grid'
-                        ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                        ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white'
                         : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
                         }`}
                     >
@@ -422,7 +422,7 @@ const GenrePage: React.FC = () => {
                       whileTap={{ scale: 0.95 }}
                       onClick={() => setViewType('list')}
                       className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${viewType === 'list'
-                        ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white'
+                        ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white'
                         : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
                         }`}
                     >
@@ -451,7 +451,7 @@ const GenrePage: React.FC = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="mt-4 px-6 py-2 bg-gradient-to-r from-green-400 to-purple-500 hover:bg-gradient-to-r hover:from-green-400 to-purple-500 rounded-full text-white font-medium transition-colors"
+                className="mt-4 px-6 py-2 bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] hover:bg-gradient-to-r hover:from-green-400 to-purple-500 rounded-full text-white font-medium transition-colors"
                 onClick={() => navigate(-1)}
               >
                 {t('common.back')}

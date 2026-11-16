@@ -48,7 +48,7 @@ const CustomCheckbox: React.FC<CustomCheckboxProps> = ({
             w-5 h-5 rounded border flex items-center justify-center
             transition-colors duration-200
             ${checked
-                            ? 'bg-gradient-to-r from-green-400 to-purple-500 border-white/20'
+                            ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] border-white/20'
                             : 'bg-gray-800 border-gray-500 hover:border-gray-400'
                         }
           `}

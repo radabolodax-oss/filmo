@@ -82,7 +82,7 @@ const CSA_INFO: Record<string, { label: string; color: string; desc: string }> =
   'TP': { label: 'Tout public', color: 'bg-green-600', desc: 'Tous âges' },
   '10': { label: '-10 ans', color: 'bg-yellow-500', desc: 'Déconseillé aux moins de 10 ans' },
   '12': { label: '-12 ans', color: 'bg-orange-500', desc: 'Déconseillé aux moins de 12 ans' },
-  '16': { label: '-16 ans', color: 'bg-gradient-to-r from-green-400 to-purple-500', desc: 'Déconseillé aux moins de 16 ans' },
+  '16': { label: '-16 ans', color: 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]', desc: 'Déconseillé aux moins de 16 ans' },
   '18': { label: '-18 ans', color: 'bg-red-700', desc: 'Interdit aux moins de 18 ans' },
 };
 

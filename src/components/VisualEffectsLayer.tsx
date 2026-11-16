@@ -500,38 +500,85 @@ export const VisualEffectsLayer: React.FC = () => {
         />
       )}
 
-      {/* Halloween Theme Overlay (Movix style: ambient purple/orange aura + subtle corner cobwebs) */}
+      {/* Halloween Theme Overlay (fidèle à Movix : brouillard, citrouilles, toiles + araignée, fantôme, sorcière, bonbons) — jamais sur le lecteur vidéo */}
       {batEnabled && !isVideoPlayingOrFullscreen() && (
         <div
           aria-hidden="true"
           className="fixed inset-0 pointer-events-none z-[1] overflow-hidden select-none"
         >
+          {/* Ciel de nuit & brouillard bas d'écran */}
           <div
-            className="absolute inset-x-0 top-0 h-64 opacity-40"
+            className="absolute inset-x-0 top-0 h-56 opacity-45"
             style={{
-              background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(249,115,22,0.22) 0%, rgba(147,51,234,0.16) 45%, transparent 80%)',
+              background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(249,115,22,0.18) 0%, rgba(88,28,135,0.14) 50%, transparent 85%)',
             }}
           />
-          <svg
-            viewBox="0 0 120 120"
-            className="absolute top-0 left-0 w-24 h-24 sm:w-32 sm:h-32 text-orange-400/20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.2"
-          >
+          <div
+            className="absolute inset-x-0 bottom-0 h-44"
+            style={{
+              background: 'linear-gradient(to top, rgba(28,30,36,0.82) 0%, rgba(38,40,48,0.42) 45%, transparent 100%)',
+            }}
+          />
+
+          {/* Toiles d'araignée + petite araignée suspendue (haut gauche & haut droite) */}
+          <svg viewBox="0 0 120 120" className="absolute top-0 left-0 w-28 h-28 sm:w-36 sm:h-36 text-amber-200/30" fill="none" stroke="currentColor" strokeWidth="1.2">
             <path d="M0,0 L110,15 M0,0 L95,55 M0,0 L65,95 M0,0 L20,115" />
             <path d="M25,4 Q20,18 5,26 M50,7 Q40,32 10,48 M78,11 Q62,48 14,72 M102,14 Q82,66 18,98" />
           </svg>
-          <svg
-            viewBox="0 0 120 120"
-            className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 text-purple-400/20 -scale-x-100"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.2"
-          >
-            <path d="M0,0 L110,15 M0,0 L95,55 M0,0 L65,95 M0,0 L20,115" />
-            <path d="M25,4 Q20,18 5,26 M50,7 Q40,32 10,48 M78,11 Q62,48 14,72 M102,14 Q82,66 18,98" />
-          </svg>
+          <div className="absolute top-0 right-0 w-28 h-36 sm:w-36 sm:h-44">
+            <svg viewBox="0 0 120 120" className="w-28 h-28 sm:w-36 sm:h-36 text-amber-200/30 -scale-x-100" fill="none" stroke="currentColor" strokeWidth="1.2">
+              <path d="M0,0 L110,15 M0,0 L95,55 M0,0 L65,95 M0,0 L20,115" />
+              <path d="M25,4 Q20,18 5,26 M50,7 Q40,32 10,48 M78,11 Q62,48 14,72 M102,14 Q82,66 18,98" />
+            </svg>
+            <div className="absolute right-6 top-16 flex flex-col items-center animate-bounce" style={{ animationDuration: '3.2s' }}>
+              <div className="w-px h-10 bg-white/30" />
+              <span className="text-sm drop-shadow-[0_0_6px_rgba(168,85,247,0.8)]">🕷️</span>
+            </div>
+          </div>
+
+          {/* Sorcière sur son balai traversant le haut de l'écran */}
+          <div className="absolute top-20 left-0 animate-[dawgerWitchFly_28s_linear_infinite] opacity-85">
+            <span className="text-3xl sm:text-4xl drop-shadow-[0_0_12px_rgba(249,115,22,0.5)]">🧙‍♀️</span>
+          </div>
+
+          {/* Fantôme flottant translucide en bas */}
+          <div className="absolute bottom-8 left-1/3 animate-[dawgerGhostFloat_7s_ease-in-out_infinite] opacity-65">
+            <span className="text-4xl sm:text-5xl drop-shadow-[0_0_16px_rgba(255,255,255,0.6)]">👻</span>
+          </div>
+
+          {/* Chute de bonbons d'Halloween (Candy corn, bonbons, sucettes) */}
+          <div className="absolute inset-0 overflow-hidden">
+            {[
+              { left: '8%', delay: '0s', dur: '11s', icon: '🍬' },
+              { left: '22%', delay: '2.5s', dur: '13s', icon: '🍭' },
+              { left: '38%', delay: '1.2s', dur: '10s', icon: '🍬' },
+              { left: '54%', delay: '4s', dur: '12s', icon: '🎃' },
+              { left: '70%', delay: '0.8s', dur: '14s', icon: '🍭' },
+              { left: '86%', delay: '3.2s', dur: '11.5s', icon: '🍬' },
+            ].map((candy, i) => (
+              <span
+                key={i}
+                className="absolute -top-8 text-base sm:text-lg opacity-75 animate-[dawgerCandyFall_12s_linear_infinite]"
+                style={{ left: candy.left, animationDelay: candy.delay, animationDuration: candy.dur }}
+              >
+                {candy.icon}
+              </span>
+            ))}
+          </div>
+
+          {/* Citrouilles lumineuses aux coins inférieurs et le long du bas */}
+          <div className="absolute bottom-2 left-3 sm:left-6 flex items-end gap-2">
+            <span className="text-3xl sm:text-5xl drop-shadow-[0_0_18px_rgba(249,115,22,0.85)]">🎃</span>
+            <span className="text-xl sm:text-2xl opacity-85 drop-shadow-[0_0_10px_rgba(249,115,22,0.7)]">🎃</span>
+          </div>
+          <div className="hidden sm:flex absolute bottom-1.5 inset-x-36 justify-around opacity-70">
+            <span className="text-xl drop-shadow-[0_0_10px_rgba(249,115,22,0.6)]">🎃</span>
+            <span className="text-lg drop-shadow-[0_0_10px_rgba(249,115,22,0.6)]">🎃</span>
+            <span className="text-xl drop-shadow-[0_0_10px_rgba(249,115,22,0.6)]">🎃</span>
+          </div>
+          <div className="absolute bottom-2 right-3 sm:right-6">
+            <span className="text-3xl sm:text-5xl drop-shadow-[0_0_18px_rgba(249,115,22,0.85)]">🎃</span>
+          </div>
         </div>
       )}
 

@@ -1365,7 +1365,7 @@ const CineGraphPage: React.FC = () => {
                       </div>
                       <button
                         onClick={() => setGraphOptions(o => ({ ...o, actors: !o.actors }))}
-                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.actors ? 'bg-gradient-to-r from-green-400 to-purple-500' : 'bg-white/20'}`}
+                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.actors ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]' : 'bg-white/20'}`}
                       >
                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${graphOptions.actors ? 'translate-x-5' : ''}`} />
                       </button>
@@ -1404,7 +1404,7 @@ const CineGraphPage: React.FC = () => {
                       </div>
                       <button
                         onClick={() => setGraphOptions(o => ({ ...o, directors: !o.directors }))}
-                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.directors ? 'bg-gradient-to-r from-green-400 to-purple-500' : 'bg-white/20'}`}
+                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.directors ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]' : 'bg-white/20'}`}
                       >
                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${graphOptions.directors ? 'translate-x-5' : ''}`} />
                       </button>
@@ -1421,7 +1421,7 @@ const CineGraphPage: React.FC = () => {
                       </div>
                       <button
                         onClick={() => setGraphOptions(o => ({ ...o, genres: !o.genres }))}
-                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.genres ? 'bg-gradient-to-r from-green-400 to-purple-500' : 'bg-white/20'}`}
+                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.genres ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]' : 'bg-white/20'}`}
                       >
                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${graphOptions.genres ? 'translate-x-5' : ''}`} />
                       </button>
@@ -1438,7 +1438,7 @@ const CineGraphPage: React.FC = () => {
                       </div>
                       <button
                         onClick={() => setGraphOptions(o => ({ ...o, similar: !o.similar }))}
-                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.similar ? 'bg-gradient-to-r from-green-400 to-purple-500' : 'bg-white/20'}`}
+                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.similar ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]' : 'bg-white/20'}`}
                       >
                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${graphOptions.similar ? 'translate-x-5' : ''}`} />
                       </button>
@@ -1477,7 +1477,7 @@ const CineGraphPage: React.FC = () => {
                       </div>
                       <button
                         onClick={() => setGraphOptions(o => ({ ...o, recommendations: !o.recommendations }))}
-                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.recommendations ? 'bg-gradient-to-r from-green-400 to-purple-500' : 'bg-white/20'}`}
+                        className={`w-11 h-6 rounded-full transition-colors relative ${graphOptions.recommendations ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)]' : 'bg-white/20'}`}
                       >
                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${graphOptions.recommendations ? 'translate-x-5' : ''}`} />
                       </button>
@@ -1521,7 +1521,7 @@ const CineGraphPage: React.FC = () => {
                             onClick={() => setGraphOptions(o => ({ ...o, depth: d }))}
                             className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${
                               graphOptions.depth === d
-                                ? 'bg-gradient-to-r from-green-400 to-purple-500 text-white shadow-lg shadow-red-600/30'
+                                ? 'bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white shadow-lg shadow-red-600/30'
                                 : 'bg-white/10 text-white/50 hover:bg-white/15 hover:text-white/80'
                             }`}
                           >

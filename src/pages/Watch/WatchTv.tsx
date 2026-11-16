@@ -9448,7 +9448,7 @@ const WatchTv: React.FC = () => {
 
           {displayCert && (
 
-            <span className="px-2 py-0.5 rounded text-xs font-bold bg-gradient-to-r from-green-400 to-purple-500 text-white">
+            <span className="px-2 py-0.5 rounded text-xs font-bold bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] text-white">
 
               {getClassificationLabel(displayCert, t)}
 
@@ -9892,7 +9892,13 @@ const WatchTv: React.FC = () => {
 
       </div>
 
-
+      {tvMeta?.overview && (
+        <div className="mb-4 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10">
+          <p className="text-white/75 text-xs sm:text-sm leading-relaxed line-clamp-3 hover:line-clamp-none transition-all">
+            {tvMeta.overview}
+          </p>
+        </div>
+      )}
 
       <PlayerStage backdrop={backdropPath || tvMeta?.backdrop_path} className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
 

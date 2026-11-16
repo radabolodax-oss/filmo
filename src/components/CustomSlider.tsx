@@ -129,7 +129,7 @@ const CustomSlider: React.FC<CustomSliderProps> = ({
             <div className="absolute left-0 right-0 h-2 bg-gray-700 rounded-full overflow-hidden">
                 {/* Progress Bar - Disable transition during drag for 1:1 feel */}
                 <div
-                    className={`h-full bg-gradient-to-r from-green-400 to-purple-500 ${isDragging ? '' : 'transition-all duration-150 ease-out'}`}
+                    className={`h-full bg-white/15 hover:bg-white/20 backdrop-blur-xl border border-white/30 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_14px_rgba(0,0,0,0.3)] ${isDragging ? '' : 'transition-all duration-150 ease-out'}`}
                     style={{ width: `${percentage}%` }}
                 />
             </div>
