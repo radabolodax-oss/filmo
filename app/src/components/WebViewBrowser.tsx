@@ -202,6 +202,7 @@ const WebViewBrowser = forwardRef<WebViewBrowserRef, WebViewBrowserProps>(
           'github.com',
           't.me',
           'telegram.me',
+          'instagram.com',
           'discord.gg',
           'discord.com',
           'ko-fi.com',

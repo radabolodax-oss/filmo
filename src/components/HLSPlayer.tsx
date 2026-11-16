@@ -4763,7 +4763,10 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
 
       const hostElement = playerElement.closest<HTMLElement>('[data-dawger-fullscreen-host="true"]') || playerElement;
       const ok = await tryRequestFullscreen(hostElement);
-      if (!ok && videoElement && typeof videoElement.webkitEnterFullscreen === 'function') {
+      if (ok) {
+        // Native fullscreen owns the lifecycle; Escape will fire fullscreenchange cleanly
+        manualFullscreenRef.current = false;
+      } else if (videoElement && typeof videoElement.webkitEnterFullscreen === 'function') {
         try {
           videoElement.webkitEnterFullscreen();
         } catch {}
@@ -4780,9 +4783,9 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         (window.screen?.orientation as any)?.unlock?.();
       } catch {}
 
-      if (window.history.state?.dawgerHlsFs) {
+      if (window.history.state?.dawgerHlsFs || window.history.state?.dawgerFs) {
         try {
-          window.history.back();
+          window.history.replaceState(null, '');
         } catch {}
       }
 
@@ -4831,12 +4834,18 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
         (video && video.webkitDisplayingFullscreen)
       );
       if (active) {
+        manualFullscreenRef.current = false;
         (window as any).__DAWGER_CSS_FULLSCREEN__ = true;
         setIsFullscreen(true);
       } else if (!manualFullscreenRef.current) {
         (window as any).__DAWGER_CSS_FULLSCREEN__ = false;
         setIsFullscreen(false);
         (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+        if (window.history.state?.dawgerHlsFs || window.history.state?.dawgerFs) {
+          try {
+            window.history.replaceState(null, '');
+          } catch {}
+        }
         try {
           (window.screen?.orientation as any)?.unlock?.();
         } catch {}
@@ -4875,14 +4884,18 @@ const HLSPlayer = forwardRef<HLSPlayerRef, HLSPlayerProps>(({
     };
   }, [isFullscreen, onlyQualityMenu]);
 
-  // Escape key listener to exit fullscreen mode (covers native fullscreen, CSS overlay & Electron)
+  // Escape key listener to exit fullscreen mode (CSS-only fallback; native fullscreen is handled by browser -> fullscreenchange)
   useEffect(() => {
     if (onlyQualityMenu || !isFullscreen) return;
     const handleEscapeKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        void toggleFullscreen();
+        const doc = document as Document & { webkitFullscreenElement?: Element | null };
+        const inNativeFs = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement);
+        if (!inNativeFs) {
+          e.preventDefault();
+          e.stopPropagation();
+          void toggleFullscreen();
+        }
       }
     };
     window.addEventListener('keydown', handleEscapeKey, true);

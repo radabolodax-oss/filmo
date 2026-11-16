@@ -191,7 +191,10 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
           const el = hostEl as any;
           const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
           if (typeof req === 'function') {
-            await Promise.resolve(req.call(el)).catch(() => {});
+            try {
+              await Promise.resolve(req.call(el));
+              manualFullscreenRef.current = false;
+            } catch {}
           }
         }
         try {
@@ -210,9 +213,9 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
         try {
           (window.screen?.orientation as any)?.unlock?.();
         } catch {}
-        if (window.history.state?.dawgerFs) {
+        if (window.history.state?.dawgerFs || window.history.state?.dawgerHlsFs) {
           try {
-            window.history.back();
+            window.history.replaceState(null, '');
           } catch {}
         }
       }
@@ -231,12 +234,18 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
       const doc = document as any;
       const active = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement);
       if (active) {
+        manualFullscreenRef.current = false;
         (window as any).__DAWGER_CSS_FULLSCREEN__ = true;
         setIsFullscreen(true);
       } else if (!manualFullscreenRef.current) {
         (window as any).__DAWGER_CSS_FULLSCREEN__ = false;
         setIsFullscreen(false);
         (window as any).__DAWGER_EXIT_FULLSCREEN__ = null;
+        if (window.history.state?.dawgerFs || window.history.state?.dawgerHlsFs) {
+          try {
+            window.history.replaceState(null, '');
+          } catch {}
+        }
         try {
           (window.screen?.orientation as any)?.unlock?.();
         } catch {}
@@ -279,14 +288,18 @@ const EmbedPlayerChrome: React.FC<EmbedPlayerChromeProps> = ({
     };
   }, [isFullscreen]);
 
-  // Escape key to exit fullscreen (for CSS-only fallback or Electron)
+  // Escape key to exit fullscreen (CSS-only fallback; native fullscreen is handled by browser -> fullscreenchange)
   useEffect(() => {
     if (!isFullscreen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        void toggleFullscreen();
+        const doc = document as any;
+        const inNativeFs = Boolean(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement);
+        if (!inNativeFs) {
+          e.preventDefault();
+          e.stopPropagation();
+          void toggleFullscreen();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown, true);
