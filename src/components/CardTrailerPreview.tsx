@@ -4,92 +4,149 @@ import { TMDB_API_KEY, TMDB_API_URL } from '../config/config';
 import { getTmdbLanguage } from '../i18n';
 
 interface TrailerInfo {
-  youtubeKey: string | null;
+  youtubeKeys: string[];
   overview: string | null;
 }
 
 const trailerCache = new Map<string, TrailerInfo>();
 
-async function fetchTrailerAndOverview(
-  mediaType: 'movie' | 'tv',
-  mediaId: number,
-  existingOverview?: string,
-): Promise<TrailerInfo> {
-  const cacheKey = `${mediaType}:${mediaId}`;
-  const cached = trailerCache.get(cacheKey);
-  if (cached) {
-    return {
-      youtubeKey: cached.youtubeKey,
-      overview: existingOverview || cached.overview,
-    };
-  }
+function normalizeTitle(str?: string | null): string {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
 
-  let youtubeKey: string | null = null;
-  let overview: string | null = existingOverview || null;
-  let hadNetworkError = false;
+function titlesMatch(expected: string | undefined, data: any): boolean {
+  if (!expected) return true;
+  const exp = normalizeTitle(expected);
+  if (!exp) return true;
+  const candidates = [
+    data?.title,
+    data?.name,
+    data?.original_title,
+    data?.original_name,
+  ]
+    .map(normalizeTitle)
+    .filter(Boolean);
+  if (candidates.length === 0) return true;
+  return candidates.some((c) => c === exp || c.includes(exp) || exp.includes(c));
+}
 
-  const pickBestVideo = (videos: any[]) => {
-    const yt = videos.filter((v) => v?.site === 'YouTube' && v?.key);
-    return (
-      yt.find((v) => v.type === 'Trailer' && v.official) ||
-      yt.find((v) => v.type === 'Trailer') ||
-      yt.find((v) => v.type === 'Teaser' && v.official) ||
-      yt.find((v) => v.type === 'Teaser') ||
-      yt.find((v) => v.type !== 'Behind the Scenes' && v.type !== 'Bloopers' && v.type !== 'Featurette') ||
-      null
-    );
-  };
-
-  try {
-    const lang = getTmdbLanguage();
-    const res = await axios.get(`${TMDB_API_URL}/${mediaType}/${mediaId}/videos`, {
-      params: { api_key: TMDB_API_KEY, language: lang },
-      timeout: 5000,
-    });
-    let results: any[] = res.data?.results || [];
-
-    if (!results.some((v) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))) {
-      const enRes = await axios.get(`${TMDB_API_URL}/${mediaType}/${mediaId}/videos`, {
-        params: { api_key: TMDB_API_KEY, language: 'en-US' },
-        timeout: 5000,
-      });
-      const enResults: any[] = enRes.data?.results || [];
-      results = [...results, ...enResults];
+function rankVideosTeaserFirst(videos: any[]): string[] {
+  const yt = videos.filter((v) => v?.site === 'YouTube' && typeof v?.key === 'string' && v.key.trim() !== '');
+  const ordered = [
+    ...yt.filter((v) => v.type === 'Teaser' && v.official),
+    ...yt.filter((v) => v.type === 'Teaser' && !v.official),
+    ...yt.filter((v) => v.type === 'Trailer' && v.official),
+    ...yt.filter((v) => v.type === 'Trailer' && !v.official),
+    ...yt.filter((v) => v.type === 'Clip' && v.official),
+    ...yt.filter(
+      (v) =>
+        v.type !== 'Teaser' &&
+        v.type !== 'Trailer' &&
+        v.type !== 'Behind the Scenes' &&
+        v.type !== 'Bloopers' &&
+        v.type !== 'Featurette',
+    ),
+  ];
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  for (const v of ordered) {
+    if (!seen.has(v.key)) {
+      seen.add(v.key);
+      keys.push(v.key);
     }
+  }
+  return keys;
+}
 
-    if (!results.some((v) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))) {
-      const allRes = await axios.get(`${TMDB_API_URL}/${mediaType}/${mediaId}/videos`, {
+async function fetchVideosForType(
+  type: 'movie' | 'tv',
+  mediaId: number,
+  lang: string,
+): Promise<{ detail: any; videos: any[] }> {
+  const detailRes = await axios.get(`${TMDB_API_URL}/${type}/${mediaId}`, {
+    params: {
+      api_key: TMDB_API_KEY,
+      language: lang,
+      append_to_response: 'videos',
+      include_video_language: `${lang.split('-')[0]},en,null`,
+    },
+    timeout: 5000,
+  });
+  const detail = detailRes.data;
+  let videos: any[] = detail?.videos?.results || [];
+
+  if (!videos.some((v) => v?.site === 'YouTube' && v?.type === 'Teaser')) {
+    try {
+      const allRes = await axios.get(`${TMDB_API_URL}/${type}/${mediaId}/videos`, {
         params: { api_key: TMDB_API_KEY },
         timeout: 5000,
       });
-      const allResults: any[] = allRes.data?.results || [];
-      results = [...results, ...allResults];
-    }
-
-    const pick = pickBestVideo(results);
-    if (pick?.key) {
-      youtubeKey = pick.key;
-    }
-  } catch {
-    hadNetworkError = true;
-  }
-
-  if (!overview) {
-    try {
-      const detailRes = await axios.get(`${TMDB_API_URL}/${mediaType}/${mediaId}`, {
-        params: { api_key: TMDB_API_KEY, language: getTmdbLanguage() },
-        timeout: 5000,
-      });
-      if (detailRes.data?.overview) {
-        overview = detailRes.data.overview;
-      }
+      const allVideos: any[] = allRes.data?.results || [];
+      videos = [...videos, ...allVideos];
     } catch {
       // ignore
     }
   }
 
-  const info: TrailerInfo = { youtubeKey, overview };
-  if (!hadNetworkError || youtubeKey) {
+  return { detail, videos };
+}
+
+async function fetchTrailerAndOverview(
+  mediaType: 'movie' | 'tv',
+  mediaId: number,
+  existingOverview?: string,
+  expectedTitle?: string,
+): Promise<TrailerInfo> {
+  const cacheKey = `${mediaType}:${mediaId}:${normalizeTitle(expectedTitle)}`;
+  const cached = trailerCache.get(cacheKey);
+  if (cached) {
+    return {
+      youtubeKeys: cached.youtubeKeys,
+      overview: existingOverview || cached.overview,
+    };
+  }
+
+  let youtubeKeys: string[] = [];
+  let overview: string | null = existingOverview || null;
+  let hadNetworkError = false;
+
+  try {
+    const lang = getTmdbLanguage();
+    let resolvedType: 'movie' | 'tv' = mediaType;
+    let { detail, videos } = await fetchVideosForType(resolvedType, mediaId, lang);
+
+    // If TMDB returned a different movie/series than the card's title, try the other mediaType
+    if (expectedTitle && !titlesMatch(expectedTitle, detail)) {
+      const altType: 'movie' | 'tv' = resolvedType === 'movie' ? 'tv' : 'movie';
+      try {
+        const alt = await fetchVideosForType(altType, mediaId, lang);
+        if (titlesMatch(expectedTitle, alt.detail)) {
+          detail = alt.detail;
+          videos = alt.videos;
+          resolvedType = altType;
+        } else {
+          // Neither matched the expected title -> do not play a wrong movie's video
+          videos = [];
+        }
+      } catch {
+        videos = [];
+      }
+    }
+
+    youtubeKeys = rankVideosTeaserFirst(videos);
+    if (!overview && detail?.overview) {
+      overview = detail.overview;
+    }
+  } catch {
+    hadNetworkError = true;
+  }
+
+  const info: TrailerInfo = { youtubeKeys, overview };
+  if (!hadNetworkError || youtubeKeys.length > 0) {
     trailerCache.set(cacheKey, info);
   }
   return info;
@@ -98,6 +155,7 @@ async function fetchTrailerAndOverview(
 interface CardTrailerPreviewProps {
   mediaId: number;
   mediaType: 'movie' | 'tv';
+  title?: string;
   overview?: string;
   posterUrl?: string;
   active: boolean;
@@ -107,27 +165,33 @@ interface CardTrailerPreviewProps {
 export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   mediaId,
   mediaType,
+  title,
   overview: initialOverview,
   posterUrl,
   active,
   onOverviewLoaded,
 }) => {
   const [info, setInfo] = useState<TrailerInfo | null>(null);
+  const [keyIndex, setKeyIndex] = useState(0);
   const [isVideoVisible, setIsVideoVisible] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setInfo(null);
+    setKeyIndex(0);
     setIsVideoVisible(false);
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
     if (!active) {
       return;
     }
     let cancelled = false;
-    fetchTrailerAndOverview(mediaType, mediaId, initialOverview).then((res) => {
+    fetchTrailerAndOverview(mediaType, mediaId, initialOverview, title).then((res) => {
       if (!cancelled) {
         setInfo(res);
+        setKeyIndex(0);
         if (res.overview && onOverviewLoaded) {
           onOverviewLoaded(res.overview);
         }
@@ -136,8 +200,16 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
     return () => {
       cancelled = true;
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
     };
-  }, [active, mediaType, mediaId, initialOverview, onOverviewLoaded]);
+  }, [active, mediaType, mediaId, initialOverview, title, onOverviewLoaded]);
+
+  const tryNextKey = () => {
+    setIsVideoVisible(false);
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+    setKeyIndex((prev) => prev + 1);
+  };
 
   const sendYtCommand = (func: string, args: any[] = []) => {
     try {
@@ -156,16 +228,26 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
       if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data?.event === 'onError') {
+          tryNextKey();
+          return;
+        }
         const playerState =
           data?.event === 'onStateChange'
             ? data?.info
             : data?.event === 'infoDelivery' && typeof data?.info?.playerState === 'number'
               ? data.info.playerState
               : null;
-        // PlayerState 1 = playing -> wait 4500ms without sending extra commands so YouTube HUD fades out completely
+        // PlayerState 1 = playing -> clear load watchdog and wait 4500ms so YouTube HUD fades out completely, then reveal video + sound together
         if (playerState === 1) {
-          if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-          revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 4500);
+          if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+          if (!revealTimerRef.current) {
+            revealTimerRef.current = setTimeout(() => {
+              sendYtCommand('unMute');
+              sendYtCommand('setVolume', [100]);
+              setIsVideoVisible(true);
+            }, 4500);
+          }
         }
       } catch {
         // ignore
@@ -173,7 +255,7 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [active]);
+  }, [active, keyIndex]);
 
   const handleIframeLoad = () => {
     try {
@@ -184,16 +266,19 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
     } catch {
       // ignore
     }
-    sendYtCommand('unMute');
-    sendYtCommand('setVolume', [100]);
-    // Fallback reveal after YouTube's initial title/pause button disappears (~5.2s)
-    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 5200);
+    // Keep muted while hidden behind the poster; sound will unmute when video becomes visible
+    sendYtCommand('mute');
+    sendYtCommand('setVolume', [0]);
+    // If this YouTube key fails to start playing within 4s (e.g. blocked embed), try next teaser key
+    if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+    loadTimeoutRef.current = setTimeout(() => {
+      tryNextKey();
+    }, 4000);
   };
 
   if (!active) return null;
 
-  const ytKey = info?.youtubeKey;
+  const ytKey = info?.youtubeKeys?.[keyIndex] || null;
   if (!ytKey) return null;
 
   return (
@@ -203,7 +288,7 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
         <iframe
           ref={iframeRef}
           onLoad={handleIframeLoad}
-          src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
+          src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
           title="Trailer preview"
           allow="autoplay; encrypted-media"
           className="w-full h-full border-0 scale-[2.95] pointer-events-none"

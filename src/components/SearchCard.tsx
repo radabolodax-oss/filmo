@@ -187,7 +187,8 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
             {/* Trailer + Synopsis preview on hover (PC 1.2s) or long press (Mobile) */}
             <CardTrailerPreview
                 mediaId={item.id}
-                mediaType={item.media_type}
+                mediaType={item.first_air_date && !item.release_date ? 'tv' : item.media_type}
+                title={item.title || item.name}
                 overview={item.overview}
                 posterUrl={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined}
                 active={previewActive}

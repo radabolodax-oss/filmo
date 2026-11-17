@@ -348,7 +348,8 @@ const CarouselCard = React.memo<{
           {canPreview && (
             <CardTrailerPreview
               mediaId={item.id}
-              mediaType={item.media_type as 'movie' | 'tv'}
+              mediaType={(item as any).first_air_date && !(item as any).release_date ? 'tv' : (item.media_type as 'movie' | 'tv')}
+              title={title}
               overview={(item as any).overview}
               posterUrl={posterSrc}
               active={previewActive}
