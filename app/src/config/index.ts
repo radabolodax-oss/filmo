@@ -31,6 +31,6 @@ export const FALLBACK_CONFIG = {
     STANDALONE_SITE_URL,
   ],
   CACHE_KEY: 'dawger_address:lastConfig_v3',
-  GITHUB_URL: 'https://dawgerwebsite.vercel.app',
+  GITHUB_URL: 'https://filmo-one.vercel.app',
   TELEGRAM_URL: '',
 };

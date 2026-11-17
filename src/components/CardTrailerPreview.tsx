@@ -132,7 +132,7 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
           sendYtCommand('unMute');
           sendYtCommand('setVolume', [100]);
           if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-          revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 650);
+          revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 800);
         }
       } catch {
         // ignore
@@ -158,9 +158,9 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
       sendYtCommand('unMute');
       sendYtCommand('setVolume', [100]);
     }, 350);
-    // Fallback reveal after YouTube's initial title/pause button disappears (~1.4s)
+    // Fallback reveal after YouTube's initial title/pause button disappears (~1.6s)
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 1400);
+    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 1600);
   };
 
   if (!active) return null;
@@ -169,26 +169,28 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const synopsisText = initialOverview || info?.overview || '';
 
   return (
-    <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
-      {ytKey && (
-        <div
-          className={`absolute inset-0 bg-black transition-opacity duration-500 ${
-            isVideoVisible ? 'opacity-100' : 'opacity-0'
-          }`}
-        >
-          <iframe
-            ref={iframeRef}
-            onLoad={handleIframeLoad}
-            src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
-            title="Trailer preview"
-            allow="autoplay; encrypted-media"
-            className="w-full h-full border-0 scale-[1.65] pointer-events-none"
-          />
-        </div>
-      )}
+    <div className="absolute inset-0 z-20 flex flex-col bg-zinc-950 overflow-hidden pointer-events-none">
+      <div className="relative w-full h-[46%] shrink-0 bg-black overflow-hidden">
+        {ytKey && (
+          <div
+            className={`absolute inset-0 bg-black transition-opacity duration-500 ${
+              isVideoVisible ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            <iframe
+              ref={iframeRef}
+              onLoad={handleIframeLoad}
+              src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
+              title="Trailer preview"
+              allow="autoplay; encrypted-media"
+              className="w-full h-full border-0 scale-[1.45] pointer-events-none"
+            />
+          </div>
+        )}
+      </div>
       {synopsisText && (
-        <div className="absolute inset-x-0 bottom-0 max-h-[75%] overflow-hidden p-2.5 pt-10 bg-gradient-to-t from-black via-black/90 to-transparent">
-          <p className="text-[9.5px] sm:text-[10.5px] leading-tight text-white/95 drop-shadow">
+        <div className="flex-1 px-2.5 py-2 bg-zinc-950/95 border-t border-white/10 overflow-hidden">
+          <p className="text-[8.5px] sm:text-[9.5px] leading-snug text-white/95">
             {synopsisText}
           </p>
         </div>

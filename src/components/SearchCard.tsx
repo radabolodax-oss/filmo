@@ -133,9 +133,9 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0, scale: previewActive ? 1.22 : 1 }}
+            animate={{ opacity: 1, y: 0, scale: previewActive ? 1.42 : 1 }}
             transition={{ duration: 0.25, delay: previewActive ? 0 : Math.min(index * 0.03, 0.5) }}
-            whileHover={{ scale: previewActive ? 1.22 : 1.05 }}
+            whileHover={{ scale: previewActive ? 1.42 : 1.05 }}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
             onTouchStart={handleTouchStart}

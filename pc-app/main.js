@@ -5,8 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-const CURRENT_VERSION = '1.0.8';
-const VERSION_CHECK_URL = 'https://dawgerwebsite.vercel.app/api/version.json';
+const CURRENT_VERSION = app.getVersion();
+const VERSION_CHECK_URL = 'https://filmo-one.vercel.app/api/version.json';
 const isPackaged = app.isPackaged;
 
 function getLogDir() {
@@ -557,7 +557,14 @@ async function checkUpdates(win) {
 }
 
 // IPC Handlers pour la mise a jour
-const ALLOWED_UPDATE_DOMAINS = ['dawgerwebsite.vercel.app', 'github.com', 'raw.githubusercontent.com'];
+const ALLOWED_UPDATE_DOMAINS = [
+  'filmo-one.vercel.app',
+  'dawgerwebsite.vercel.app',
+  'github.com',
+  'raw.githubusercontent.com',
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+];
 
 ipcMain.handle('dawger:start-update', async (event, downloadUrl) => {
   // Validation stricte de l'URL pour bloquer toute injection RCE

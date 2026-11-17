@@ -52,11 +52,12 @@ jobs:
           mkdir -p "$APP_BUNDLE/dist"
           cp -R ../dist/* "$APP_BUNDLE/dist/"
           IOS_APP_PATH="$APP_BUNDLE" IOS_OUTPUT_DIR="build/ios-ipa" bash scripts/package-unsigned-ios.sh
-          mv build/ios-ipa/Movix-unsigned.ipa build/ios-ipa/Dawger-Autonome-v1.0.0-unsigned.ipa
+          APP_VERSION=$(node -p "require('./package.json').version")
+          mv build/ios-ipa/Movix-unsigned.ipa "build/ios-ipa/Dawger-Autonome-v${APP_VERSION}-unsigned.ipa"
 
       - name: Upload Dawger iOS Unsigned IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Dawger-Autonome-iOS-IPA
-          path: app/build/ios-ipa/Dawger-Autonome-v1.0.0-unsigned.ipa
+          path: app/build/ios-ipa/*.ipa
           if-no-files-found: error

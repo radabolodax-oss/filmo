@@ -1,14 +1,14 @@
 {
-  "version": "1.0.1",
-  "buildNumber": 2,
-  "apkUrl": "https://dawgerwebsite.vercel.app/downloads/Dawger-Autonome-v1.0.1.apk",
-  "apkSizeBytes": 32286661,
-  "apkSha256": "01b238f29f5152965f232ab0fa49594b3d82426c8c8383c4bc082d209f3cdb0c",
-  "iosUrl": "https://dawgerwebsite.vercel.app/ios",
+  "version": "1.0.2",
+  "buildNumber": 3,
+  "apkUrl": "https://filmo-one.vercel.app/downloads/Dawger-Autonome-v1.0.2.apk",
+  "apkSizeBytes": 32293816,
+  "apkSha256": "efffef5c92ab9838deea2d620d1337cbb41fb6008f8d35bc4a9c3c831064b19c",
+  "iosUrl": "https://github.com/radabolodax-oss/filmo/actions",
   "mandatory": false,
-  "releasedAt": "2026-11-13T22:12:52.549Z",
+  "releasedAt": "2026-11-17T16:35:09.495Z",
   "releaseNotes": {
-    "fr": "Dawger Autonome v1.0.1 — Onglet Découvrir, Roulette Dawger Spin infinie, Ambilight & nouveau plein écran sans barres système sur Android et iOS.",
-    "en": "Dawger Standalone v1.0.1 — Discover tab, infinite Dawger Spin roulette, Ambilight & fullscreen fixes without system bars."
+    "fr": "Dawger Autonome v1.0.2 — Aperçu trailer agrandi avec séparation vidéo/synopsis, son actif, masquage YouTube 800ms et système de mise à jour centralisé.",
+    "en": "Dawger Standalone v1.0.2 — Larger trailer preview with separated video/synopsis, audio enabled, 800ms YouTube reveal & centralized update manifest."
   }
 }
