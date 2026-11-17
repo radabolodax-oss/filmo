@@ -99,6 +99,7 @@ interface CardTrailerPreviewProps {
   mediaId: number;
   mediaType: 'movie' | 'tv';
   overview?: string;
+  posterUrl?: string;
   active: boolean;
   onOverviewLoaded?: (overview: string) => void;
 }
@@ -107,6 +108,7 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   mediaId,
   mediaType,
   overview: initialOverview,
+  posterUrl,
   active,
   onOverviewLoaded,
 }) => {
@@ -140,7 +142,7 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const sendYtCommand = (func: string, args: any[] = []) => {
     try {
       iframeRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: 'command', func, args }),
+        JSON.stringify({ event: 'command', func, args, id: 1, channel: 'widget' }),
         '*',
       );
     } catch {
@@ -154,12 +156,16 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
       if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        // PlayerState 1 = playing -> wait 1500ms so pause icon/title fades out completely, then show
-        if (data?.event === 'onStateChange' && data?.info === 1) {
-          sendYtCommand('unMute');
-          sendYtCommand('setVolume', [100]);
+        const playerState =
+          data?.event === 'onStateChange'
+            ? data?.info
+            : data?.event === 'infoDelivery' && typeof data?.info?.playerState === 'number'
+              ? data.info.playerState
+              : null;
+        // PlayerState 1 = playing -> wait 3500ms without sending extra commands so YouTube HUD fades out completely
+        if (playerState === 1) {
           if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-          revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 1500);
+          revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 3500);
         }
       } catch {
         // ignore
@@ -172,7 +178,7 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const handleIframeLoad = () => {
     try {
       iframeRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: 'listening' }),
+        JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
         '*',
       );
     } catch {
@@ -180,14 +186,9 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
     }
     sendYtCommand('unMute');
     sendYtCommand('setVolume', [100]);
-    sendYtCommand('playVideo');
-    setTimeout(() => {
-      sendYtCommand('unMute');
-      sendYtCommand('setVolume', [100]);
-    }, 350);
-    // Fallback reveal after YouTube's initial title/pause button disappears (~2.2s)
+    // Fallback reveal after YouTube's initial title/pause button disappears (~4.2s)
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 2200);
+    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 4200);
   };
 
   if (!active) return null;
@@ -196,12 +197,9 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   if (!ytKey) return null;
 
   return (
-    <div className="absolute inset-0 z-[5] rounded-xl overflow-hidden pointer-events-none">
-      <div
-        className={`absolute inset-0 bg-black transition-opacity duration-500 ${
-          isVideoVisible ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
+    <div className="absolute inset-0 z-[5] rounded-xl overflow-hidden pointer-events-none bg-black">
+      {/* Keep iframe at opacity-100 so Chromium never throttles cross-origin video rendering */}
+      <div className="absolute inset-0 bg-black">
         <iframe
           ref={iframeRef}
           onLoad={handleIframeLoad}
@@ -210,6 +208,21 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
           allow="autoplay; encrypted-media"
           className="w-full h-full border-0 scale-[1.65] pointer-events-none"
         />
+      </div>
+      {/* Poster mask on top of iframe: hides YouTube's initial pause/title HUD and fades out after 3500ms */}
+      <div
+        className={`absolute inset-0 z-10 bg-black transition-opacity duration-500 ${
+          isVideoVisible ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
+        {posterUrl && (
+          <img
+            src={posterUrl}
+            alt=""
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+        )}
       </div>
     </div>
   );

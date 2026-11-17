@@ -5,18 +5,18 @@
   "minRequiredVersion": "1.0.0",
   "releaseDate": "2026-11-17",
   "title": "Nouvelle version Dawger v1.0.10",
-  "releasedAt": "2026-11-17T19:00:13.425Z",
+  "releasedAt": "2026-11-17T19:13:59.409Z",
   "apkUrl": "https://dawgerwebsite.vercel.app/downloads/Dawger-Autonome-v1.0.2.apk",
-  "apkSizeBytes": 32294552,
-  "apkSha256": "e15b38645f90470b2ae77a745f92de413d8b26274d2067e2d17dd1e0014f6124",
+  "apkSizeBytes": 32294592,
+  "apkSha256": "cfb7d00554c08acc24566d9445e2ac5cea9920f11e47fcf121738701e3f7519f",
   "platforms": {
     "windows": {
       "version": "1.0.10",
       "url": "https://dawgerwebsite.vercel.app/downloads/PCDawger-Setup.exe",
       "directUrl": "https://dawgerwebsite.vercel.app/downloads/PCDawger-Setup.exe",
       "size": "939.7 Mo",
-      "sizeBytes": 985356689,
-      "sha256": "b042750cadd6586defdc409e2a5a79da7501a8e021d941e6897be0fd502d9962"
+      "sizeBytes": 985354918,
+      "sha256": "668167074d17c1286908d8a25f48f532bb40723cc34e2c8a1cfc0842fce3f7f9"
     }
   }
 }

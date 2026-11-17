@@ -189,6 +189,7 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
                 mediaId={item.id}
                 mediaType={item.media_type}
                 overview={item.overview}
+                posterUrl={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined}
                 active={previewActive}
                 onOverviewLoaded={setResolvedOverview}
             />

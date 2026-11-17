@@ -350,6 +350,7 @@ const CarouselCard = React.memo<{
               mediaId={item.id}
               mediaType={item.media_type as 'movie' | 'tv'}
               overview={(item as any).overview}
+              posterUrl={posterSrc}
               active={previewActive}
               onOverviewLoaded={setResolvedOverview}
             />
