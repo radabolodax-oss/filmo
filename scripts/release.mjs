@@ -26,7 +26,7 @@ const pcVersion = pcPkg.version;
 const mobileVersion = appPkg.version;
 const buildNumber = versionCodeMatch ? Number(versionCodeMatch[1]) : 1;
 
-const baseUrl = process.env.RELEASE_BASE_URL || 'https://filmo-one.vercel.app';
+const baseUrl = process.env.RELEASE_BASE_URL || 'https://dawgerwebsite.vercel.app';
 const githubRepoUrl = 'https://github.com/radabolodax-oss/filmo';
 
 const exeCandidates = [
@@ -71,8 +71,8 @@ const apiManifest = {
   platforms: {
     windows: {
       version: pcVersion,
-      url: `${githubRepoUrl}/releases/latest/download/PCDawger-Setup.exe`,
-      directUrl: `${githubRepoUrl}/releases/latest/download/PCDawger-Setup.exe`,
+      url: `${baseUrl}/downloads/PCDawger-Setup.exe`,
+      directUrl: `${baseUrl}/downloads/PCDawger-Setup.exe`,
       size: exeStat ? formatMb(exeStat.size) : 'Mise à jour',
       sizeBytes: exeStat ? exeStat.size : 0,
       sha256: exeSha256 || '',
@@ -86,12 +86,12 @@ const appManifest = {
   apkUrl: `${baseUrl}/downloads/${apkDownloadName}`,
   apkSizeBytes: apkStat.size,
   apkSha256,
-  iosUrl: `${githubRepoUrl}/actions`,
+  iosUrl: `${baseUrl}/ios`,
   mandatory: false,
   releasedAt: nowIso,
   releaseNotes: {
-    fr: `Dawger Autonome v${mobileVersion} — Aperçu trailer agrandi avec séparation vidéo/synopsis, son actif, masquage YouTube 800ms et système de mise à jour centralisé.`,
-    en: `Dawger Standalone v${mobileVersion} — Larger trailer preview with separated video/synopsis, audio enabled, 800ms YouTube reveal & centralized update manifest.`,
+    fr: `Dawger Autonome v${mobileVersion} — Aperçu trailer plein cadre en arrière-plan, synopsis court au premier plan, masquage YouTube 800ms et mise à jour via dawgerwebsite.vercel.app.`,
+    en: `Dawger Standalone v${mobileVersion} — Full-card trailer background, short foreground synopsis, 800ms YouTube reveal & updates via dawgerwebsite.vercel.app.`,
   },
 };
 

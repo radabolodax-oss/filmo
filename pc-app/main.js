@@ -6,7 +6,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 
 const CURRENT_VERSION = app.getVersion();
-const VERSION_CHECK_URL = 'https://filmo-one.vercel.app/api/version.json';
+const VERSION_CHECK_URL = 'https://dawgerwebsite.vercel.app/api/version.json';
 const isPackaged = app.isPackaged;
 
 function getLogDir() {

@@ -26,6 +26,19 @@ async function fetchTrailerAndOverview(
 
   let youtubeKey: string | null = null;
   let overview: string | null = existingOverview || null;
+  let hadNetworkError = false;
+
+  const pickBestVideo = (videos: any[]) => {
+    const yt = videos.filter((v) => v?.site === 'YouTube' && v?.key);
+    return (
+      yt.find((v) => v.type === 'Trailer' && v.official) ||
+      yt.find((v) => v.type === 'Trailer') ||
+      yt.find((v) => v.type === 'Teaser' && v.official) ||
+      yt.find((v) => v.type === 'Teaser') ||
+      yt.find((v) => v.type !== 'Behind the Scenes' && v.type !== 'Bloopers' && v.type !== 'Featurette') ||
+      null
+    );
+  };
 
   try {
     const lang = getTmdbLanguage();
@@ -35,7 +48,7 @@ async function fetchTrailerAndOverview(
     });
     let results: any[] = res.data?.results || [];
 
-    if (!results.some((v) => v.site === 'YouTube' && v.type === 'Trailer')) {
+    if (!results.some((v) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))) {
       const enRes = await axios.get(`${TMDB_API_URL}/${mediaType}/${mediaId}/videos`, {
         params: { api_key: TMDB_API_KEY, language: 'en-US' },
         timeout: 5000,
@@ -44,17 +57,21 @@ async function fetchTrailerAndOverview(
       results = [...results, ...enResults];
     }
 
-    const pick =
-      results.find((v) => v.site === 'YouTube' && v.type === 'Trailer' && v.official) ||
-      results.find((v) => v.site === 'YouTube' && v.type === 'Trailer') ||
-      results.find((v) => v.site === 'YouTube' && v.type === 'Teaser') ||
-      results.find((v) => v.site === 'YouTube');
+    if (!results.some((v) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'))) {
+      const allRes = await axios.get(`${TMDB_API_URL}/${mediaType}/${mediaId}/videos`, {
+        params: { api_key: TMDB_API_KEY },
+        timeout: 5000,
+      });
+      const allResults: any[] = allRes.data?.results || [];
+      results = [...results, ...allResults];
+    }
 
+    const pick = pickBestVideo(results);
     if (pick?.key) {
       youtubeKey = pick.key;
     }
   } catch {
-    // ignore
+    hadNetworkError = true;
   }
 
   if (!overview) {
@@ -72,7 +89,9 @@ async function fetchTrailerAndOverview(
   }
 
   const info: TrailerInfo = { youtubeKey, overview };
-  trailerCache.set(cacheKey, info);
+  if (!hadNetworkError || youtubeKey) {
+    trailerCache.set(cacheKey, info);
+  }
   return info;
 }
 
@@ -95,9 +114,10 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    setInfo(null);
+    setIsVideoVisible(false);
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     if (!active) {
-      setIsVideoVisible(false);
-      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
       return;
     }
     let cancelled = false;
@@ -158,9 +178,9 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
       sendYtCommand('unMute');
       sendYtCommand('setVolume', [100]);
     }, 350);
-    // Fallback reveal after YouTube's initial title/pause button disappears (~1.6s)
+    // Fallback reveal after YouTube's initial title/pause button disappears (~1.4s)
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 1600);
+    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 1400);
   };
 
   if (!active) return null;
@@ -169,30 +189,30 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const synopsisText = initialOverview || info?.overview || '';
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-zinc-950 overflow-hidden pointer-events-none">
-      <div className="relative w-full h-[46%] shrink-0 bg-black overflow-hidden">
-        {ytKey && (
-          <div
-            className={`absolute inset-0 bg-black transition-opacity duration-500 ${
-              isVideoVisible ? 'opacity-100' : 'opacity-0'
-            }`}
-          >
-            <iframe
-              ref={iframeRef}
-              onLoad={handleIframeLoad}
-              src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
-              title="Trailer preview"
-              allow="autoplay; encrypted-media"
-              className="w-full h-full border-0 scale-[1.45] pointer-events-none"
-            />
-          </div>
-        )}
-      </div>
+    <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
+      {ytKey && (
+        <div
+          className={`absolute inset-0 bg-black transition-opacity duration-500 ${
+            isVideoVisible ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <iframe
+            ref={iframeRef}
+            onLoad={handleIframeLoad}
+            src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
+            title="Trailer preview"
+            allow="autoplay; encrypted-media"
+            className="w-full h-full border-0 scale-[1.65] pointer-events-none"
+          />
+        </div>
+      )}
       {synopsisText && (
-        <div className="flex-1 px-2.5 py-2 bg-zinc-950/95 border-t border-white/10 overflow-hidden">
-          <p className="text-[8.5px] sm:text-[9.5px] leading-snug text-white/95">
-            {synopsisText}
-          </p>
+        <div className="relative z-10 h-full flex flex-col justify-end">
+          <div className="p-2.5 pt-8 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
+            <p className="line-clamp-3 text-[9.5px] sm:text-[10.5px] leading-snug text-white/95 drop-shadow">
+              {synopsisText}
+            </p>
+          </div>
         </div>
       )}
     </div>

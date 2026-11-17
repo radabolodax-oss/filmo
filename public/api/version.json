@@ -1,15 +1,15 @@
 {
   "version": "1.0.10",
   "title": "Nouvelle version Dawger v1.0.10",
-  "releasedAt": "2026-11-17T16:35:09.495Z",
+  "releasedAt": "2026-11-17T17:46:12.578Z",
   "platforms": {
     "windows": {
       "version": "1.0.10",
-      "url": "https://github.com/radabolodax-oss/filmo/releases/latest/download/PCDawger-Setup.exe",
-      "directUrl": "https://github.com/radabolodax-oss/filmo/releases/latest/download/PCDawger-Setup.exe",
+      "url": "https://dawgerwebsite.vercel.app/downloads/PCDawger-Setup.exe",
+      "directUrl": "https://dawgerwebsite.vercel.app/downloads/PCDawger-Setup.exe",
       "size": "939.7 Mo",
-      "sizeBytes": 985353146,
-      "sha256": "7e4653eb4185f48b56a9aa1e61a9306300e8c8e930cafd5195ccf8f2727c4f68"
+      "sizeBytes": 985353679,
+      "sha256": "1cf7aabba110f701f1c10c8dbcb1e7dd03087c7440cce346769fc52c71d3e082"
     }
   }
 }
