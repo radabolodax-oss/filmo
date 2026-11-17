@@ -78,6 +78,7 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
     const { t } = useTranslation();
     const [starred, setStarred] = useState(() => getWatchlistIds(item.media_type).has(item.id));
     const [previewActive, setPreviewActive] = useState(false);
+    const [resolvedOverview, setResolvedOverview] = useState<string>('');
     const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -133,16 +134,16 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            animate={{ opacity: 1, y: 0, scale: previewActive ? 1.15 : 1 }}
             transition={{ duration: 0.25, delay: previewActive ? 0 : Math.min(index * 0.03, 0.5) }}
-            whileHover={{ scale: previewActive ? 1 : 1.05 }}
+            whileHover={{ scale: previewActive ? 1.15 : 1.05 }}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
             onTouchStart={handleTouchStart}
             onTouchMove={cancelTouchPreview}
             onTouchEnd={cancelTouchPreview}
             onTouchCancel={cancelTouchPreview}
-            className={`relative group rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors ${previewActive ? 'z-40 overflow-visible shadow-2xl' : 'overflow-hidden'}`}
+            className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-colors ${previewActive ? 'z-40 shadow-2xl' : ''}`}
         >
             {/* Badge */}
             <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wider text-white/80">
@@ -189,13 +190,14 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
                 mediaType={item.media_type}
                 overview={item.overview}
                 active={previewActive}
+                onOverviewLoaded={setResolvedOverview}
             />
 
             {/* Hover overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            <div className={`absolute inset-0 z-10 bg-gradient-to-t from-black via-black/60 to-transparent transition-opacity duration-300 pointer-events-none ${previewActive ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`} />
 
             {/* Hover content */}
-            <div className="absolute bottom-0 left-0 right-0 p-3 md:opacity-0 md:group-hover:opacity-100 md:translate-y-2 md:group-hover:translate-y-0 transition-all duration-300 pointer-events-none">
+            <div className={`absolute bottom-0 left-0 right-0 z-10 p-3 transition-all duration-300 pointer-events-none ${previewActive ? 'opacity-100 translate-y-0' : 'md:opacity-0 md:group-hover:opacity-100 md:translate-y-2 md:group-hover:translate-y-0'}`}>
                 <h3 className="text-sm font-bold text-white line-clamp-1 mb-1">
                     {item.title || item.name}
                 </h3>
@@ -211,7 +213,7 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
                     </span>
                 </div>
                 <p className="text-xs text-white/50 line-clamp-3">
-                    {item.overview}
+                    {item.overview || resolvedOverview}
                 </p>
             </div>
 

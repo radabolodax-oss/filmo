@@ -237,6 +237,7 @@ const CarouselCard = React.memo<{
       : t('common.movie');
 
   const [previewActive, setPreviewActive] = useState(false);
+  const [resolvedOverview, setResolvedOverview] = useState<string>('');
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -279,7 +280,7 @@ const CarouselCard = React.memo<{
           if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
           setPreviewActive(false);
         }}
-        className={`relative group rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'overflow-visible shadow-2xl' : 'overflow-hidden hover:scale-105'}`}
+        className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'scale-[1.10] md:scale-[1.15] shadow-2xl' : 'hover:scale-105'}`}
       >
         {/* Type badge */}
         <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/75 text-[10px] font-semibold uppercase tracking-wider text-white/80">
@@ -350,15 +351,16 @@ const CarouselCard = React.memo<{
               mediaType={item.media_type as 'movie' | 'tv'}
               overview={(item as any).overview}
               active={previewActive}
+              onOverviewLoaded={setResolvedOverview}
             />
           )}
         </div>
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+        <div className={`absolute inset-0 z-10 bg-gradient-to-t from-black via-black/60 to-transparent transition-opacity duration-300 pointer-events-none ${previewActive ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`} />
 
         {/* Hover content */}
-        <div className="absolute bottom-0 left-0 right-0 p-3 md:opacity-0 md:group-hover:opacity-100 md:translate-y-2 md:group-hover:translate-y-0 transition-[opacity,transform] duration-300 pointer-events-none">
+        <div className={`absolute bottom-0 left-0 right-0 z-10 p-3 transition-[opacity,transform] duration-300 pointer-events-none ${previewActive ? 'opacity-100 translate-y-0' : 'md:opacity-0 md:group-hover:opacity-100 md:translate-y-2 md:group-hover:translate-y-0'}`}>
           {logoUrl ? (
             <div className="mb-1.5 h-7 flex items-end">
               <img
@@ -390,9 +392,9 @@ const CarouselCard = React.memo<{
               </div>
             )}
           </div>
-          {item.overview && (
+          {(item.overview || resolvedOverview) && (
             <p className="text-xs text-white/50 line-clamp-3">
-              {item.overview}
+              {item.overview || resolvedOverview}
             </p>
           )}
         </div>
