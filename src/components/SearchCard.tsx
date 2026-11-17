@@ -133,16 +133,16 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0, scale: previewActive ? 1.42 : 1 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.25, delay: previewActive ? 0 : Math.min(index * 0.03, 0.5) }}
-            whileHover={{ scale: previewActive ? 1.42 : 1.05 }}
+            whileHover={{ scale: previewActive ? 1 : 1.05 }}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
             onTouchStart={handleTouchStart}
             onTouchMove={cancelTouchPreview}
             onTouchEnd={cancelTouchPreview}
             onTouchCancel={cancelTouchPreview}
-            className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-colors ${previewActive ? 'z-40 shadow-2xl' : ''}`}
+            className={`relative group rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors ${previewActive ? 'z-40 overflow-visible shadow-2xl' : 'overflow-hidden'}`}
         >
             {/* Badge */}
             <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wider text-white/80">
@@ -179,7 +179,7 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
             <img
                 src={`https://image.tmdb.org/t/p/w500${item.poster_path}`}
                 alt={item.title || item.name}
-                className="w-full aspect-[2/3] object-cover"
+                className="w-full aspect-[2/3] object-cover rounded-xl"
                 onError={(e) => { (e.target as HTMLImageElement).onerror = null; (e.target as HTMLImageElement).src = POSTER_FALLBACK; }}
             />
 

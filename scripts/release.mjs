@@ -66,8 +66,15 @@ const nowIso = new Date().toISOString();
 
 const apiManifest = {
   version: pcVersion,
+  versionCode: buildNumber,
+  buildNumber,
+  minRequiredVersion: '1.0.0',
+  releaseDate: nowIso.slice(0, 10),
   title: `Nouvelle version Dawger v${pcVersion}`,
   releasedAt: nowIso,
+  apkUrl: `${baseUrl}/downloads/${apkDownloadName}`,
+  apkSizeBytes: apkStat.size,
+  apkSha256,
   platforms: {
     windows: {
       version: pcVersion,
@@ -90,8 +97,8 @@ const appManifest = {
   mandatory: false,
   releasedAt: nowIso,
   releaseNotes: {
-    fr: `Dawger Autonome v${mobileVersion} — Aperçu trailer plein cadre en arrière-plan, synopsis court au premier plan, masquage YouTube 800ms et mise à jour via dawgerwebsite.vercel.app.`,
-    en: `Dawger Standalone v${mobileVersion} — Full-card trailer background, short foreground synopsis, 800ms YouTube reveal & updates via dawgerwebsite.vercel.app.`,
+    fr: `Dawger Autonome v${mobileVersion} — Cadre trailer élargi sans déformation, synopsis court au premier plan, masquage YouTube 800ms et mise à jour centralisée.`,
+    en: `Dawger Standalone v${mobileVersion} — Wider trailer frame without scaling distortion, short foreground synopsis, 800ms YouTube reveal & centralized updates.`,
   },
 };
 
@@ -103,6 +110,19 @@ fs.mkdirSync(publicAppDir, { recursive: true });
 fs.writeFileSync(path.join(publicApiDir, 'version.json'), JSON.stringify(apiManifest, null, 2) + '\n', 'utf8');
 fs.writeFileSync(path.join(publicAppDir, 'version.json'), JSON.stringify(appManifest, null, 2) + '\n', 'utf8');
 fs.writeFileSync(path.join(rootDir, 'app', 'version.json'), JSON.stringify(appManifest, null, 2) + '\n', 'utf8');
+
+const dawgerWebsiteDir = path.join(desktopDawgerDir, 'dawger_web_site');
+if (fs.existsSync(dawgerWebsiteDir)) {
+  const siteAppDir = path.join(dawgerWebsiteDir, 'app');
+  const siteDownloadsDir = path.join(dawgerWebsiteDir, 'downloads');
+  fs.mkdirSync(siteAppDir, { recursive: true });
+  fs.mkdirSync(siteDownloadsDir, { recursive: true });
+  fs.writeFileSync(path.join(dawgerWebsiteDir, 'version.json'), JSON.stringify(apiManifest, null, 2) + '\n', 'utf8');
+  fs.writeFileSync(path.join(siteAppDir, 'version.json'), JSON.stringify(appManifest, null, 2) + '\n', 'utf8');
+  fs.copyFileSync(apkPath, path.join(siteDownloadsDir, apkDownloadName));
+  fs.copyFileSync(apkPath, path.join(siteDownloadsDir, 'Dawger-Autonome-v1.0.0.apk'));
+  fs.copyFileSync(apkPath, path.join(siteDownloadsDir, 'dawger.apk'));
+}
 
 console.log('✅ Manifestes générés :');
 console.log(`   - PC (.exe)   : v${pcVersion}${exeStat ? ` (${exeStat.size} octets, sha256=${exeSha256.slice(0, 12)}...)` : ' (binaire absent)'}`);

@@ -4943,46 +4943,6 @@ const WatchAnime: React.FC<WatchAnimeProps> = ({
 
 
 
-      {/* Encadré infos — synopsis + affiche, sous le player. Parité avec WatchTv.tsx/
-
-          WatchMovie.tsx qui affichent déjà ce bloc ; showDetails est fetch depuis TMDB
-
-          juste au-dessus (poster_path/overview inclus), il manquait juste le rendu. */}
-
-      {showDetails?.overview && (
-
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6 flex flex-col sm:flex-row sm:items-stretch gap-6">
-
-          {showDetails?.poster_path && (
-
-            <div className="relative w-32 sm:w-40 md:w-48 flex-shrink-0 mx-auto sm:mx-0">
-
-              <img
-
-                src={`https://image.tmdb.org/t/p/w342${showDetails.poster_path}`}
-
-                alt={headerTitle || showDetails?.name}
-
-                className="w-full h-auto sm:absolute sm:inset-0 sm:w-full sm:h-full rounded-xl object-cover"
-
-              />
-
-            </div>
-
-          )}
-
-          <div className="flex-1 min-w-0">
-
-            <p className="text-white/60 text-sm md:text-base leading-relaxed">{showDetails.overview}</p>
-
-          </div>
-
-        </div>
-
-      )}
-
-
-
       {/* Animes / Films similaires */}
 
       {recommendations.length > 0 && (

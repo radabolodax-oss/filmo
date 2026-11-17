@@ -189,7 +189,7 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const synopsisText = initialOverview || info?.overview || '';
 
   return (
-    <div className="absolute inset-0 z-20 overflow-hidden pointer-events-none">
+    <div className="absolute -inset-x-[32%] -inset-y-[6%] z-30 rounded-xl overflow-hidden bg-black border border-white/20 shadow-2xl pointer-events-none">
       {ytKey && (
         <div
           className={`absolute inset-0 bg-black transition-opacity duration-500 ${
@@ -202,14 +202,14 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
             src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
             title="Trailer preview"
             allow="autoplay; encrypted-media"
-            className="w-full h-full border-0 scale-[1.65] pointer-events-none"
+            className="w-full h-full border-0 scale-[1.35] pointer-events-none"
           />
         </div>
       )}
       {synopsisText && (
         <div className="relative z-10 h-full flex flex-col justify-end">
-          <div className="p-2.5 pt-8 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
-            <p className="line-clamp-3 text-[9.5px] sm:text-[10.5px] leading-snug text-white/95 drop-shadow">
+          <div className="p-3 pt-10 bg-gradient-to-t from-black/95 via-black/70 to-transparent">
+            <p className="line-clamp-3 text-[10px] sm:text-[11px] leading-snug text-white/95 drop-shadow">
               {synopsisText}
             </p>
           </div>

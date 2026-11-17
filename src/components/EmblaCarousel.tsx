@@ -279,7 +279,7 @@ const CarouselCard = React.memo<{
           if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
           setPreviewActive(false);
         }}
-        className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'scale-[1.42] shadow-2xl' : 'hover:scale-105'}`}
+        className={`relative group rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'overflow-visible shadow-2xl' : 'overflow-hidden hover:scale-105'}`}
       >
         {/* Type badge */}
         <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/75 text-[10px] font-semibold uppercase tracking-wider text-white/80">

@@ -8378,42 +8378,6 @@ const WatchMovie: React.FC = () => {
 
 
 
-      {/* Encadré infos du film sélectionné — sous le player, au-dessus des recommandations */}
-
-      <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-6 flex flex-col sm:flex-row sm:items-stretch gap-6">
-
-        {posterPath && (
-
-          <div className="relative w-32 sm:w-40 md:w-48 flex-shrink-0 mx-auto sm:mx-0">
-
-            <img
-
-              src={`https://image.tmdb.org/t/p/w342${posterPath}`}
-
-              alt={movieTitle}
-
-              className="w-full h-auto sm:absolute sm:inset-0 sm:w-full sm:h-full rounded-xl object-cover"
-
-            />
-
-          </div>
-
-        )}
-
-        <div className="flex-1 min-w-0">
-
-          {movieMeta?.overview && (
-
-            <p className="text-white/60 text-sm md:text-base leading-relaxed">{movieMeta.overview}</p>
-
-          )}
-
-        </div>
-
-      </div>
-
-
-
       {/* Films similaires */}
 
       {recommendations.length > 0 && (
