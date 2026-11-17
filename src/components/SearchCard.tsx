@@ -189,6 +189,9 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
                 mediaId={item.id}
                 mediaType={item.first_air_date && !item.release_date ? 'tv' : item.media_type}
                 title={item.title || item.name}
+                typeLabel={item.media_type === 'tv' ? serieLabel : movieLabel}
+                voteAverage={item.vote_average}
+                year={item.release_date || item.first_air_date ? new Date(item.release_date || item.first_air_date || '').getFullYear() : null}
                 overview={item.overview}
                 posterUrl={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined}
                 active={previewActive}

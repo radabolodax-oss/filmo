@@ -2,11 +2,11 @@
   "version": "1.0.2",
   "buildNumber": 3,
   "apkUrl": "https://dawgerwebsite.vercel.app/downloads/Dawger-Autonome-v1.0.2.apk",
-  "apkSizeBytes": 32295160,
-  "apkSha256": "66b3e696da7f3c10fbe0ac6854d43b57f2927dd37667d87d55261e3ece0d20bb",
+  "apkSizeBytes": 32296180,
+  "apkSha256": "4eb4cb270c26959979b93b597b0c60e5dc2bafd522ddb10c5a9e30bb41b0d6ef",
   "iosUrl": "https://dawgerwebsite.vercel.app/ios",
   "mandatory": false,
-  "releasedAt": "2026-11-17T19:49:25.157Z",
+  "releasedAt": "2026-11-17T20:38:27.456Z",
   "releaseNotes": {
     "fr": "Dawger Autonome v1.0.2 — Cadre trailer élargi sans déformation, synopsis court au premier plan, masquage YouTube 800ms et mise à jour centralisée.",
     "en": "Dawger Standalone v1.0.2 — Wider trailer frame without scaling distortion, short foreground synopsis, 800ms YouTube reveal & centralized updates."
