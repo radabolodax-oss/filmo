@@ -162,10 +162,10 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
             : data?.event === 'infoDelivery' && typeof data?.info?.playerState === 'number'
               ? data.info.playerState
               : null;
-        // PlayerState 1 = playing -> wait 3500ms without sending extra commands so YouTube HUD fades out completely
+        // PlayerState 1 = playing -> wait 4500ms without sending extra commands so YouTube HUD fades out completely
         if (playerState === 1) {
           if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-          revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 3500);
+          revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 4500);
         }
       } catch {
         // ignore
@@ -186,9 +186,9 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
     }
     sendYtCommand('unMute');
     sendYtCommand('setVolume', [100]);
-    // Fallback reveal after YouTube's initial title/pause button disappears (~4.2s)
+    // Fallback reveal after YouTube's initial title/pause button disappears (~5.2s)
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 4200);
+    revealTimerRef.current = setTimeout(() => setIsVideoVisible(true), 5200);
   };
 
   if (!active) return null;
@@ -206,7 +206,7 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
           src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
           title="Trailer preview"
           allow="autoplay; encrypted-media"
-          className="w-full h-full border-0 scale-[1.65] pointer-events-none"
+          className="w-full h-full border-0 scale-[2.95] pointer-events-none"
         />
       </div>
       {/* Poster mask on top of iframe: hides YouTube's initial pause/title HUD and fades out after 3500ms */}

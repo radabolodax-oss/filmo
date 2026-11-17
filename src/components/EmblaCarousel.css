@@ -24,6 +24,12 @@
   contain-intrinsic-size: 132px 198px;
 }
 
+.embla-slide:hover,
+.embla-slide.preview-active {
+  content-visibility: visible !important;
+  contain: none !important;
+}
+
 @media (min-width: 768px) {
   .embla-slide:not(:has(.ranking-number)) {
     contain-intrinsic-size: 192px 320px;

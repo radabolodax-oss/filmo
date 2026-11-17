@@ -1,4 +1,4 @@
-const { app, BrowserWindow, utilityProcess, shell, session, ipcMain } = require('electron');
+const { app, BrowserWindow, utilityProcess, shell, session, ipcMain, webFrameMain } = require('electron');
 const http = require('http');
 const https = require('https');
 const path = require('path');
@@ -870,6 +870,24 @@ async function createWindow() {
       event.preventDefault();
       log('WARN', '[ADBLOCK] Protocole iframe externe bloque:', url);
     }
+  });
+
+  // Masque totalement l'interface YouTube (bouton pause .ytp-bezel, titre, barre, filigrane) dans les iframes de trailer
+  mainWindow.webContents.on('did-frame-finish-load', (_event, isMainFrame, frameProcessId, frameRoutingId) => {
+    if (isMainFrame) return;
+    try {
+      const frame = webFrameMain.fromId(frameProcessId, frameRoutingId);
+      if (!frame || !frame.url) return;
+      if (frame.url.includes('youtube-nocookie.com/embed') || frame.url.includes('youtube.com/embed')) {
+        frame.executeJavaScript(`
+          (function() {
+            const s = document.createElement('style');
+            s.textContent = '.ytp-bezel, .ytp-bezel-text-hide, .ytp-chrome-top, .ytp-chrome-bottom, .ytp-pause-overlay, .ytp-watermark, .ytp-gradient-top, .ytp-gradient-bottom, .ytp-ce-element, .ytp-cards-teaser, .ytp-spinner { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';
+            (document.head || document.documentElement).appendChild(s);
+          })();
+        `).catch(() => {});
+      }
+    } catch (_) {}
   });
 
   mainWindow.on('closed', () => {

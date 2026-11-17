@@ -251,7 +251,7 @@ const CarouselCard = React.memo<{
   const canPreview = item.media_type === 'movie' || item.media_type === 'tv';
 
   return (
-    <div className={`embla-slide flex-none relative w-[clamp(112px,29vw,156px)] sm:w-[160px] md:w-[192px] tv:w-[220px] ${previewActive ? 'z-40' : ''}`}>
+    <div className={`embla-slide flex-none relative w-[clamp(112px,29vw,156px)] sm:w-[160px] md:w-[192px] tv:w-[220px] ${previewActive ? 'z-40 preview-active' : ''}`}>
       <div
         style={{ animationDelay: `${Math.min(index * 0.03, 0.5)}s` }}
         onMouseEnter={() => {
