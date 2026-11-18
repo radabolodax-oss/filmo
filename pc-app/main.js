@@ -266,7 +266,10 @@ async function startFrontend() {
       }
       res.writeHead(200, {
         'Content-Type': contentType,
-        'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000',
+        'Cache-Control':
+          ext === '.html' || ext === '.json' || cleanRelative === 'sw.js'
+            ? 'no-store, no-cache, must-revalidate'
+            : 'public, max-age=31536000',
       });
       res.end(data);
     });
@@ -558,7 +561,6 @@ async function checkUpdates(win) {
 
 // IPC Handlers pour la mise a jour
 const ALLOWED_UPDATE_DOMAINS = [
-  'filmo-one.vercel.app',
   'dawgerwebsite.vercel.app',
   'github.com',
   'raw.githubusercontent.com',

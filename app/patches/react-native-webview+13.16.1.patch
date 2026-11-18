@@ -1,5 +1,79 @@
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+index 07f73fd..dd95554 100644
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+@@ -336,6 +336,58 @@ public class RNCWebChromeClient extends WebChromeClient implements LifecycleEven
+         return this.mWebView.getThemedReactContext().getNativeModule(RNCWebViewModule.class).startPhotoPickerIntent(filePathCallback, acceptTypes, allowMultiple, fileChooserParams.isCaptureEnabled());
+     }
+ 
++    @Override
++    public void onShowCustomView(View view, CustomViewCallback callback) {
++        if (this.mVideoView != null) {
++            callback.onCustomViewHidden();
++            return;
++        }
++
++        this.mVideoView = view;
++        this.mCustomViewCallback = callback;
++
++        Activity activity = this.mWebView.getThemedReactContext().getCurrentActivity();
++        if (activity != null) {
++            activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
++        }
++
++        this.mVideoView.setSystemUiVisibility(FULLSCREEN_SYSTEM_UI_VISIBILITY);
++        getRootView().addView(this.mVideoView, FULLSCREEN_LAYOUT_PARAMS);
++        this.mWebView.setVisibility(View.GONE);
++
++        this.mWebView.getThemedReactContext().addLifecycleEventListener(this);
++    }
++
++    @Override
++    public void onHideCustomView() {
++        if (this.mVideoView == null) {
++            return;
++        }
++
++        this.mVideoView.setVisibility(View.GONE);
++        getRootView().removeView(this.mVideoView);
++        this.mVideoView = null;
++
++        if (this.mCustomViewCallback != null) {
++            this.mCustomViewCallback.onCustomViewHidden();
++            this.mCustomViewCallback = null;
++        }
++
++        this.mWebView.setVisibility(View.VISIBLE);
++
++        Activity activity = this.mWebView.getThemedReactContext().getCurrentActivity();
++        if (activity != null) {
++            activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
++        }
++
++        this.mWebView.getThemedReactContext().removeLifecycleEventListener(this);
++    }
++
++    @Override
++    public android.graphics.Bitmap getDefaultVideoPoster() {
++        return android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888);
++    }
++
+     @Override
+     public void onHostResume() {
+         if (mVideoView != null && mVideoView.getSystemUiVisibility() != FULLSCREEN_SYSTEM_UI_VISIBILITY) {
+@@ -347,7 +399,9 @@ public class RNCWebChromeClient extends WebChromeClient implements LifecycleEven
+     public void onHostPause() { }
+ 
+     @Override
+-    public void onHostDestroy() { }
++    public void onHostDestroy() {
++        onHideCustomView();
++    }
+ 
+     protected ViewGroup getRootView() {
+         return this.mWebView.getThemedReactContext().getCurrentActivity().findViewById(android.R.id.content);
 diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
-index 80c6803..f70b87d 100644
+index 80c6803..a24523c 100644
 --- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
 +++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
 @@ -253,7 +253,11 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
@@ -15,7 +89,7 @@ index 80c6803..f70b87d 100644
                }
              };
              WebViewCompat.addWebMessageListener(
-@@ -324,7 +324,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+@@ -324,7 +328,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
        injectJavascriptObject();
      }
  
@@ -24,7 +98,7 @@ index 80c6803..f70b87d 100644
          ThemedReactContext reactContext = getThemedReactContext();
          RNCWebView mWebView = this;
  
-@@ -338,6 +338,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+@@ -338,6 +342,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
                      }
                      WritableMap data = mRNCWebViewClient.createWebViewEvent(webView, sourceUrl);
                      data.putString("data", message);
@@ -32,7 +106,7 @@ index 80c6803..f70b87d 100644
  
                      if (mMessagingJSModule != null) {
                          dispatchDirectMessage(data);
-@@ -349,6 +350,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+@@ -349,6 +354,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
          } else {
              WritableMap eventData = Arguments.createMap();
              eventData.putString("data", message);
@@ -40,7 +114,7 @@ index 80c6803..f70b87d 100644
  
              if (mMessagingJSModule != null) {
                  dispatchDirectMessage(eventData);
-@@ -446,7 +448,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+@@ -446,7 +452,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
          public void postMessage(String message) {
              if (mWebView.getMessagingEnabled()) {
                  // Post to main thread because `mWebView.getUrl()` requires to be executed on main.
@@ -49,7 +123,142 @@ index 80c6803..f70b87d 100644
              } else {
                  FLog.w(TAG, "ReactNativeWebView.postMessage method was called but messaging is disabled. Pass an onMessage handler to the WebView.");
              }
+diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 0287e1c..24febc6 100644
+--- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@ -38,6 +38,103 @@ import android.webkit.CookieSyncManager;
+ import java.util.concurrent.atomic.AtomicReference;
+ 
+ public class RNCWebViewClient extends WebViewClient {
++    private androidx.webkit.WebViewAssetLoader mAssetLoader = null;
++
++    private synchronized void initAssetLoader(android.content.Context context) {
++        if (mAssetLoader == null && context != null) {
++            final android.content.Context appContext = context.getApplicationContext();
++            mAssetLoader = new androidx.webkit.WebViewAssetLoader.Builder()
++                .setDomain("appassets.androidplatform.net")
++                .addPathHandler("/", new androidx.webkit.WebViewAssetLoader.PathHandler() {
++                    @Override
++                    public WebResourceResponse handle(String path) {
++                        try {
++                            String cleanPath = (path == null || path.isEmpty() || path.equals("/")) ? "index.html" : path;
++                            if (cleanPath.startsWith("/")) {
++                                cleanPath = cleanPath.substring(1);
++                            }
++                            android.content.res.AssetManager am = appContext.getAssets();
++                            try {
++                                java.io.InputStream is = am.open("dist/" + cleanPath);
++                                String mime = getAssetMimeType(cleanPath);
++                                java.util.Map<String, String> headers = new java.util.HashMap<>();
++                                headers.put("Access-Control-Allow-Origin", "*");
++                                headers.put("Cache-Control", "no-cache");
++                                return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, is);
++                            } catch (java.io.IOException notFound) {
++                                if (!cleanPath.contains(".") || cleanPath.endsWith(".html")) {
++                                    java.io.InputStream is = am.open("dist/index.html");
++                                    java.util.Map<String, String> headers = new java.util.HashMap<>();
++                                    headers.put("Access-Control-Allow-Origin", "*");
++                                    headers.put("Cache-Control", "no-cache");
++                                    return new WebResourceResponse("text/html", "UTF-8", 200, "OK", headers, is);
++                                }
++                                return null;
++                            }
++                        } catch (Exception e) {
++                            return null;
++                        }
++                    }
++                })
++                .build();
++        }
++    }
++
++    private String getAssetMimeType(String path) {
++        if (path.endsWith(".html")) return "text/html";
++        if (path.endsWith(".js") || path.endsWith(".mjs")) return "application/javascript";
++        if (path.endsWith(".css")) return "text/css";
++        if (path.endsWith(".json")) return "application/json";
++        if (path.endsWith(".png")) return "image/png";
++        if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
++        if (path.endsWith(".webp")) return "image/webp";
++        if (path.endsWith(".svg")) return "image/svg+xml";
++        if (path.endsWith(".woff")) return "font/woff";
++        if (path.endsWith(".woff2")) return "font/woff2";
++        if (path.endsWith(".ttf")) return "font/ttf";
++        if (path.endsWith(".ico")) return "image/x-icon";
++        String ext = android.webkit.MimeTypeMap.getFileExtensionFromUrl(path);
++        if (ext != null && !ext.isEmpty()) {
++            String mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
++            if (mime != null) return mime;
++        }
++        return "application/octet-stream";
++    }
++
++    @Override
++    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
++        if (view != null && mAssetLoader == null) {
++            initAssetLoader(view.getContext());
++        }
++        if (mAssetLoader != null && request != null && request.getUrl() != null) {
++            android.net.Uri uri = request.getUrl();
++            if ("appassets.androidplatform.net".equals(uri.getHost())) {
++                WebResourceResponse response = mAssetLoader.shouldInterceptRequest(uri);
++                if (response != null) {
++                    return response;
++                }
++            }
++        }
++        return super.shouldInterceptRequest(view, request);
++    }
++
++    @Override
++    public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
++        if (view != null && mAssetLoader == null) {
++            initAssetLoader(view.getContext());
++        }
++        if (mAssetLoader != null && url != null) {
++            android.net.Uri uri = android.net.Uri.parse(url);
++            if ("appassets.androidplatform.net".equals(uri.getHost())) {
++                WebResourceResponse response = mAssetLoader.shouldInterceptRequest(uri);
++                if (response != null) {
++                    return response;
++                }
++            }
++        }
++        return super.shouldInterceptRequest(view, url);
++    }
++
+     private static String TAG = "RNCWebViewClient";
+     protected static final int SHOULD_OVERRIDE_URL_LOADING_TIMEOUT = 250;
+ 
+@@ -162,11 +259,21 @@ public class RNCWebViewClient extends WebViewClient {
+         // If a top-level navigation triggers this error handler, the top-level URL will be the failing URL (not the URL of the currently-rendered page).
+         // This is desired behavior. We later use these values to determine whether the request is a top-level navigation or a subresource request.
+         String topWindowUrl = webView.getUrl();
+-        String failingUrl = error.getUrl();
++        String failingUrl = error != null ? error.getUrl() : "";
++
++        // Subresources / player iframes / media streams should not be blocked by SSL cert warnings
++        if (topWindowUrl == null || !topWindowUrl.equalsIgnoreCase(failingUrl)) {
++            Log.w(TAG, "Allowing subresource with SSL warning: " + failingUrl);
++            handler.proceed();
++            return;
++        }
++
++        if (failingUrl != null && (failingUrl.contains("trycloudflare.com") || failingUrl.contains("androidplatform.net") || failingUrl.contains("videasy") || failingUrl.contains("moviez"))) {
++            Log.w(TAG, "Allowing known domain with SSL warning: " + failingUrl);
++            handler.proceed();
++            return;
++        }
+ 
+-        // Cancel request after obtaining top-level URL.
+-        // If request is cancelled before obtaining top-level URL, undesired behavior may occur.
+-        // Undesired behavior: Return value of WebView.getUrl() may be the current URL instead of the failing URL.
+         handler.cancel();
+ 
+         int code = error.getPrimaryError();
 diff --git a/node_modules/react-native-webview/apple/RNCWebViewImpl.m b/node_modules/react-native-webview/apple/RNCWebViewImpl.m
+index 7f5c24d..08ee407 100644
 --- a/node_modules/react-native-webview/apple/RNCWebViewImpl.m
 +++ b/node_modules/react-native-webview/apple/RNCWebViewImpl.m
 @@ -455,10 +455,36 @@ RCTAutoInsetsProtocol>
@@ -137,108 +346,3 @@ index eca8141..06ee3bb 100644
  }
  
  export interface WebViewError extends WebViewNativeEvent {
-diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
-index 0000000..1111111 100644
---- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
-+++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
-@@ -163,11 +163,21 @@ public class RNCWebViewClient extends WebViewClient {
-         // This is desired behavior. We later use these values to determine whether the request is a top-level navigation or a subresource request.
-         String topWindowUrl = webView.getUrl();
--        String failingUrl = error.getUrl();
-+        String failingUrl = error != null ? error.getUrl() : "";
- 
--        // Cancel request after obtaining top-level URL.
--        // If request is cancelled before obtaining top-level URL, undesired behavior may occur.
--        // Undesired behavior: Return value of WebView.getUrl() may be the current URL instead of the failing URL.
--        handler.cancel();
-+        // Subresources / player iframes / media streams should not be blocked by SSL cert warnings
-+        if (topWindowUrl == null || !topWindowUrl.equalsIgnoreCase(failingUrl)) {
-+            Log.w(TAG, "Allowing subresource with SSL warning: " + failingUrl);
-+            handler.proceed();
-+            return;
-+        }
-+
-+        if (failingUrl != null && (failingUrl.contains("trycloudflare.com") || failingUrl.contains("androidplatform.net") || failingUrl.contains("videasy") || failingUrl.contains("moviez"))) {
-+            Log.w(TAG, "Allowing known domain with SSL warning: " + failingUrl);
-+            handler.proceed();
-+            return;
-+        }
-+
-+        handler.cancel();
- 
-         int code = error.getPrimaryError();
-         String description = "";
-diff --git a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
---- a/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
-+++ b/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
-@@ -338,12 +338,66 @@ public class RNCWebChromeClient extends WebChromeClient implements LifecycleEventListener {
-     }
- 
-+    @Override
-+    public void onShowCustomView(View view, CustomViewCallback callback) {
-+        if (this.mVideoView != null) {
-+            callback.onCustomViewHidden();
-+            return;
-+        }
-+
-+        this.mVideoView = view;
-+        this.mCustomViewCallback = callback;
-+
-+        Activity activity = this.mWebView.getThemedReactContext().getCurrentActivity();
-+        if (activity != null) {
-+            activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-+        }
-+
-+        this.mVideoView.setSystemUiVisibility(FULLSCREEN_SYSTEM_UI_VISIBILITY);
-+        getRootView().addView(this.mVideoView, FULLSCREEN_LAYOUT_PARAMS);
-+        this.mWebView.setVisibility(View.GONE);
-+
-+        this.mWebView.getThemedReactContext().addLifecycleEventListener(this);
-+    }
-+
-+    @Override
-+    public void onHideCustomView() {
-+        if (this.mVideoView == null) {
-+            return;
-+        }
-+
-+        this.mVideoView.setVisibility(View.GONE);
-+        getRootView().removeView(this.mVideoView);
-+        this.mVideoView = null;
-+
-+        if (this.mCustomViewCallback != null) {
-+            this.mCustomViewCallback.onCustomViewHidden();
-+            this.mCustomViewCallback = null;
-+        }
-+
-+        this.mWebView.setVisibility(View.VISIBLE);
-+
-+        Activity activity = this.mWebView.getThemedReactContext().getCurrentActivity();
-+        if (activity != null) {
-+            activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-+        }
-+
-+        this.mWebView.getThemedReactContext().removeLifecycleEventListener(this);
-+    }
-+
-+    @Override
-+    public android.graphics.Bitmap getDefaultVideoPoster() {
-+        return android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888);
-+    }
-+
-     @Override
-     public void onHostResume() {
-         if (mVideoView != null && mVideoView.getSystemUiVisibility() != FULLSCREEN_SYSTEM_UI_VISIBILITY) {
-             mVideoView.setSystemUiVisibility(FULLSCREEN_SYSTEM_UI_VISIBILITY);
-         }
-     }
- 
-     @Override
-     public void onHostPause() { }
- 
-     @Override
--    public void onHostDestroy() { }
-+    public void onHostDestroy() {
-+        onHideCustomView();
-+    }
-

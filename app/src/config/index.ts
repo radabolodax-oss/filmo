@@ -2,8 +2,8 @@ import { Platform } from 'react-native';
 
 const STANDALONE_SITE_URL =
   Platform.OS === 'ios'
-    ? 'movix-media://appassets.androidplatform.net/index.html'
-    : 'https://appassets.androidplatform.net/index.html';
+    ? 'movix-media://appassets.androidplatform.net/index.html?v=1.0.2-b3'
+    : 'https://appassets.androidplatform.net/index.html?v=1.0.2-b3';
 
 export const CONFIG = {
   SITE_URL: STANDALONE_SITE_URL,
@@ -30,7 +30,7 @@ export const FALLBACK_CONFIG = {
   MIRRORS: [
     STANDALONE_SITE_URL,
   ],
-  CACHE_KEY: 'dawger_address:lastConfig_v3',
+  CACHE_KEY: 'dawger_address:lastConfig_v4',
   GITHUB_URL: 'https://dawgerwebsite.vercel.app',
   TELEGRAM_URL: '',
 };

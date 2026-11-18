@@ -240,6 +240,7 @@ const CarouselCard = React.memo<{
   const [resolvedOverview, setResolvedOverview] = useState<string>('');
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -263,12 +264,19 @@ const CarouselCard = React.memo<{
           if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
           setPreviewActive(false);
         }}
-        onTouchStart={() => {
+        onTouchStart={(e) => {
           if (!canPreview) return;
           if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+          const t0 = e.touches?.[0];
+          touchStartPosRef.current = t0 ? { x: t0.clientX, y: t0.clientY } : null;
           touchTimerRef.current = setTimeout(() => setPreviewActive(true), 700);
         }}
-        onTouchMove={() => {
+        onTouchMove={(e) => {
+          const t0 = e.touches?.[0];
+          const start = touchStartPosRef.current;
+          if (t0 && start && Math.hypot(t0.clientX - start.x, t0.clientY - start.y) <= 12) {
+            return;
+          }
           if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
           setPreviewActive(false);
         }}
@@ -279,6 +287,9 @@ const CarouselCard = React.memo<{
         onTouchCancel={() => {
           if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
           setPreviewActive(false);
+        }}
+        onContextMenu={(e) => {
+          if (previewActive) e.preventDefault();
         }}
         className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'scale-[1.10] md:scale-[1.15] shadow-2xl' : 'hover:scale-105'}`}
       >
