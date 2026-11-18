@@ -97,8 +97,8 @@ const appManifest = {
   mandatory: false,
   releasedAt: nowIso,
   releaseNotes: {
-    fr: `Dawger Autonome v${mobileVersion} — Cadre trailer élargi sans déformation, synopsis court au premier plan, masquage YouTube 800ms et mise à jour centralisée.`,
-    en: `Dawger Standalone v${mobileVersion} — Wider trailer frame without scaling distortion, short foreground synopsis, 800ms YouTube reveal & centralized updates.`,
+    fr: `Dawger Autonome v${mobileVersion} — Teaser en 1 clic (+60%, son direct, synopsis), boutons Regarder & Ma Liste ⭐ dans la roue crantée, et tutoriels lecteur 1080p/4K mis à jour.`,
+    en: `Dawger Standalone v${mobileVersion} — 1-click Teaser window (+60%, direct sound, synopsis), Watch & My List ⭐ in the gear menu, and updated 1080p/4K player tutorials.`,
   },
 };
 
@@ -122,6 +122,84 @@ if (fs.existsSync(dawgerWebsiteDir)) {
   fs.copyFileSync(apkPath, path.join(siteDownloadsDir, apkDownloadName));
   fs.copyFileSync(apkPath, path.join(siteDownloadsDir, 'Dawger-Autonome-v1.0.0.apk'));
   fs.copyFileSync(apkPath, path.join(siteDownloadsDir, 'dawger.apk'));
+
+  const portableCandidates = [
+    path.join(desktopDawgerDir, 'PCDawger-portable.exe'),
+    path.join(rootDir, 'pc-app', 'dist_electron', 'PCDawger-portable.exe'),
+    path.join(siteDownloadsDir, 'PCDawger-portable.exe'),
+  ];
+  const portablePath = portableCandidates.find((p) => fs.existsSync(p));
+  const portableSha256 = portablePath ? sha256File(portablePath) : '';
+
+  const ipaCandidates = [
+    path.join(desktopDawgerDir, `Dawger-iOS-v${mobileVersion}.ipa`),
+    path.join(desktopDawgerDir, 'Dawger-iOS-v1.0.0.ipa'),
+    path.join(siteDownloadsDir, `Dawger-iOS-v${mobileVersion}.ipa`),
+    path.join(siteDownloadsDir, 'Dawger-iOS-v1.0.0.ipa'),
+  ];
+  const ipaPath = ipaCandidates.find((p) => fs.existsSync(p));
+  const ipaSha256 = ipaPath ? sha256File(ipaPath) : '';
+  if (ipaPath) {
+    const destIpaVersioned = path.join(siteDownloadsDir, `Dawger-iOS-v${mobileVersion}.ipa`);
+    const destIpaLegacy = path.join(siteDownloadsDir, 'Dawger-iOS-v1.0.0.ipa');
+    if (path.resolve(ipaPath) !== path.resolve(destIpaVersioned)) {
+      fs.copyFileSync(ipaPath, destIpaVersioned);
+    }
+    if (path.resolve(ipaPath) !== path.resolve(destIpaLegacy)) {
+      fs.copyFileSync(ipaPath, destIpaLegacy);
+    }
+  }
+
+  const releaseDateObj = new Date(nowIso);
+  const dd = String(releaseDateObj.getDate()).padStart(2, '0');
+  const mm = String(releaseDateObj.getMonth() + 1).padStart(2, '0');
+  const yyyy = releaseDateObj.getFullYear();
+  const formattedDate = `${dd}/${mm}/${yyyy}`;
+
+  const checksumsTxt = [
+    '# ═══════════════════════════════════════════════════════════════════════════════',
+    `# DAWGER — REGISTRE OFFICIEL D'INTÉGRITÉ ET D'AUTHENTICITÉ LOGICIELLE (v${pcVersion} — Maj ${formattedDate})`,
+    '# ═══════════════════════════════════════════════════════════════════════════════',
+    '',
+    `# [1] Windows (PC) — Application Autonome 1-clic (v${pcVersion}) [OFFICIEL STABLE]`,
+    `${exeSha256 || '254c542818565487793c6ec42b31ec5ec934f6549bac3bce8ce28d5acc7a1d46'}  downloads/PCDawger-Setup.exe`,
+    `${portableSha256 || 'd65611fab69d75f2c80adb55deb9b4353e801b3c0a97555aea4f0cb6d0a8ae42'}  downloads/PCDawger-portable.exe`,
+    '',
+    `# [2] Android Mobile — Application Autonome Release (v${mobileVersion}) [BÊTA OUVERTE]`,
+    `${apkSha256}  downloads/${apkDownloadName}`,
+    '',
+    `# [3] Apple iOS — Archive IPA Sideloadly / AltStore (v${mobileVersion}) [BÊTA OUVERTE]`,
+    `${ipaSha256 || '2e50f330c1e863f3777fb7db6e38c7405f5abe396d153dff2b96abc8e4a6f69d'}  downloads/Dawger-iOS-v${mobileVersion}.ipa`,
+    '',
+    '# [4] Outils & Patches PC',
+    '6d22844550a924eab92a1ab5990a09194164a4ea567065a5c17f0d75d26311eb  downloads/dawger-setup.zip',
+    'c7952613934195425c49979fafda16f3e17bd910333a4336361d7c4eae9c2a0f  downloads/patch.zip',
+    '',
+  ].join('\n');
+  fs.writeFileSync(path.join(dawgerWebsiteDir, 'checksums.txt'), checksumsTxt, 'utf8');
+
+  for (const htmlFile of ['index.html', 'pc.html', 'android.html', 'ios.html', 'tv.html', 'mac.html']) {
+    const htmlPath = path.join(dawgerWebsiteDir, htmlFile);
+    if (fs.existsSync(htmlPath)) {
+      const content = fs.readFileSync(htmlPath, 'utf8');
+      let updated = content.replace(/(data-release-date[^>]*>)[^<]+(<\/)/g, `$1${formattedDate}$2`);
+      if (exeSha256) {
+        updated = updated.replace(/(data-sha256="exe-setup"[^>]*>)[^<]+(<\/code>)/g, `$1${exeSha256}$2`);
+      }
+      if (portableSha256) {
+        updated = updated.replace(/(data-sha256="exe-portable"[^>]*>)[^<]+(<\/code>)/g, `$1${portableSha256}$2`);
+      }
+      if (apkSha256) {
+        updated = updated.replace(/(data-sha256="apk"[^>]*>)[^<]+(<\/code>)/g, `$1${apkSha256}$2`);
+      }
+      if (ipaSha256) {
+        updated = updated.replace(/(data-sha256="ipa"[^>]*>)[^<]+(<\/code>)/g, `$1${ipaSha256}$2`);
+      }
+      if (updated !== content) {
+        fs.writeFileSync(htmlPath, updated, 'utf8');
+      }
+    }
+  }
 }
 
 console.log('✅ Manifestes générés :');

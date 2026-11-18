@@ -224,7 +224,22 @@ const CarouselCard = React.memo<{
       setStarred(true);
       toast.success(`${title} ${t('lists.addedToList')}`, { duration: 2000 });
     }
+    window.dispatchEvent(new CustomEvent('watchlist_updated'));
   }, [item, title, t, isCollection]);
+
+  useEffect(() => {
+    const syncWatchlist = () => {
+      try {
+        const key = isCollection ? 'watchlist_collections' : `watchlist_${item.media_type}`;
+        const list = JSON.parse(localStorage.getItem(key) || '[]');
+        setStarred(list.some((m: any) => m.id === item.id));
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener('watchlist_updated', syncWatchlist);
+    return () => window.removeEventListener('watchlist_updated', syncWatchlist);
+  }, [item.id, item.media_type, isCollection]);
 
   const year = (item as any).release_date || (item as any).first_air_date
     ? new Date((item as any).release_date || (item as any).first_air_date).getFullYear()
@@ -238,60 +253,26 @@ const CarouselCard = React.memo<{
 
   const [previewActive, setPreviewActive] = useState(false);
   const [resolvedOverview, setResolvedOverview] = useState<string>('');
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-      if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-    };
-  }, []);
 
   const canPreview = item.media_type === 'movie' || item.media_type === 'tv';
+
+  const handleCardClick = useCallback((e: React.MouseEvent) => {
+    if (!canPreview) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.dispatchEvent(
+      new CustomEvent('dawger:teaser-preview-open', {
+        detail: { mediaId: item.id, mediaType: item.media_type },
+      }),
+    );
+    setPreviewActive(true);
+  }, [canPreview, item.id, item.media_type]);
 
   return (
     <div className={`embla-slide flex-none relative w-[clamp(112px,29vw,156px)] sm:w-[160px] md:w-[192px] tv:w-[220px] ${previewActive ? 'z-40 preview-active' : ''}`}>
       <div
         style={{ animationDelay: `${Math.min(index * 0.03, 0.5)}s` }}
-        onMouseEnter={() => {
-          if (!canPreview) return;
-          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-          hoverTimerRef.current = setTimeout(() => setPreviewActive(true), 1200);
-        }}
-        onMouseLeave={() => {
-          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-          setPreviewActive(false);
-        }}
-        onTouchStart={(e) => {
-          if (!canPreview) return;
-          if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-          const t0 = e.touches?.[0];
-          touchStartPosRef.current = t0 ? { x: t0.clientX, y: t0.clientY } : null;
-          touchTimerRef.current = setTimeout(() => setPreviewActive(true), 700);
-        }}
-        onTouchMove={(e) => {
-          const t0 = e.touches?.[0];
-          const start = touchStartPosRef.current;
-          if (t0 && start && Math.hypot(t0.clientX - start.x, t0.clientY - start.y) <= 12) {
-            return;
-          }
-          if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-          setPreviewActive(false);
-        }}
-        onTouchEnd={() => {
-          if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-          setPreviewActive(false);
-        }}
-        onTouchCancel={() => {
-          if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-          setPreviewActive(false);
-        }}
-        onContextMenu={(e) => {
-          if (previewActive) e.preventDefault();
-        }}
-        className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter ${previewActive ? 'scale-[1.10] md:scale-[1.15] shadow-2xl' : 'hover:scale-105'}`}
+        className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-transform duration-200 ease-out animate-card-enter hover:scale-105 cursor-pointer`}
       >
         {/* Type badge */}
         <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/75 text-[10px] font-semibold uppercase tracking-wider text-white/80">
@@ -367,6 +348,10 @@ const CarouselCard = React.memo<{
               year={year}
               overview={(item as any).overview}
               posterUrl={posterSrc}
+              detailPath={detailPath}
+              starred={starred}
+              onToggleWatchlist={toggleWatchlist}
+              onClose={() => setPreviewActive(false)}
               active={previewActive}
               onOverviewLoaded={setResolvedOverview}
             />
@@ -426,9 +411,10 @@ const CarouselCard = React.memo<{
           </div>
         )}
 
-        {/* Main clickable area */}
+        {/* Main clickable area -> opens Teaser Floating Window on 1 click */}
         <Link
           to={detailPath}
+          onClick={handleCardClick}
           onAuxClick={(e) => handleAuxOpen(e, detailPath)}
           className="absolute inset-0 z-[5]"
         >

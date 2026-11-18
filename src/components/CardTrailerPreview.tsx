@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Star, Calendar } from 'lucide-react';
+import { Star, Calendar, Play, X, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { TMDB_API_KEY, TMDB_API_URL } from '../config/config';
 import { getTmdbLanguage } from '../i18n';
@@ -134,7 +135,6 @@ async function fetchTrailerAndOverview(
           videos = alt.videos;
           resolvedType = altType;
         } else {
-          // Neither matched the expected title -> do not play a wrong movie's video
           videos = [];
         }
       } catch {
@@ -170,6 +170,10 @@ interface CardTrailerPreviewProps {
   year?: number | string | null;
   overview?: string;
   posterUrl?: string;
+  detailPath?: string;
+  starred?: boolean;
+  onToggleWatchlist?: (e: React.MouseEvent) => void;
+  onClose?: () => void;
   active: boolean;
   onOverviewLoaded?: (overview: string) => void;
 }
@@ -184,9 +188,14 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   year,
   overview: initialOverview,
   posterUrl,
+  detailPath,
+  starred = false,
+  onToggleWatchlist,
+  onClose,
   active,
   onOverviewLoaded,
 }) => {
+  const navigate = useNavigate();
   const [info, setInfo] = useState<TrailerInfo | null>(null);
   const [keyIndex, setKeyIndex] = useState(0);
   const [isVideoVisible, setIsVideoVisible] = useState(false);
@@ -195,6 +204,28 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close when another card opens its preview or when Escape is pressed
+  useEffect(() => {
+    if (!active) return;
+    const handleOtherOpen = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && (detail.mediaId !== mediaId || detail.mediaType !== mediaType)) {
+        onClose?.();
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('dawger:teaser-preview-open', handleOtherOpen);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('dawger:teaser-preview-open', handleOtherOpen);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [active, mediaId, mediaType, onClose]);
 
   useLayoutEffect(() => {
     if (!active) {
@@ -207,8 +238,9 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
       const rect = el.getBoundingClientRect();
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      const targetW = Math.min(vw - 24, Math.max(rect.width * 1.65, 340));
-      const targetH = Math.min(vh - 24, Math.max(rect.height * 1.18, 320));
+      // Enlarged by +60% compared to previous (1.65 * 1.6 = 2.64 width, 1.18 * 1.6 = 1.89 height, min 544x512)
+      const targetW = Math.min(vw - 24, Math.max(rect.width * 2.64, 544));
+      const targetH = Math.min(vh - 24, Math.max(rect.height * 1.89, 512));
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
       const left = Math.max(12, Math.min(vw - targetW - 12, centerX - targetW / 2));
@@ -291,16 +323,13 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
             : data?.event === 'infoDelivery' && typeof data?.info?.playerState === 'number'
               ? data.info.playerState
               : null;
-        // PlayerState 1 = playing -> clear load watchdog and wait 4500ms so YouTube HUD fades out completely, then reveal video + sound together
+        // PlayerState 1 = playing -> launch immediately with sound, zero delay!
         if (playerState === 1) {
           if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
-          if (!revealTimerRef.current) {
-            revealTimerRef.current = setTimeout(() => {
-              sendYtCommand('unMute');
-              sendYtCommand('setVolume', [100]);
-              setIsVideoVisible(true);
-            }, 4500);
-          }
+          if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+          sendYtCommand('unMute');
+          sendYtCommand('setVolume', [100]);
+          setIsVideoVisible(true);
         }
       } catch {
         // ignore
@@ -319,9 +348,16 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
     } catch {
       // ignore
     }
-    // Keep muted while hidden behind the poster; sound will unmute when video becomes visible
-    sendYtCommand('mute');
-    sendYtCommand('setVolume', [0]);
+    // Launch directly with sound enabled
+    sendYtCommand('unMute');
+    sendYtCommand('setVolume', [100]);
+    sendYtCommand('playVideo');
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    revealTimerRef.current = setTimeout(() => {
+      sendYtCommand('unMute');
+      sendYtCommand('setVolume', [100]);
+      setIsVideoVisible(true);
+    }, 250);
     // If this YouTube key fails to start playing within 4s (e.g. blocked embed), try next teaser key
     if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
     loadTimeoutRef.current = setTimeout(() => {
@@ -337,95 +373,167 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
     ? `https://image.tmdb.org/t/p/w780${info.backdropPath}`
     : posterUrl;
 
+  const handleWatchClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClose?.();
+    if (detailPath) {
+      navigate(detailPath);
+    }
+  };
+
   return (
     <div ref={anchorRef} className="absolute inset-0 pointer-events-none">
       {boxStyle &&
         typeof document !== 'undefined' &&
         createPortal(
-          <div
-            style={boxStyle}
-            className="rounded-2xl overflow-hidden pointer-events-none bg-zinc-950 border border-white/20 shadow-[0_25px_70px_rgba(0,0,0,0.92)] animate-in fade-in zoom-in-95 duration-200"
-          >
-            {/* Background Teaser Iframe (kept at opacity-100 so Chromium never throttles rendering) */}
-            {ytKey && (
-              <div className="absolute inset-0 bg-black overflow-hidden">
-                <iframe
-                  ref={iframeRef}
-                  onLoad={handleIframeLoad}
-                  src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=1&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
-                  title="Teaser preview"
-                  allow="autoplay; encrypted-media"
-                  className="w-full h-full border-0 scale-[2.15] pointer-events-none"
-                />
-              </div>
-            )}
-
-            {/* Cover mask while loading / waiting for YouTube HUD to disappear */}
+          <>
+            {/* Backdrop click-outside area ("dans le vide") to dismiss */}
             <div
-              className={`absolute inset-0 z-10 bg-zinc-950 transition-opacity duration-500 ${
-                ytKey && isVideoVisible ? 'opacity-0' : 'opacity-100'
-              }`}
+              className="fixed inset-0 z-[9998] bg-black/50 backdrop-blur-[2px] animate-in fade-in duration-150"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose?.();
+              }}
+            />
+
+            {/* Enlarged +60% Teaser Floating Window */}
+            <div
+              style={boxStyle}
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-2xl overflow-hidden pointer-events-auto bg-zinc-950 border border-white/20 shadow-[0_25px_80px_rgba(0,0,0,0.95)] animate-in fade-in zoom-in-95 duration-200 select-none"
             >
-              {coverUrl && (
-                <img
-                  src={coverUrl}
-                  alt=""
-                  className="w-full h-full object-cover"
-                  draggable={false}
-                />
-              )}
-            </div>
-
-            {/* Top-left badge */}
-            {typeLabel && (
-              <span className="absolute top-3 left-3 z-20 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wider text-white/90">
-                {typeLabel}
-              </span>
-            )}
-
-            {/* Foreground gradient + Title/Logo + Rating/Year + Synopsis */}
-            <div className="absolute inset-0 z-20 bg-gradient-to-t from-black via-black/75 to-transparent flex flex-col justify-end p-4">
-              {logoUrl ? (
-                <div className="mb-1.5 h-8 flex items-end">
-                  <img
-                    src={logoUrl}
-                    alt={title || ''}
-                    className="max-h-full max-w-[75%] object-contain object-left drop-shadow-md"
-                    draggable={false}
+              {/* Background Teaser Iframe — launches immediately with sound */}
+              {ytKey && (
+                <div className="absolute inset-0 bg-black overflow-hidden pointer-events-none">
+                  <iframe
+                    ref={iframeRef}
+                    onLoad={handleIframeLoad}
+                    src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
+                    title="Teaser preview"
+                    allow="autoplay; encrypted-media"
+                    className="w-full h-full border-0 scale-[2.15] pointer-events-none"
                   />
                 </div>
-              ) : (
-                title && (
-                  <h3 className="text-base font-bold text-white line-clamp-1 mb-1 drop-shadow">
-                    {title}
-                  </h3>
-                )
               )}
 
-              <div className="flex items-center gap-2.5 mb-1.5">
-                {typeof voteAverage === 'number' && voteAverage > 0 && (
-                  <div className="flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5 text-yellow-400" fill="currentColor" />
-                    <span className="text-xs font-medium text-white/90">
-                      {voteAverage.toFixed(1)}
-                    </span>
-                  </div>
+              {/* Cover image (backdrop or poster) shown before/when teaser is not yet visible */}
+              <div
+                className={`absolute inset-0 z-10 bg-zinc-950 transition-opacity duration-300 pointer-events-none ${
+                  ytKey && isVideoVisible ? 'opacity-0' : 'opacity-100'
+                }`}
+              >
+                {coverUrl && (
+                  <img
+                    src={coverUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    draggable={false}
+                  />
                 )}
-                {year ? (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-white/70" />
-                    <span className="text-xs text-white/75">{year}</span>
-                  </div>
-                ) : null}
               </div>
 
-              {synopsisText && (
-                <p className="text-xs leading-snug text-white/90 line-clamp-4 drop-shadow">
-                  {synopsisText}
-                </p>
+              {/* Top-left badge */}
+              {typeLabel && (
+                <span className="absolute top-3.5 left-3.5 z-20 px-3 py-1 rounded-lg bg-black/75 backdrop-blur-sm text-xs font-semibold uppercase tracking-wider text-white/90 pointer-events-none">
+                  {typeLabel}
+                </span>
               )}
+
+              {/* Top-right close button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose?.();
+                }}
+                aria-label="Fermer l'aperçu"
+                className="absolute top-3.5 right-3.5 z-30 w-8 h-8 rounded-full bg-black/70 hover:bg-black/90 border border-white/15 text-white/80 hover:text-white flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Foreground gradient + Title/Logo + Rating/Year + Synopsis + Action Buttons */}
+              <div className="absolute inset-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-5 sm:p-6">
+                {logoUrl ? (
+                  <div className="mb-2 h-10 sm:h-12 flex items-end">
+                    <img
+                      src={logoUrl}
+                      alt={title || ''}
+                      className="max-h-full max-w-[75%] object-contain object-left drop-shadow-md"
+                      draggable={false}
+                    />
+                  </div>
+                ) : (
+                  title && (
+                    <h3 className="text-lg sm:text-xl font-bold text-white line-clamp-1 mb-1.5 drop-shadow">
+                      {title}
+                    </h3>
+                  )
+                )}
+
+                <div className="flex items-center gap-3 mb-2">
+                  {typeof voteAverage === 'number' && voteAverage > 0 && (
+                    <div className="flex items-center gap-1">
+                      <Star className="w-4 h-4 text-yellow-400" fill="currentColor" />
+                      <span className="text-xs sm:text-sm font-semibold text-white/95">
+                        {voteAverage.toFixed(1)}
+                      </span>
+                    </div>
+                  )}
+                  {year ? (
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4 text-white/70" />
+                      <span className="text-xs sm:text-sm text-white/80">{year}</span>
+                    </div>
+                  ) : null}
+                </div>
+
+                {synopsisText && (
+                  <p className="text-xs sm:text-sm leading-relaxed text-white/90 line-clamp-4 sm:line-clamp-5 drop-shadow mb-4">
+                    {synopsisText}
+                  </p>
+                )}
+
+                {/* Action buttons: Regarder + Ma liste */}
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleWatchClick}
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-[0.98] text-black font-bold text-xs sm:text-sm shadow-lg shadow-emerald-500/25 transition-all cursor-pointer"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>Regarder</span>
+                  </button>
+
+                  {onToggleWatchlist && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onToggleWatchlist(e);
+                      }}
+                      className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm border backdrop-blur-md active:scale-[0.98] transition-all cursor-pointer ${
+                        starred
+                          ? 'bg-yellow-500/20 border-yellow-400/50 text-yellow-300 hover:bg-yellow-500/30'
+                          : 'bg-white/10 border-white/20 text-white hover:bg-white/20'
+                      }`}
+                    >
+                      <Star
+                        className={`w-4 h-4 ${starred ? 'text-yellow-400' : 'text-white'}`}
+                        fill={starred ? 'currentColor' : 'none'}
+                      />
+                      <span>{starred ? 'Dans Ma liste' : 'Ma liste'}</span>
+                      {starred && <Check className="w-3.5 h-3.5 text-yellow-400" />}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>,
+          </>,
           document.body,
         )}
     </div>

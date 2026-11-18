@@ -79,50 +79,18 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
     const [starred, setStarred] = useState(() => getWatchlistIds(item.media_type).has(item.id));
     const [previewActive, setPreviewActive] = useState(false);
     const [resolvedOverview, setResolvedOverview] = useState<string>('');
-    const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
     useEffect(() => {
-        return () => {
-            if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-            if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+        const syncWatchlist = () => {
+            invalidateWatchlistCache(item.media_type);
+            setStarred(getWatchlistIds(item.media_type).has(item.id));
         };
-    }, []);
-
-    const handleMouseEnter = useCallback(() => {
-        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-        hoverTimerRef.current = setTimeout(() => setPreviewActive(true), 1200);
-    }, []);
-
-    const handleMouseLeave = useCallback(() => {
-        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-        setPreviewActive(false);
-    }, []);
-
-    const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-        const t0 = e.touches?.[0];
-        touchStartPosRef.current = t0 ? { x: t0.clientX, y: t0.clientY } : null;
-        touchTimerRef.current = setTimeout(() => setPreviewActive(true), 700);
-    }, []);
-
-    const handleTouchMove = useCallback((e: React.TouchEvent) => {
-        const t0 = e.touches?.[0];
-        const start = touchStartPosRef.current;
-        if (t0 && start && Math.hypot(t0.clientX - start.x, t0.clientY - start.y) <= 12) {
-            return;
-        }
-        if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-        setPreviewActive(false);
-    }, []);
-
-    const cancelTouchPreview = useCallback(() => {
-        if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-        setPreviewActive(false);
-    }, []);
+        window.addEventListener('watchlist_updated', syncWatchlist);
+        return () => window.removeEventListener('watchlist_updated', syncWatchlist);
+    }, [item.id, item.media_type]);
 
     const title = item.title || item.name || '';
+    const detailPath = `/${item.media_type}/${encodeId(item.id)}`;
 
     const toggle = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -142,22 +110,27 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
         }
         // Bust the module cache so other cards (and remounts) read fresh.
         invalidateWatchlistCache(item.media_type);
+        window.dispatchEvent(new CustomEvent('watchlist_updated'));
     }, [item, title, t]);
+
+    const handleCardClick = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.dispatchEvent(
+            new CustomEvent('dawger:teaser-preview-open', {
+                detail: { mediaId: item.id, mediaType: item.media_type },
+            }),
+        );
+        setPreviewActive(true);
+    }, [item.id, item.media_type]);
 
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0, scale: previewActive ? 1.15 : 1 }}
-            transition={{ duration: 0.25, delay: previewActive ? 0 : Math.min(index * 0.03, 0.5) }}
-            whileHover={{ scale: previewActive ? 1.15 : 1.05 }}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={cancelTouchPreview}
-            onTouchCancel={cancelTouchPreview}
-            onContextMenu={(e) => { if (previewActive) e.preventDefault(); }}
-            className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-colors ${previewActive ? 'z-40 shadow-2xl' : ''}`}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.5) }}
+            whileHover={{ scale: 1.05 }}
+            className={`relative group rounded-xl overflow-hidden bg-white/5 border border-white/10 hover:border-white/20 transition-colors cursor-pointer ${previewActive ? 'z-40 shadow-2xl' : ''}`}
         >
             {/* Badge */}
             <span className="absolute top-2 left-2 z-10 px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wider text-white/80">
@@ -198,7 +171,7 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
                 onError={(e) => { (e.target as HTMLImageElement).onerror = null; (e.target as HTMLImageElement).src = POSTER_FALLBACK; }}
             />
 
-            {/* Trailer + Synopsis preview on hover (PC 1.2s) or long press (Mobile) */}
+            {/* Teaser + Synopsis preview on 1-click */}
             <CardTrailerPreview
                 mediaId={item.id}
                 mediaType={item.first_air_date && !item.release_date ? 'tv' : item.media_type}
@@ -208,6 +181,10 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
                 year={item.release_date || item.first_air_date ? new Date(item.release_date || item.first_air_date || '').getFullYear() : null}
                 overview={item.overview}
                 posterUrl={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : undefined}
+                detailPath={detailPath}
+                starred={starred}
+                onToggleWatchlist={toggle}
+                onClose={() => setPreviewActive(false)}
                 active={previewActive}
                 onOverviewLoaded={setResolvedOverview}
             />
@@ -236,8 +213,8 @@ export const SearchGridCard: React.FC<GridCardProps> = React.memo(({ item, index
                 </p>
             </div>
 
-            {/* Main clickable area */}
-            <Link to={`/${item.media_type}/${encodeId(item.id)}`} className="absolute inset-0 z-10">
+            {/* Main clickable area -> opens Teaser Floating Window on 1 click */}
+            <Link to={detailPath} onClick={handleCardClick} className="absolute inset-0 z-10">
                 <span className="sr-only">{item.title || item.name}</span>
             </Link>
         </motion.div>
@@ -282,6 +259,7 @@ export const SearchListCard: React.FC<ListCardProps> = React.memo(({ item, index
         }
         // Bust the module cache so other cards (and remounts) read fresh.
         invalidateWatchlistCache(item.media_type);
+        window.dispatchEvent(new CustomEvent('watchlist_updated'));
     }, [item, title, t]);
 
     return (
