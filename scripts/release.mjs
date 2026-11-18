@@ -50,10 +50,6 @@ const apkStat = fs.statSync(apkPath);
 const apkSha256 = sha256File(apkPath);
 
 const apkDownloadName = `Dawger-Autonome-v${mobileVersion}.apk`;
-const publicDownloadsDir = path.join(rootDir, 'public', 'downloads');
-fs.mkdirSync(publicDownloadsDir, { recursive: true });
-fs.copyFileSync(apkPath, path.join(publicDownloadsDir, apkDownloadName));
-fs.copyFileSync(apkPath, path.join(publicDownloadsDir, 'Dawger-Autonome-v1.0.0.apk'));
 
 let exeStat = null;
 let exeSha256 = null;

@@ -2,11 +2,11 @@
   "version": "1.0.2",
   "buildNumber": 3,
   "apkUrl": "https://dawgerwebsite.vercel.app/downloads/Dawger-Autonome-v1.0.2.apk",
-  "apkSizeBytes": 722298889,
-  "apkSha256": "025db80224dde354e1f582cdb86f3b3f7203913dd0e9e855c5ad747e0fe2ee79",
+  "apkSizeBytes": 32303135,
+  "apkSha256": "48478fe76c116e24b3bd752bbbdb60dd46738111d1ba2a7417486deae3ca43bd",
   "iosUrl": "https://dawgerwebsite.vercel.app/ios",
   "mandatory": false,
-  "releasedAt": "2026-11-18T23:19:12.066Z",
+  "releasedAt": "2026-11-18T23:27:07.245Z",
   "releaseNotes": {
     "fr": "Dawger Autonome v1.0.2 — Teaser en 1 clic (+60%, son direct, synopsis), boutons Regarder & Ma Liste ⭐ dans la roue crantée, et tutoriels lecteur 1080p/4K mis à jour.",
     "en": "Dawger Standalone v1.0.2 — 1-click Teaser window (+60%, direct sound, synopsis), Watch & My List ⭐ in the gear menu, and updated 1080p/4K player tutorials."
