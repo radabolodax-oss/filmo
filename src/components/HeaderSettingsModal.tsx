@@ -141,7 +141,7 @@ export const HeaderSettingsModal: React.FC<HeaderSettingsModalProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="relative w-full max-w-2xl bg-zinc-950/95 border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/80 flex flex-col max-h-[90vh] overflow-hidden z-10"
+          className="relative w-full max-w-3xl bg-zinc-950/95 border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl shadow-black/80 flex flex-col max-h-[90vh] overflow-hidden z-10"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -170,18 +170,18 @@ export const HeaderSettingsModal: React.FC<HeaderSettingsModalProps> = ({
             </button>
           </div>
 
-          {/* Navigation Tabs — "Ma Liste" placed right before "Contactez-moi" */}
-          <div className="flex items-center gap-2 px-5 sm:px-6 pt-3 pb-2 border-b border-white/5 bg-zinc-900/40 overflow-x-auto no-scrollbar">
+          {/* Navigation Tabs — Balanced 4-column grid, zero horizontal scroll or arrows */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 px-5 sm:px-6 py-3 border-b border-white/5 bg-zinc-900/40">
             <button
               type="button"
               onClick={() => setActiveTab('mylist')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 border shrink-0 ${
+              className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border whitespace-nowrap cursor-pointer ${
                 activeTab === 'mylist'
                   ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/15 border-yellow-400/40 text-yellow-300 shadow-sm'
                   : 'bg-white/[0.03] border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
-              <Star className="w-4 h-4 text-yellow-400" fill="currentColor" />
+              <Star className="w-3.5 h-3.5 text-yellow-400 shrink-0" fill="currentColor" />
               <span>Ma Liste</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-yellow-500/20 text-yellow-300 border border-yellow-400/30">
                 {watchlistItems.length}
@@ -191,39 +191,39 @@ export const HeaderSettingsModal: React.FC<HeaderSettingsModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('contact')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 border shrink-0 ${
+              className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border whitespace-nowrap cursor-pointer ${
                 activeTab === 'contact'
                   ? 'bg-gradient-to-r from-pink-500/15 to-purple-500/15 border-pink-500/30 text-pink-300 shadow-sm'
                   : 'bg-white/[0.03] border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
-              <Instagram className="w-4 h-4 text-pink-400" />
+              <Instagram className="w-3.5 h-3.5 text-pink-400 shrink-0" />
               <span>Contactez-moi</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('sources')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 border shrink-0 ${
+              className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border whitespace-nowrap cursor-pointer ${
                 activeTab === 'sources'
                   ? 'bg-gradient-to-r from-emerald-500/15 to-teal-500/15 border-emerald-500/30 text-emerald-300 shadow-sm'
                   : 'bg-white/[0.03] border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
-              <Layers className="w-4 h-4 text-emerald-400" />
+              <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span>Sources & Lecteurs</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('settings')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 border shrink-0 ${
+              className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 border whitespace-nowrap cursor-pointer ${
                 activeTab === 'settings'
                   ? 'bg-gradient-to-r from-cyan-500/15 to-blue-500/15 border-cyan-500/30 text-cyan-300 shadow-sm'
                   : 'bg-white/[0.03] border-transparent text-zinc-400 hover:text-white hover:bg-white/[0.06]'
               }`}
             >
-              <Settings className="w-4 h-4 text-cyan-400" />
+              <Settings className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span>Options de l'app</span>
             </button>
           </div>

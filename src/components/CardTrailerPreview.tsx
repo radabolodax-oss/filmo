@@ -13,6 +13,169 @@ interface TrailerInfo {
 }
 
 const trailerCache = new Map<string, TrailerInfo>();
+const mp4UrlCache = new Map<string, { url: string; expiresAt: number }>();
+
+function gmRequest(options: {
+  method: 'GET' | 'POST';
+  url: string;
+  headers?: Record<string, string>;
+  data?: string;
+}): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const gm = (window as any).GM_xmlhttpRequest;
+    if (typeof gm !== 'function') {
+      reject(new Error('GM_xmlhttpRequest unavailable'));
+      return;
+    }
+    gm({
+      method: options.method,
+      url: options.url,
+      headers: options.headers || {},
+      data: options.data,
+      timeout: 6000,
+      onload: (res: any) => {
+        if (res && res.status >= 200 && res.status < 300 && typeof res.responseText === 'string') {
+          resolve(res.responseText);
+        } else {
+          reject(new Error(`HTTP ${res?.status || 0}`));
+        }
+      },
+      onerror: () => reject(new Error('GM network error')),
+      ontimeout: () => reject(new Error('GM timeout')),
+    });
+  });
+}
+
+function pickBestMp4FromPlayerJson(data: any): string | null {
+  const formats: any[] = data?.streamingData?.formats || [];
+  const best =
+    formats.find((f) => f?.url && f.itag === 22) ||
+    formats.find((f) => f?.url && f.itag === 18) ||
+    formats.find((f) => f?.url && String(f.mimeType || '').includes('video/mp4')) ||
+    formats.find((f) => f?.url);
+  return best?.url || null;
+}
+
+async function extractYoutubeDirectMp4(videoId: string): Promise<string | null> {
+  if (!videoId) return null;
+  const cached = mp4UrlCache.get(videoId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.url;
+  }
+
+  // 1. Mobile WebView (Android .apk & iOS .ipa) via native GM_xmlhttpRequest bridge
+  if (typeof (window as any).GM_xmlhttpRequest === 'function') {
+    try {
+      const embedHtml = await gmRequest({
+        method: 'GET',
+        url: `https://www.youtube.com/embed/${videoId}`,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        },
+      });
+      const visitorMatch = embedHtml.match(/"VISITOR_DATA":"([^"]+)"/);
+      const visitorData = visitorMatch ? visitorMatch[1] : undefined;
+
+      const playerRaw = await gmRequest({
+        method: 'POST',
+        url: 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'com.google.android.youtube/20.03.32 (Linux; U; Android 14) gzip',
+          'X-YouTube-Client-Name': '3',
+          'X-YouTube-Client-Version': '20.03.32',
+        },
+        data: JSON.stringify({
+          videoId,
+          context: {
+            client: {
+              clientName: 'ANDROID',
+              clientVersion: '20.03.32',
+              androidSdkVersion: 34,
+              osName: 'Android',
+              osVersion: '14',
+              hl: 'fr',
+              gl: 'FR',
+              visitorData,
+            },
+          },
+          contentCheckOk: true,
+          racyCheckOk: true,
+        }),
+      });
+      const url = pickBestMp4FromPlayerJson(JSON.parse(playerRaw));
+      if (url) {
+        mp4UrlCache.set(videoId, { url, expiresAt: Date.now() + 45 * 60 * 1000 });
+        return url;
+      }
+    } catch {
+      // Fall through to PC methods
+    }
+  }
+
+  // 2. PC Desktop (.exe) via local Node endpoint /__dawger_yt_mp4
+  try {
+    const localRes = await fetch(`/__dawger_yt_mp4?id=${encodeURIComponent(videoId)}`, {
+      cache: 'no-store',
+    });
+    const contentType = localRes.headers.get('content-type') || '';
+    if (localRes.ok && contentType.includes('application/json')) {
+      const json = await localRes.json();
+      if (json && typeof json.url === 'string' && json.url.startsWith('http')) {
+        mp4UrlCache.set(videoId, { url: json.url, expiresAt: Date.now() + 45 * 60 * 1000 });
+        return json.url;
+      }
+    }
+  } catch {
+    // Fall through to direct fetch
+  }
+
+  // 3. Direct InnerTube fetch (works in Electron with webSecurity:false + X-Dawger-YT-UA hook)
+  try {
+    const embedRes = await fetch(`https://www.youtube.com/embed/${videoId}`);
+    const embedHtml = await embedRes.text();
+    const visitorMatch = embedHtml.match(/"VISITOR_DATA":"([^"]+)"/);
+    const visitorData = visitorMatch ? visitorMatch[1] : undefined;
+
+    const playerRes = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Dawger-YT-UA': 'com.google.android.youtube/20.03.32 (Linux; U; Android 14) gzip',
+        'X-YouTube-Client-Name': '3',
+        'X-YouTube-Client-Version': '20.03.32',
+      },
+      body: JSON.stringify({
+        videoId,
+        context: {
+          client: {
+            clientName: 'ANDROID',
+            clientVersion: '20.03.32',
+            androidSdkVersion: 34,
+            osName: 'Android',
+            osVersion: '14',
+            hl: 'fr',
+            gl: 'FR',
+            visitorData,
+          },
+        },
+        contentCheckOk: true,
+        racyCheckOk: true,
+      }),
+    });
+    const data = await playerRes.json();
+    const url = pickBestMp4FromPlayerJson(data);
+    if (url) {
+      mp4UrlCache.set(videoId, { url, expiresAt: Date.now() + 45 * 60 * 1000 });
+      return url;
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
 
 function normalizeTitle(str?: string | null): string {
   return (str || '')
@@ -125,7 +288,6 @@ async function fetchTrailerAndOverview(
     let resolvedType: 'movie' | 'tv' = mediaType;
     let { detail, videos } = await fetchVideosForType(resolvedType, mediaId, lang);
 
-    // If TMDB returned a different movie/series than the card's title, try the other mediaType
     if (expectedTitle && !titlesMatch(expectedTitle, detail)) {
       const altType: 'movie' | 'tv' = resolvedType === 'movie' ? 'tv' : 'movie';
       try {
@@ -198,12 +360,13 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   const navigate = useNavigate();
   const [info, setInfo] = useState<TrailerInfo | null>(null);
   const [keyIndex, setKeyIndex] = useState(0);
+  const [directMp4Url, setDirectMp4Url] = useState<string | null>(null);
+  const [useFallbackEmbed, setUseFallbackEmbed] = useState(false);
   const [isVideoVisible, setIsVideoVisible] = useState(false);
   const [boxStyle, setBoxStyle] = useState<React.CSSProperties | null>(null);
   const anchorRef = useRef<HTMLDivElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Close when another card opens its preview or when Escape is pressed
   useEffect(() => {
@@ -233,32 +396,27 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
       return;
     }
     const updatePosition = () => {
-      const el = anchorRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
       const vw = window.innerWidth;
       const vh = window.innerHeight;
-      // Enlarged by +60% compared to previous (1.65 * 1.6 = 2.64 width, 1.18 * 1.6 = 1.89 height, min 544x512)
+      const el = anchorRef.current;
+      const rect = el ? el.getBoundingClientRect() : { width: 200, height: 300 };
+      // Enlarged by +60% and strictly locked at the exact center of the screen
       const targetW = Math.min(vw - 24, Math.max(rect.width * 2.64, 544));
       const targetH = Math.min(vh - 24, Math.max(rect.height * 1.89, 512));
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      const left = Math.max(12, Math.min(vw - targetW - 12, centerX - targetW / 2));
-      const top = Math.max(12, Math.min(vh - targetH - 12, centerY - targetH / 2));
+      const left = Math.max(12, Math.round((vw - targetW) / 2));
+      const top = Math.max(12, Math.round((vh - targetH) / 2));
       setBoxStyle({
         position: 'fixed',
-        left: `${Math.round(left)}px`,
-        top: `${Math.round(top)}px`,
+        left: `${left}px`,
+        top: `${top}px`,
         width: `${Math.round(targetW)}px`,
         height: `${Math.round(targetH)}px`,
         zIndex: 9999,
       });
     };
     updatePosition();
-    window.addEventListener('scroll', updatePosition, true);
     window.addEventListener('resize', updatePosition);
     return () => {
-      window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
     };
   }, [active]);
@@ -266,9 +424,9 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
   useEffect(() => {
     setInfo(null);
     setKeyIndex(0);
+    setDirectMp4Url(null);
+    setUseFallbackEmbed(false);
     setIsVideoVisible(false);
-    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
     if (!active) {
       return;
     }
@@ -284,90 +442,52 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
     });
     return () => {
       cancelled = true;
-      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-      if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
     };
   }, [active, mediaType, mediaId, initialOverview, title, onOverviewLoaded]);
 
+  const ytKey = info?.youtubeKeys?.[keyIndex] || null;
+
+  // Extract direct MP4 stream for the current ytKey
+  useEffect(() => {
+    setDirectMp4Url(null);
+    setIsVideoVisible(false);
+    if (!active || !ytKey) return;
+
+    let cancelled = false;
+    extractYoutubeDirectMp4(ytKey).then((mp4) => {
+      if (cancelled) return;
+      if (mp4) {
+        setDirectMp4Url(mp4);
+        setUseFallbackEmbed(false);
+      } else {
+        const totalKeys = info?.youtubeKeys?.length || 0;
+        if (keyIndex + 1 < totalKeys) {
+          setKeyIndex((prev) => prev + 1);
+        } else {
+          // Last resort fallback if all keys failed MP4 extraction
+          setUseFallbackEmbed(true);
+        }
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, ytKey, keyIndex, info?.youtubeKeys?.length]);
+
   const tryNextKey = () => {
     setIsVideoVisible(false);
-    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
-    setKeyIndex((prev) => prev + 1);
-  };
-
-  const sendYtCommand = (func: string, args: any[] = []) => {
-    try {
-      iframeRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: 'command', func, args, id: 1, channel: 'widget' }),
-        '*',
-      );
-    } catch {
-      // ignore
+    setDirectMp4Url(null);
+    const totalKeys = info?.youtubeKeys?.length || 0;
+    if (keyIndex + 1 < totalKeys) {
+      setKeyIndex((prev) => prev + 1);
+    } else if (!useFallbackEmbed) {
+      setUseFallbackEmbed(true);
     }
-  };
-
-  useEffect(() => {
-    if (!active) return;
-    const handleMessage = (event: MessageEvent) => {
-      if (!iframeRef.current || event.source !== iframeRef.current.contentWindow) return;
-      try {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-        if (data?.event === 'onError') {
-          tryNextKey();
-          return;
-        }
-        const playerState =
-          data?.event === 'onStateChange'
-            ? data?.info
-            : data?.event === 'infoDelivery' && typeof data?.info?.playerState === 'number'
-              ? data.info.playerState
-              : null;
-        // PlayerState 1 = playing -> launch immediately with sound, zero delay!
-        if (playerState === 1) {
-          if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
-          if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-          sendYtCommand('unMute');
-          sendYtCommand('setVolume', [100]);
-          setIsVideoVisible(true);
-        }
-      } catch {
-        // ignore
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [active, keyIndex]);
-
-  const handleIframeLoad = () => {
-    try {
-      iframeRef.current?.contentWindow?.postMessage(
-        JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
-        '*',
-      );
-    } catch {
-      // ignore
-    }
-    // Launch directly with sound enabled
-    sendYtCommand('unMute');
-    sendYtCommand('setVolume', [100]);
-    sendYtCommand('playVideo');
-    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
-    revealTimerRef.current = setTimeout(() => {
-      sendYtCommand('unMute');
-      sendYtCommand('setVolume', [100]);
-      setIsVideoVisible(true);
-    }, 250);
-    // If this YouTube key fails to start playing within 4s (e.g. blocked embed), try next teaser key
-    if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
-    loadTimeoutRef.current = setTimeout(() => {
-      tryNextKey();
-    }, 4000);
   };
 
   if (!active) return null;
 
-  const ytKey = info?.youtubeKeys?.[keyIndex] || null;
   const synopsisText = initialOverview || info?.overview || '';
   const coverUrl = info?.backdropPath
     ? `https://image.tmdb.org/t/p/w780${info.backdropPath}`
@@ -404,12 +524,55 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
               onClick={(e) => e.stopPropagation()}
               className="rounded-2xl overflow-hidden pointer-events-auto bg-zinc-950 border border-white/20 shadow-[0_25px_80px_rgba(0,0,0,0.95)] animate-in fade-in zoom-in-95 duration-200 select-none"
             >
-              {/* Background Teaser Iframe — launches immediately with sound */}
-              {ytKey && (
+              {/* Extracted Native HTML5 <video> — zero YouTube UI, zero delay, direct sound at 100% */}
+              {directMp4Url && (
+                <div className="absolute inset-0 bg-black overflow-hidden pointer-events-none">
+                  <video
+                    ref={videoRef}
+                    src={directMp4Url}
+                    autoPlay
+                    playsInline
+                    loop
+                    muted={false}
+                    onLoadedData={(e) => {
+                      const v = e.currentTarget;
+                      v.muted = false;
+                      v.volume = 1;
+                      v.play().catch(() => {});
+                      setIsVideoVisible(true);
+                    }}
+                    onPlay={(e) => {
+                      const v = e.currentTarget;
+                      v.muted = false;
+                      v.volume = 1;
+                      setIsVideoVisible(true);
+                    }}
+                    onError={tryNextKey}
+                    className="w-full h-full object-cover pointer-events-none"
+                  />
+                </div>
+              )}
+
+              {/* Fallback embed only if direct MP4 extraction was unavailable for all keys */}
+              {!directMp4Url && useFallbackEmbed && ytKey && (
                 <div className="absolute inset-0 bg-black overflow-hidden pointer-events-none">
                   <iframe
                     ref={iframeRef}
-                    onLoad={handleIframeLoad}
+                    onLoad={() => {
+                      try {
+                        iframeRef.current?.contentWindow?.postMessage(
+                          JSON.stringify({ event: 'command', func: 'unMute', args: [], id: 1, channel: 'widget' }),
+                          '*',
+                        );
+                        iframeRef.current?.contentWindow?.postMessage(
+                          JSON.stringify({ event: 'command', func: 'setVolume', args: [100], id: 1, channel: 'widget' }),
+                          '*',
+                        );
+                      } catch {
+                        // ignore
+                      }
+                      setIsVideoVisible(true);
+                    }}
                     src={`https://www.youtube-nocookie.com/embed/${ytKey}?autoplay=1&mute=0&controls=0&disablekb=1&fs=0&iv_load_policy=3&modestbranding=1&rel=0&playsinline=1&showinfo=0&loop=1&playlist=${ytKey}&enablejsapi=1`}
                     title="Teaser preview"
                     allow="autoplay; encrypted-media"
@@ -418,10 +581,10 @@ export const CardTrailerPreview: React.FC<CardTrailerPreviewProps> = ({
                 </div>
               )}
 
-              {/* Cover image (backdrop or poster) shown before/when teaser is not yet visible */}
+              {/* Cover image (backdrop or poster) shown only until the first video frame is ready */}
               <div
-                className={`absolute inset-0 z-10 bg-zinc-950 transition-opacity duration-300 pointer-events-none ${
-                  ytKey && isVideoVisible ? 'opacity-0' : 'opacity-100'
+                className={`absolute inset-0 z-10 bg-zinc-950 transition-opacity duration-200 pointer-events-none ${
+                  isVideoVisible ? 'opacity-0' : 'opacity-100'
                 }`}
               >
                 {coverUrl && (

@@ -246,8 +246,92 @@ async function startFrontend() {
     '.webp': 'image/webp',
   };
 
+  const ytMp4Cache = new Map();
+
+  async function resolveYoutubeMp4InNode(videoId) {
+    if (!videoId || !/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) return null;
+    const cached = ytMp4Cache.get(videoId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.url;
+    }
+    try {
+      const embedRes = await fetch(`https://www.youtube.com/embed/${videoId}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        },
+      });
+      const embedHtml = await embedRes.text();
+      const visitorMatch = embedHtml.match(/"VISITOR_DATA":"([^"]+)"/);
+      const visitorData = visitorMatch ? visitorMatch[1] : undefined;
+
+      const playerRes = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'com.google.android.youtube/20.03.32 (Linux; U; Android 14) gzip',
+          'X-YouTube-Client-Name': '3',
+          'X-YouTube-Client-Version': '20.03.32',
+        },
+        body: JSON.stringify({
+          videoId,
+          context: {
+            client: {
+              clientName: 'ANDROID',
+              clientVersion: '20.03.32',
+              androidSdkVersion: 34,
+              osName: 'Android',
+              osVersion: '14',
+              hl: 'fr',
+              gl: 'FR',
+              visitorData,
+            },
+          },
+          contentCheckOk: true,
+          racyCheckOk: true,
+        }),
+      });
+      const data = await playerRes.json();
+      const formats = (data && data.streamingData && data.streamingData.formats) || [];
+      const bestFormat =
+        formats.find((f) => f && f.url && f.itag === 22) ||
+        formats.find((f) => f && f.url && f.itag === 18) ||
+        formats.find((f) => f && f.url && String(f.mimeType || '').includes('video/mp4')) ||
+        formats.find((f) => f && f.url);
+      const directUrl = bestFormat && bestFormat.url ? bestFormat.url : null;
+      if (directUrl) {
+        ytMp4Cache.set(videoId, { url: directUrl, expiresAt: Date.now() + 45 * 60 * 1000 });
+      }
+      return directUrl;
+    } catch (e) {
+      log('WARN', '[YT_MP4] Echec extraction Node pour', videoId, e.message);
+      return null;
+    }
+  }
+
   staticServer = http.createServer((req, res) => {
     let reqPath = decodeURIComponent(req.url.split('?')[0]);
+    if (reqPath === '/__dawger_yt_mp4') {
+      const parsedUrl = new URL(req.url, 'http://127.0.0.1:3000');
+      const videoId = parsedUrl.searchParams.get('id') || '';
+      resolveYoutubeMp4InNode(videoId)
+        .then((url) => {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(JSON.stringify({ url }));
+        })
+        .catch(() => {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'Access-Control-Allow-Origin': '*',
+          });
+          res.end(JSON.stringify({ url: null }));
+        });
+      return;
+    }
     const normalizedReqPath = path.posix.normalize(reqPath).replace(/^(\.\.[\/\\])+/, '');
     const cleanRelative = normalizedReqPath === '/' ? 'index.html' : normalizedReqPath.replace(/^\/+/, '');
     let filePath = path.resolve(distDir, cleanRelative);
@@ -962,6 +1046,24 @@ app.whenReady().then(async () => {
       log('INFO', '[ADBLOCK] Requete publicitaire bloquee:', details.url);
       callback({ cancel: true });
     });
+
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      { urls: ['*://*.youtube.com/youtubei/v1/player*'] },
+      (details, callback) => {
+        const headers = { ...details.requestHeaders };
+        const customUa = headers['X-Dawger-YT-UA'] || headers['x-dawger-yt-ua'];
+        if (customUa) {
+          headers['User-Agent'] = customUa;
+          delete headers['X-Dawger-YT-UA'];
+          delete headers['x-dawger-yt-ua'];
+          delete headers['Origin'];
+          delete headers['origin'];
+          delete headers['Referer'];
+          delete headers['referer'];
+        }
+        callback({ requestHeaders: headers });
+      }
+    );
   } catch (err) {
     log('WARN', '[ADBLOCK] Erreur setup filter webRequest:', err.message);
   }
